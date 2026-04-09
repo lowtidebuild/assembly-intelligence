@@ -3,14 +3,16 @@
  *
  *   morning sync (06:30 KST)    evening sync (18:30 KST)
  *   ────────────────────────    ────────────────────────
- *   1. Fetch active legislators 1. Fetch bill status changes
- *      (once per term)             since morning sync
- *   2. Fetch committees          2. Update Bill.stage for any
- *   3. Fetch today's schedule       transitions (create alerts)
- *   4. Fetch new/changed bills   3. Create BillTimeline rows
- *   5. Keyword pre-filter        4. Log to SyncLog
- *   6. Gemini relevance score
- *   7. Gemini summary generation
+ *   1. Upsert all legislators    1. Re-fetch detail for high-score,
+ *      (295 from 22대)              non-terminal bills
+ *   2. For each watched cte:     2. Derive new stage from 심사경과
+ *      assembly_bill (list)      3. Insert BillTimeline + Alert on
+ *   3. Keyword pre-filter           transition
+ *   4. assembly_bill (detail)    4. Log to SyncLog
+ *      for matched bills
+ *   5. Gemini score + summary
+ *   6. Upsert bills + timeline
+ *   7. Fetch schedule (30 days)
  *   8. Generate DailyBriefing
  *   9. Log to SyncLog
  *
@@ -20,36 +22,24 @@
  * the orchestrator function, so Lane B (Gemini) can be swapped in
  * later without changing this file, and tests can pass fakes.
  *
- * Same for the news client — accepted as a dependency, not imported.
+ * ── Real MCP API shape ────────────────────────────────────
+ * This file targets the real assembly-api-mcp server (6 tools).
+ * Field names come through in Korean: 의안ID, 의안명, 제안자,
+ * 소관위원회, 제안일, 대표발의자, 공동발의자, 심사경과, etc.
  *
- * ── ⚠️ STATUS: MCP tool names & response shapes DO NOT match ──
+ * Legislators are fetched via `query_assembly("nwvrqwxyaytdsfvhu")`
+ * because that endpoint returns MONA_CD (stable ID) + HJ_NM + full
+ * committee list, while `assembly_member` lacks stable IDs.
  *
- * This file was written against assumed MCP tool names:
- *   get_active_lawmakers, search_bills, get_bill_detail
+ * Bills use a two-phase fetch:
+ *   Phase 1: assembly_bill({ committee, age }) → list only
+ *   Phase 2: assembly_bill({ bill_id }) → 심사경과 + 공동발의자[]
  *
- * The real MCP server (assembly-api-mcp) exposes only 6 tools:
- *   assembly_member, assembly_bill, assembly_session,
- *   assembly_org, discover_apis, query_assembly
+ * See docs/mcp-api-reality.md for raw sample responses and field maps.
  *
- * Response payloads use Korean field names: 의안ID, 의안명, 제안자,
- * 소관위원회, 제안일, 등. Bill search does NOT include 제안이유 or
- * 주요내용 — those require a second call with bill_id.
- *
- * See docs/mcp-api-reality.md for the full analysis captured from
- * live server inspection on 2026-04-10.
- *
- * This file will be rewritten in the next session to match the real
- * API. The current implementation is kept as architectural scaffolding
- * — dependency contracts (BillScorer, BriefingGenerator), error
- * handling patterns, sync log writing, and transaction structure are
- * all still valid. Only the MCP call sites need updating.
- *
- * TODO(next-session): rewrite MCP call sites:
- *   - callMcpToolOrThrow("get_active_lawmakers") → callMcpToolOrThrow("assembly_member", {...})
- *   - callMcpToolOrThrow("search_bills", ...) → callMcpToolOrThrow("assembly_bill", {...})
- *   - callMcpToolOrThrow("get_bill_detail", ...) → callMcpToolOrThrow("assembly_bill", { bill_id })
- *   - Adapt McpBill / McpLawmaker interfaces to Korean field names
- *   - Handle two-phase bill fetch (search → detail) for Gemini scoring
+ * ⚠️ 제안이유 / 주요내용 are NOT exposed by any MCP endpoint. They
+ * are always null in the DB for now. Lane B Gemini prompts must
+ * score on title + committee + proposer alone.
  */
 
 import { and, eq, sql } from "drizzle-orm";
@@ -63,14 +53,18 @@ import {
   syncLog,
   alert,
   type NewBill,
+  type NewLegislator,
   type Bill,
 } from "@/db/schema";
+import { callMcpToolOrThrow } from "@/lib/mcp-client";
+import { errorMessage } from "@/lib/api-base";
 
-/**
- * Bill stage enum literal type. Matches `bill_stage` postgres enum.
- * Hoisted as a concrete union so call sites can pass stage values
- * into tables whose `stage` column has no default (billTimeline).
- */
+/* ─────────────────────────────────────────────────────────────
+ * Bill stage enum literal — matches `bill_stage` postgres enum.
+ * Hoisted so billTimeline inserts (which have no default) get a
+ * narrowed type at the call site.
+ * ────────────────────────────────────────────────────────────── */
+
 type BillStage =
   | "stage_0"
   | "stage_1"
@@ -79,8 +73,6 @@ type BillStage =
   | "stage_4"
   | "stage_5"
   | "stage_6";
-import { callMcpToolOrThrow } from "@/lib/mcp-client";
-import { errorMessage } from "@/lib/api-base";
 
 /* ─────────────────────────────────────────────────────────────
  * Dependency contracts (injected by orchestrator)
@@ -89,16 +81,21 @@ import { errorMessage } from "@/lib/api-base";
 export interface BillScorer {
   scoreBill(input: {
     billName: string;
-    proposalReason: string;
-    mainContent: string;
+    committee: string | null;
+    proposerName: string;
+    proposerParty: string | null;
+    proposalReason: string | null;
+    mainContent: string | null;
     industryContext: string;
     industryKeywords: string[];
   }): Promise<{ score: number; reasoning: string }>;
 
   summarizeBill(input: {
     billName: string;
-    proposalReason: string;
-    mainContent: string;
+    committee: string | null;
+    proposerName: string;
+    proposalReason: string | null;
+    mainContent: string | null;
   }): Promise<string>;
 }
 
@@ -118,40 +115,130 @@ export interface BriefingGenerator {
 }
 
 /* ─────────────────────────────────────────────────────────────
- * MCP response shapes
+ * Real MCP response shapes (Korean field names)
  * ────────────────────────────────────────────────────────────── */
 
-interface McpBill {
-  bill_id: string;
-  bill_name: string;
-  proposer: string;
-  proposer_party?: string;
-  co_sponsor_count?: number;
-  committee?: string;
-  status?: string;
-  stage?: number; // 0-6
-  proposal_date?: string; // ISO
-  proposal_reason?: string;
-  main_content?: string;
-  external_link?: string;
+/** `assembly_bill` search mode — list item. */
+interface McpBillListItem {
+  의안ID: string;
+  의안번호: string;
+  의안명: string;
+  제안자: string | null; // "박성훈의원 등 10인"
+  제안자구분: string | null;
+  대수: string | null;
+  소관위원회: string | null;
+  제안일: string | null; // "YYYY-MM-DD"
+  처리상태: string | null;
+  처리일: string | null;
+  상세링크: string | null;
+  대표발의자: string | null;
+  공동발의자: string | null; // "김기현,이달희,..." (comma-joined)
 }
 
-interface McpLawmaker {
-  member_id: string;
-  name: string;
-  name_hanja?: string;
-  party: string;
-  district?: string;
-  term_number?: number;
-  committees?: string[];
-  profile_image_url?: string;
+interface McpBillListResponse {
+  total?: number;
+  items?: McpBillListItem[];
 }
 
-interface ScheduleItem {
+/** `assembly_bill` detail mode (bill_id param). */
+interface McpBillDetailSimsa {
+  소관위원회: string | null;
+  소관위_회부일: string | null;
+  소관위_상정일: string | null;
+  소관위_처리일: string | null;
+  소관위_처리결과: string | null;
+  법사위_회부일: string | null;
+  법사위_상정일: string | null;
+  법사위_처리일: string | null;
+  법사위_처리결과: string | null;
+  본회의_상정일: string | null;
+  본회의_의결일: string | null;
+  본회의_결과: string | null;
+  정부이송일: string | null;
+  공포일: string | null;
+  공포번호: string | null;
+}
+
+interface McpBillDetailItem {
+  의안ID: string;
+  의안번호: string;
+  의안명: string;
+  제안이유: string | null; // Always null currently — MCP limitation
+  주요내용: string | null; // Always null currently
+  LINK_URL: string | null;
+  의안문서_ZIP: string | null;
+  공동발의자: Array<{
+    이름: string;
+    정당: string;
+    대표구분: string; // "대표발의" or ""
+  }>;
+  공동발의자_총수: number;
+  심사경과: McpBillDetailSimsa;
+}
+
+interface McpBillDetailResponse {
+  total?: number;
+  items?: McpBillDetailItem[];
+}
+
+/** `query_assembly("nwvrqwxyaytdsfvhu")` — 전체 의원 현황 row. */
+interface McpLegislatorRow {
+  HG_NM: string; // 한글이름
+  HJ_NM: string | null; // 한자이름
+  ENG_NM: string | null;
+  BTH_GBN_NM: string | null;
+  BTH_DATE: string | null;
+  JOB_RES_NM: string | null; // "위원"/"위원장"/"간사"
+  POLY_NM: string; // 정당
+  ORIG_NM: string; // 선거구 or "비례대표"
+  ELECT_GBN_NM: string; // "지역구"/"비례대표"
+  CMIT_NM: string | null; // 현재 primary 위원회
+  CMITS: string | null; // 모든 위원회 (comma-separated)
+  REELE_GBN_NM: string; // "초선"/"재선"/"3선"/...
+  UNITS: string; // "제21대, 제22대"
+  SEX_GBN_NM: string | null;
+  TEL_NO: string | null;
+  E_MAIL: string | null;
+  HOMEPAGE: string | null;
+  STAFF: string | null;
+  SECRETARY: string | null;
+  SECRETARY2: string | null;
+  MONA_CD: string; // stable member ID — primary key source
+  MEM_TITLE: string | null;
+  ASSEM_ADDR: string | null;
+}
+
+interface McpQueryAssemblyResponse {
+  api?: string;
+  total?: number;
+  returned?: number;
+  fields?: string[];
+  items?: McpLegislatorRow[];
+}
+
+/** `assembly_session({ type: "schedule" })` — event row. */
+interface McpScheduleRow {
+  일정종류: string;
+  일자: string; // "YYYY-MM-DD"
+  시간: string; // "14:00~16:30"
+  위원회: string | null;
+  내용: string;
+  장소: string | null;
+}
+
+interface McpScheduleResponse {
+  mode?: string;
+  total?: number;
+  items?: McpScheduleRow[];
+}
+
+/** Normalized schedule item passed to the briefing generator. */
+export interface ScheduleItem {
+  date: string;
   time: string;
-  committee: string;
+  committee: string | null;
   subject: string;
-  location?: string;
+  location: string | null;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -167,28 +254,95 @@ function todayKstDate(): string {
   return kst.toISOString().slice(0, 10);
 }
 
-/** Map integer stage (0-6) to Drizzle enum value */
-function stageFromInt(n: number | undefined): BillStage {
-  const clamped = Math.min(6, Math.max(0, n ?? 1));
-  return `stage_${clamped}` as BillStage;
+/** N days from today in KST as "YYYY-MM-DD" */
+function kstDateOffset(days: number): string {
+  const now = new Date();
+  const kst = new Date(now.getTime() + KST_OFFSET_MS + days * 86400000);
+  return kst.toISOString().slice(0, 10);
 }
 
 /**
- * Keyword pre-filter. Returns true if any industry keyword appears
- * in bill text (name + proposal reason + main content).
- *
- * Cuts the Gemini scoring workload: typical 50-200 weekly new bills
- * → ~20% pass pre-filter → Gemini scores only those.
+ * Parse "3선" / "재선" / "초선" into an integer term count.
+ * Returns null for unknown strings.
  */
-function keywordMatches(mcpBill: McpBill, keywords: string[]): boolean {
-  if (keywords.length === 0) return true; // No filter — score everything
-  const haystack = [
-    mcpBill.bill_name,
-    mcpBill.proposal_reason ?? "",
-    mcpBill.main_content ?? "",
-  ]
-    .join(" ")
-    .toLowerCase();
+function parseTermNumber(s: string | null | undefined): number | null {
+  if (!s) return null;
+  if (s === "초선") return 1;
+  if (s === "재선") return 2;
+  const m = s.match(/^(\d+)선$/);
+  if (m) return parseInt(m[1], 10);
+  return null;
+}
+
+/**
+ * Derive the app's bill stage from the MCP detail response's
+ * `심사경과` object. Stages follow the GR/PA Excel convention:
+ *
+ *   0 = 발의예정 (unused here — MCP only surfaces filed bills)
+ *   1 = 법안발의/입법예고   — only 회부 없음
+ *   2 = 상임위 심사/계류중  — 소관위_회부일 있음
+ *   3 = 법제사법위 심사     — 법사위_회부일 있음
+ *   4 = 국회 본회의 가결    — 본회의_결과 === "원안가결"/"수정가결"
+ *   5 = 정부 이송           — 정부이송일 있음
+ *   6 = 공포                — 공포일 있음
+ *
+ * Falls back to stage_1 when everything is null (freshly filed).
+ */
+function stageFromSimsa(simsa: McpBillDetailSimsa | undefined): BillStage {
+  if (!simsa) return "stage_1";
+  if (simsa.공포일) return "stage_6";
+  if (simsa.정부이송일) return "stage_5";
+  const result = simsa.본회의_결과;
+  if (result && (result.includes("가결") || result.includes("부결"))) {
+    return "stage_4";
+  }
+  if (simsa.법사위_회부일) return "stage_3";
+  if (simsa.소관위_회부일) return "stage_2";
+  return "stage_1";
+}
+
+/**
+ * Extract proposer party from the detail response's 공동발의자 array.
+ * Returns null if no "대표발의" entry is present (rare, alternative
+ * bills proposed by committees don't have one).
+ */
+function proposerPartyFromDetail(detail: McpBillDetailItem): string | null {
+  const lead = detail.공동발의자?.find((c) => c.대표구분 === "대표발의");
+  return lead?.정당 ?? null;
+}
+
+/**
+ * Parse a YYYY-MM-DD string to a Date at KST midnight. Returns null
+ * on invalid input.
+ */
+function parseKstDate(s: string | null | undefined): Date | null {
+  if (!s) return null;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  // Treat as KST date — convert to UTC by subtracting 9h
+  return new Date(
+    Date.UTC(
+      parseInt(m[1], 10),
+      parseInt(m[2], 10) - 1,
+      parseInt(m[3], 10),
+      0,
+      0,
+      0,
+    ) - KST_OFFSET_MS,
+  );
+}
+
+/**
+ * Keyword pre-filter against the 의안명 only. MCP does not give us
+ * body text, so title is all we have for cheap filtering.
+ * Returns true when any keyword matches.
+ */
+function keywordMatches(
+  listItem: McpBillListItem,
+  keywords: string[],
+): boolean {
+  if (keywords.length === 0) return true; // no filter → keep all
+  const haystack = (listItem.의안명 ?? "").toLowerCase();
   return keywords.some((kw) => haystack.includes(kw.toLowerCase()));
 }
 
@@ -212,11 +366,10 @@ export interface MorningSyncResult {
 }
 
 /**
- * Run the morning sync pipeline. Called by the cron route at
- * /api/cron/sync-morning.
+ * Run the morning sync pipeline. Called by /api/cron/sync-morning.
  *
  * Errors in individual steps are collected but don't abort the
- * whole pipeline — we prefer partial success over total failure.
+ * whole pipeline — partial success beats total failure.
  */
 export async function runMorningSync(
   deps: MorningSyncDeps,
@@ -241,95 +394,173 @@ export async function runMorningSync(
   const committeeCodes = committees.map((c) => c.committeeCode);
   const keywords = activeProfile.keywords ?? [];
 
-  // 3. Sync legislators
+  // 3. Sync legislators — but only when stale (≥ 7 days) or empty.
+  //    The 22대 roster rarely changes, and the MCP upstream is slow
+  //    (60-90s cold start), so daily refetch is wasteful.
   try {
-    const lawmakersResult = await callMcpToolOrThrow<{
-      lawmakers: McpLawmaker[];
-    }>("get_active_lawmakers");
-    legislatorsUpdated = await upsertLegislators(
-      lawmakersResult.lawmakers ?? [],
-    );
+    const [stats] = await db
+      .select({
+        count: sql<number>`COUNT(*)::int`,
+        // Neon returns timestamps as ISO strings, not Date objects.
+        mostRecent: sql<string | null>`MAX(${legislator.lastSynced})::text`,
+      })
+      .from(legislator);
+
+    const SEVEN_DAYS_MS = 7 * 86400 * 1000;
+    const mostRecentMs = stats?.mostRecent
+      ? new Date(stats.mostRecent).getTime()
+      : 0;
+    const isStale =
+      !stats ||
+      stats.count === 0 ||
+      !stats.mostRecent ||
+      Date.now() - mostRecentMs > SEVEN_DAYS_MS;
+
+    if (isStale) {
+      legislatorsUpdated = await syncLegislators();
+    } else {
+      console.log(
+        `[sync] legislators fresh (${stats.count} rows, last synced ${stats.mostRecent}) — skipping`,
+      );
+    }
   } catch (err) {
     errors.push(`legislators: ${errorMessage(err)}`);
   }
 
-  // 4. Fetch bills per relevant committee (in parallel, bounded by p-limit)
-  const mcpBills: McpBill[] = [];
+  // 4. Phase 1 — discover bills per watched committee (in parallel,
+  //    bounded by mcp-client's internal p-limit(5))
+  const listItems: McpBillListItem[] = [];
   const committeesToQuery =
     committeeCodes.length > 0 ? committeeCodes : [""];
 
-  const fetchResults = await Promise.allSettled(
+  const listFetches = await Promise.allSettled(
     committeesToQuery.map((code) =>
-      callMcpToolOrThrow<{ bills: McpBill[] }>(
-        "search_bills",
-        code ? { committee: code, limit: 100 } : { limit: 100 },
+      callMcpToolOrThrow<McpBillListResponse>(
+        "assembly_bill",
+        code
+          ? { committee: code, age: 22, page_size: 100 }
+          : { age: 22, page_size: 100 },
       ),
     ),
   );
 
-  for (let i = 0; i < fetchResults.length; i++) {
-    const result = fetchResults[i];
+  for (let i = 0; i < listFetches.length; i++) {
+    const r = listFetches[i];
     const code = committeesToQuery[i];
-    if (result.status === "fulfilled") {
-      mcpBills.push(...(result.value.bills ?? []));
+    if (r.status === "fulfilled") {
+      listItems.push(...(r.value.items ?? []));
     } else {
       errors.push(
-        `search_bills(${code || "all"}): ${errorMessage(result.reason)}`,
+        `assembly_bill(${code || "all"}): ${errorMessage(r.reason)}`,
       );
     }
   }
 
-  // Deduplicate by bill_id
-  const uniqueBills = Array.from(
-    new Map(mcpBills.map((b) => [b.bill_id, b])).values(),
+  // Deduplicate by 의안ID
+  const uniqueList = Array.from(
+    new Map(listItems.map((b) => [b.의안ID, b])).values(),
   );
-  billsProcessed = uniqueBills.length;
+  billsProcessed = uniqueList.length;
 
-  // 5. Keyword pre-filter
-  const filtered = uniqueBills.filter((b) => keywordMatches(b, keywords));
+  // 5. Keyword pre-filter (title-only)
+  const filtered = uniqueList.filter((b) => keywordMatches(b, keywords));
 
-  // 6. Gemini score + summary (sequential for now; Lane B can add p-limit)
-  const scoredBills: Array<
-    McpBill & { score: number; reasoning: string; summary: string }
-  > = [];
+  // 6. Phase 2 — fetch detail for matched bills (parallel via p-limit).
+  //    Skip bills we already have at the same stage (not implemented yet;
+  //    for now refetch every morning — 20-50 bills is fine).
+  const detailFetches = await Promise.allSettled(
+    filtered.map(async (item) => {
+      const resp = await callMcpToolOrThrow<McpBillDetailResponse>(
+        "assembly_bill",
+        { bill_id: item.의안ID },
+      );
+      const detail = resp.items?.[0];
+      if (!detail) throw new Error(`empty detail for ${item.의안ID}`);
+      return { listItem: item, detail };
+    }),
+  );
 
-  for (const mcpBill of filtered) {
+  // 7. Score + summarize (sequential — Lane B can parallelize when ready)
+  type ScoredBill = {
+    listItem: McpBillListItem;
+    detail: McpBillDetailItem;
+    score: number;
+    reasoning: string;
+    summary: string;
+  };
+  const scoredBills: ScoredBill[] = [];
+
+  for (const f of detailFetches) {
+    if (f.status !== "fulfilled") {
+      errors.push(`detail: ${errorMessage(f.reason)}`);
+      continue;
+    }
+    const { listItem, detail } = f.value;
     try {
       const [scoreResult, summary] = await Promise.all([
         deps.scorer.scoreBill({
-          billName: mcpBill.bill_name,
-          proposalReason: mcpBill.proposal_reason ?? "",
-          mainContent: mcpBill.main_content ?? "",
+          billName: detail.의안명 ?? listItem.의안명,
+          committee: listItem.소관위원회,
+          proposerName: listItem.대표발의자 ?? "",
+          proposerParty: proposerPartyFromDetail(detail),
+          proposalReason: detail.제안이유,
+          mainContent: detail.주요내용,
           industryContext: activeProfile.llmContext,
           industryKeywords: keywords,
         }),
         deps.scorer.summarizeBill({
-          billName: mcpBill.bill_name,
-          proposalReason: mcpBill.proposal_reason ?? "",
-          mainContent: mcpBill.main_content ?? "",
+          billName: detail.의안명 ?? listItem.의안명,
+          committee: listItem.소관위원회,
+          proposerName: listItem.대표발의자 ?? "",
+          proposalReason: detail.제안이유,
+          mainContent: detail.주요내용,
         }),
       ]);
 
       scoredBills.push({
-        ...mcpBill,
+        listItem,
+        detail,
         score: scoreResult.score,
         reasoning: scoreResult.reasoning,
         summary,
       });
       billsScored++;
     } catch (err) {
-      errors.push(`score(${mcpBill.bill_id}): ${errorMessage(err)}`);
+      errors.push(`score(${listItem.의안ID}): ${errorMessage(err)}`);
     }
   }
 
-  // 7. Upsert scored bills
+  // 8. Upsert bills + timeline
   try {
     await upsertBills(scoredBills);
   } catch (err) {
     errors.push(`upsert_bills: ${errorMessage(err)}`);
   }
 
-  // 8. Generate daily briefing (top-4 relevance bills get surfaced)
+  // 9. Fetch upcoming schedule (next 30 days)
+  let scheduleItems: ScheduleItem[] = [];
+  try {
+    const schedResp = await callMcpToolOrThrow<McpScheduleResponse>(
+      "assembly_session",
+      {
+        type: "schedule",
+        date_from: todayKstDate(),
+        date_to: kstDateOffset(30),
+        page_size: 100,
+      },
+    );
+    scheduleItems = (schedResp.items ?? []).map((it) => ({
+      date: it.일자,
+      time: it.시간,
+      committee: it.위원회,
+      subject: it.내용,
+      location: it.장소,
+    }));
+  } catch (err) {
+    errors.push(`schedule: ${errorMessage(err)}`);
+  }
+
+  // 10. Generate daily briefing
   const briefingDate = todayKstDate();
   try {
     const topBills = await db
@@ -345,10 +576,6 @@ export async function runMorningSync(
       .where(sql`${bill.createdAt} > NOW() - INTERVAL '24 hours'`)
       .limit(10);
 
-    // Schedule currently stubbed — implement when the MCP schedule
-    // tool's shape is confirmed.
-    const scheduleItems: ScheduleItem[] = [];
-
     await deps.briefingGenerator.generateBriefing({
       date: briefingDate,
       industryName: activeProfile.name,
@@ -361,13 +588,9 @@ export async function runMorningSync(
     errors.push(`briefing: ${errorMessage(err)}`);
   }
 
-  // 9. Write sync log
+  // 11. Write sync log
   const status: MorningSyncResult["status"] =
-    errors.length === 0
-      ? "success"
-      : billsScored > 0
-        ? "partial"
-        : "failed";
+    errors.length === 0 ? "success" : billsScored > 0 ? "partial" : "failed";
 
   const [logRow] = await db
     .insert(syncLog)
@@ -396,7 +619,7 @@ export async function runMorningSync(
 }
 
 /* ─────────────────────────────────────────────────────────────
- * Evening sync: change detection only
+ * Evening sync: stage change detection for tracked bills
  * ────────────────────────────────────────────────────────────── */
 
 export interface EveningSyncResult {
@@ -409,15 +632,14 @@ export interface EveningSyncResult {
 }
 
 /**
- * Evening sync — lightweight change detection for bills already
- * in the database. Runs at 18:30 KST. Catches afternoon
- * legislative activity (committee passes, votes) before the next
- * morning's full sync.
+ * Evening sync — lightweight change detection for bills already in
+ * the database. Runs at 18:30 KST. Catches afternoon legislative
+ * activity (committee passes, votes) before the next morning's sync.
  *
  * No Gemini calls. No briefing regeneration. Just:
- *   1. Pull high-relevance, non-terminal bills from DB
- *   2. For each, call get_bill_detail from MCP
- *   3. If stage changed: update + create alert + write timeline entry
+ *   1. Pull high-relevance, non-terminal bills (score >= 3, stage < 6)
+ *   2. For each, call assembly_bill({ bill_id }) to get 심사경과
+ *   3. If derived stage changed: update + create alert + timeline row
  */
 export async function runEveningSync(): Promise<EveningSyncResult> {
   const startedAt = new Date();
@@ -426,8 +648,6 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
   let stageTransitions = 0;
   let alertsCreated = 0;
 
-  // Only check bills relevant enough to matter (score >= 3) and
-  // not already in terminal state (stage_6 = 공포)
   const trackedBills = await db
     .select()
     .from(bill)
@@ -438,44 +658,56 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
       ),
     );
 
-  for (const trackedBill of trackedBills) {
+  // Parallel fetch (p-limit inside mcp-client caps at 5)
+  const results = await Promise.allSettled(
+    trackedBills.map(async (tracked) => {
+      const resp = await callMcpToolOrThrow<McpBillDetailResponse>(
+        "assembly_bill",
+        { bill_id: tracked.billId },
+      );
+      const detail = resp.items?.[0];
+      if (!detail) throw new Error(`empty detail for ${tracked.billId}`);
+      return { tracked, detail };
+    }),
+  );
+
+  for (const r of results) {
+    billsChecked++;
+    if (r.status !== "fulfilled") {
+      errors.push(`evening: ${errorMessage(r.reason)}`);
+      continue;
+    }
+    const { tracked, detail } = r.value;
+    const newStage = stageFromSimsa(detail.심사경과);
+    if (newStage === tracked.stage) continue;
+
     try {
-      billsChecked++;
-      const detail = await callMcpToolOrThrow<McpBill>("get_bill_detail", {
-        bill_id: trackedBill.billId,
-      });
-
-      const newStage = stageFromInt(detail.stage);
-      if (newStage !== trackedBill.stage) {
-        await db.transaction(async (tx) => {
-          await tx
-            .update(bill)
-            .set({
-              stage: newStage,
-              status: detail.status ?? trackedBill.status,
-              lastSynced: new Date(),
-            })
-            .where(eq(bill.id, trackedBill.id));
-
-          await tx.insert(billTimeline).values({
-            billId: trackedBill.id,
+      await db.transaction(async (tx) => {
+        await tx
+          .update(bill)
+          .set({
             stage: newStage,
-            eventDate: new Date(),
-            description: `${trackedBill.stage} → ${newStage}`,
-          });
+            lastSynced: new Date(),
+          })
+          .where(eq(bill.id, tracked.id));
 
-          await tx.insert(alert).values({
-            type: "stage_change",
-            billId: trackedBill.id,
-            message: `${trackedBill.billName} — ${trackedBill.stage} → ${newStage}`,
-          });
+        await tx.insert(billTimeline).values({
+          billId: tracked.id,
+          stage: newStage,
+          eventDate: new Date(),
+          description: `${tracked.stage} → ${newStage}`,
         });
 
-        stageTransitions++;
-        alertsCreated++;
-      }
+        await tx.insert(alert).values({
+          type: "stage_change",
+          billId: tracked.id,
+          message: `${tracked.billName} — ${tracked.stage} → ${newStage}`,
+        });
+      });
+      stageTransitions++;
+      alertsCreated++;
     } catch (err) {
-      errors.push(`${trackedBill.billId}: ${errorMessage(err)}`);
+      errors.push(`evening_txn(${tracked.billId}): ${errorMessage(err)}`);
     }
   }
 
@@ -494,7 +726,7 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
       startedAt,
       completedAt: new Date(),
       billsProcessed: billsChecked,
-      billsScored: 0, // No scoring in evening sync
+      billsScored: 0,
       legislatorsUpdated: 0,
       newsFetched: 0,
       errorsJson: errors.length > 0 ? errors : null,
@@ -512,78 +744,135 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
 }
 
 /* ─────────────────────────────────────────────────────────────
- * Database upsert helpers
+ * Legislator sync via query_assembly("nwvrqwxyaytdsfvhu")
  * ────────────────────────────────────────────────────────────── */
 
 /**
- * Upsert legislator rows from MCP lawmakers response.
+ * Fetch ALL 22대 legislators via the stable 전체 의원 현황 API and
+ * upsert into the legislator table.
  *
- * Dedupes by member_id. Computes seat_index for hemicycle display
- * by ordering alphabetically within parties (deterministic — can
- * be refined to match real seating order later).
+ * The server caps `page_size` at 100, so we page through until we
+ * have all 295 members.
+ *
+ * ⚠️ Observed issue 2026-04-10: the upstream server can take 60-90s
+ * for the first call after idle, and occasionally returns "Invalid
+ * or expired session" on the 3rd+ sequential call. We sleep 1s
+ * between pages to let the server settle and catch per-page errors
+ * so a partial fetch still gets upserted.
+ *
+ * Returns the number of rows inserted/updated.
  */
-async function upsertLegislators(
-  lawmakers: McpLawmaker[],
-): Promise<number> {
-  if (lawmakers.length === 0) return 0;
+async function syncLegislators(): Promise<number> {
+  const PAGE_SIZE = 100;
+  const rows: McpLegislatorRow[] = [];
+  let page = 1;
+  const errors: string[] = [];
 
-  // Group by party for seat index computation
-  const byParty = new Map<string, McpLawmaker[]>();
-  for (const lm of lawmakers) {
-    const list = byParty.get(lm.party) ?? [];
-    list.push(lm);
-    byParty.set(lm.party, list);
+  // Hard safety cap — the Assembly has ≤ 300 members, so 5 pages is plenty.
+  while (page <= 5) {
+    if (page > 1) await new Promise((r) => setTimeout(r, 1000));
+
+    try {
+      const resp = await callMcpToolOrThrow<McpQueryAssemblyResponse>(
+        "query_assembly",
+        {
+          api_code: "nwvrqwxyaytdsfvhu",
+          params: { AGE: 22 },
+          page,
+          page_size: PAGE_SIZE,
+        },
+      );
+      const batch = resp.items ?? [];
+      rows.push(...batch);
+      if (batch.length < PAGE_SIZE) break; // last page
+      page++;
+    } catch (err) {
+      errors.push(`legislator page ${page}: ${errorMessage(err)}`);
+      break; // stop paging; upsert whatever we have
+    }
   }
 
-  // Assign seat indices: alphabetical by party name, then by member_id
-  // within party. Deterministic and reproducible across syncs.
+  if (errors.length > 0) {
+    console.warn("[syncLegislators] partial fetch:", errors);
+  }
+
+  if (rows.length === 0) return 0;
+
+  // Group by party for seat index computation — alphabetical within party
+  const byParty = new Map<string, McpLegislatorRow[]>();
+  for (const r of rows) {
+    const list = byParty.get(r.POLY_NM) ?? [];
+    list.push(r);
+    byParty.set(r.POLY_NM, list);
+  }
+
+  // Deterministic seat assignment: sort parties by size (largest left),
+  // then by MONA_CD within party.
+  const sortedParties = [...byParty.keys()].sort((a, b) => {
+    const diff = (byParty.get(b)!.length ?? 0) - (byParty.get(a)!.length ?? 0);
+    return diff !== 0 ? diff : a.localeCompare(b);
+  });
+
   let seatCursor = 0;
-  const rows: Array<typeof legislator.$inferInsert> = [];
-  const sortedParties = [...byParty.keys()].sort();
+  const inserts: NewLegislator[] = [];
+
   for (const party of sortedParties) {
     const list = byParty.get(party)!;
-    list.sort((a, b) => a.member_id.localeCompare(b.member_id));
-    for (const lm of list) {
-      rows.push({
-        memberId: lm.member_id,
-        name: lm.name,
-        nameHanja: lm.name_hanja,
-        party: lm.party,
-        district: lm.district,
-        termNumber: lm.term_number,
-        committees: lm.committees ?? [],
+    list.sort((a, b) => a.MONA_CD.localeCompare(b.MONA_CD));
+    for (const r of list) {
+      inserts.push({
+        memberId: r.MONA_CD,
+        name: r.HG_NM,
+        nameHanja: r.HJ_NM,
+        nameEnglish: r.ENG_NM,
+        party: r.POLY_NM,
+        district: r.ORIG_NM,
+        electionType: r.ELECT_GBN_NM,
+        termNumber: parseTermNumber(r.REELE_GBN_NM),
+        // CMITS is comma-separated ("A위원회, B위원회"); split + trim
+        committees: r.CMITS
+          ? r.CMITS.split(",").map((s) => s.trim()).filter(Boolean)
+          : r.CMIT_NM
+            ? [r.CMIT_NM]
+            : [],
         seatIndex: seatCursor++,
-        profileImageUrl: lm.profile_image_url,
+        email: r.E_MAIL,
+        homepage: r.HOMEPAGE,
+        officeAddress: r.ASSEM_ADDR,
         isActive: true,
         lastSynced: new Date(),
       });
     }
   }
 
-  // ON CONFLICT (member_id) DO UPDATE
+  // Upsert on member_id conflict
   await db
     .insert(legislator)
-    .values(rows)
+    .values(inserts)
     .onConflictDoUpdate({
       target: legislator.memberId,
       set: {
         name: sql`excluded.name`,
         nameHanja: sql`excluded.name_hanja`,
+        nameEnglish: sql`excluded.name_english`,
         party: sql`excluded.party`,
         district: sql`excluded.district`,
+        electionType: sql`excluded.election_type`,
         termNumber: sql`excluded.term_number`,
         committees: sql`excluded.committees`,
         seatIndex: sql`excluded.seat_index`,
-        profileImageUrl: sql`excluded.profile_image_url`,
+        email: sql`excluded.email`,
+        homepage: sql`excluded.homepage`,
+        officeAddress: sql`excluded.office_address`,
         isActive: sql`true`,
         lastSynced: sql`NOW()`,
       },
     });
 
-  // Mark any previously active lawmakers NOT in this batch as inactive
-  // (they left the Assembly — rare, happens on by-elections or term changes)
-  const activeMemberIds = rows.map((r) => r.memberId!);
-  if (activeMemberIds.length > 0) {
+  // Mark any previously active legislators NOT in this batch as inactive
+  // (rare — by-elections, expulsions, resignation).
+  const activeIds = inserts.map((i) => i.memberId);
+  if (activeIds.length > 0) {
     await db
       .update(legislator)
       .set({ isActive: false })
@@ -591,44 +880,64 @@ async function upsertLegislators(
         and(
           eq(legislator.isActive, true),
           sql`${legislator.memberId} NOT IN (${sql.join(
-            activeMemberIds.map((id) => sql`${id}`),
+            activeIds.map((id) => sql`${id}`),
             sql`, `,
           )})`,
         ),
       );
   }
 
-  return rows.length;
+  return inserts.length;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Bill upsert (with timeline seeding from 심사경과 timestamps)
+ * ────────────────────────────────────────────────────────────── */
+
+interface ScoredBillForUpsert {
+  listItem: McpBillListItem;
+  detail: McpBillDetailItem;
+  score: number;
+  reasoning: string;
+  summary: string;
 }
 
 /**
  * Upsert scored bills into the database.
+ *
+ * Also seeds `bill_timeline` with a single row for the current stage
+ * (evening sync appends more on transitions).
  */
-async function upsertBills(
-  scoredBills: Array<
-    McpBill & { score: number; reasoning: string; summary: string }
-  >,
-): Promise<number> {
-  if (scoredBills.length === 0) return 0;
+async function upsertBills(scored: ScoredBillForUpsert[]): Promise<number> {
+  if (scored.length === 0) return 0;
 
-  const rows: NewBill[] = scoredBills.map((b) => ({
-    billId: b.bill_id,
-    billName: b.bill_name,
-    proposerName: b.proposer,
-    proposerParty: b.proposer_party,
-    coSponsorCount: b.co_sponsor_count ?? 0,
-    committee: b.committee,
-    stage: stageFromInt(b.stage),
-    status: b.status,
-    proposalDate: b.proposal_date ? new Date(b.proposal_date) : null,
-    relevanceScore: b.score,
-    relevanceReasoning: b.reasoning,
-    proposalReason: b.proposal_reason,
-    mainContent: b.main_content,
-    summaryText: b.summary,
-    externalLink: b.external_link,
-    lastSynced: new Date(),
-  }));
+  const rows: NewBill[] = scored.map(
+    ({ listItem, detail, score, reasoning, summary }) => {
+      const stage = stageFromSimsa(detail.심사경과);
+      const proposerParty = proposerPartyFromDetail(detail);
+      const coSponsorCount =
+        detail.공동발의자_총수 ??
+        (listItem.공동발의자?.split(",").filter(Boolean).length ?? 0);
+      return {
+        billId: listItem.의안ID,
+        billName: detail.의안명 ?? listItem.의안명,
+        proposerName: listItem.대표발의자 ?? listItem.제안자 ?? "",
+        proposerParty,
+        coSponsorCount,
+        committee: listItem.소관위원회,
+        stage,
+        status: listItem.처리상태,
+        proposalDate: parseKstDate(listItem.제안일),
+        relevanceScore: score,
+        relevanceReasoning: reasoning,
+        proposalReason: detail.제안이유, // null today (MCP limitation)
+        mainContent: detail.주요내용, // null today
+        summaryText: summary,
+        externalLink: detail.LINK_URL ?? listItem.상세링크,
+        lastSynced: new Date(),
+      };
+    },
+  );
 
   await db
     .insert(bill)

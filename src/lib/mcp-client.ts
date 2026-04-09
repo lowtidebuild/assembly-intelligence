@@ -2,32 +2,37 @@
  * MCP client wrapper for assembly-api-mcp.
  *
  * ── Transport: Streamable HTTP ────────────────────────────
- * The assembly-api-mcp server speaks the MCP 1.x "streamable HTTP"
+ * The assembly-api-mcp server speaks MCP 1.x "streamable HTTP"
  * transport (not legacy SSE). Verified via the server's setup page
  * at https://assembly-api-mcp.fly.dev/ which documents:
  *
  *   claude mcp add assembly-api --transport http <URL>
  *
- * We use StreamableHTTPClientTransport from the SDK accordingly.
- * Initial SSE-based attempts returned `{"error":"Invalid or
- * expired session"}` (HTTP 400) because that server endpoint
- * doesn't accept SSE connections.
+ * ── Connection strategy: shared, lazy, recoverable ────────
+ * We maintain ONE persistent Client + Transport per process, created
+ * lazily on first call. The original per-call connection pattern
+ * triggered `{"error":"Invalid or expired session"}` HTTP 400s from
+ * the upstream when calls came in rapid succession — apparently
+ * opening+closing sessions back-to-back races the server's session
+ * cleanup.
  *
- * ── Connection strategy: per-call ─────────────────────────
- * Each tool call opens a fresh HTTP transport, sends one request,
- * gets the response, and closes. Per-call overhead is minimal
- * because streamable HTTP is stateless (no long-lived connection).
- * Safe for Vercel serverless.
+ * With a persistent client:
+ *   - First call opens the HTTP session once.
+ *   - Subsequent calls reuse the same session ID.
+ *   - If a call fails with a session error, the next call will
+ *     transparently re-initialize (the cached client is discarded).
+ *   - Process exit leaves the session to expire on its own.
  *
- * ── Rate limiting ─────────────────────────────────────────
- * `p-limit` with concurrency 5 protects the MCP server from
- * connection storms during morning sync (which fetches
- * bills + schedules + votes + lawmakers in parallel).
+ * This is safe for Vercel serverless: each invocation gets its own
+ * process, so the cached client lives exactly as long as the function.
+ *
+ * ── Concurrency ───────────────────────────────────────────
+ * `p-limit(1)` — we observed the server drops sessions under any
+ * parallelism. Fully serialized. 25-40s end-to-end for morning sync.
  *
  * ── Auth ──────────────────────────────────────────────────
  * The key is embedded in the URL as a query param:
  *   https://assembly-api-mcp.fly.dev/mcp?key=XXX&profile=lite
- *
  * Server-side only. The key must never reach the browser.
  */
 
@@ -39,8 +44,8 @@ import { withRetry, NonRetryableError, errorMessage } from "./api-base";
 const MCP_BASE_URL = "https://assembly-api-mcp.fly.dev/mcp";
 const MCP_PROFILE = "lite"; // "lite" vs "full" — lite is enough for MVP
 
-/** Max 5 concurrent MCP connections, hard ceiling. */
-const limit = pLimit(5);
+/** Fully serialized — parallelism triggers upstream session errors. */
+const limit = pLimit(1);
 
 /* ─────────────────────────────────────────────────────────────
  * URL construction
@@ -60,33 +65,65 @@ function getMcpUrl(): URL {
 }
 
 /* ─────────────────────────────────────────────────────────────
- * Per-call connection
+ * Shared client (lazy, reopens on failure)
  * ────────────────────────────────────────────────────────────── */
 
-/**
- * Open an MCP client, run `fn(client)`, then close the connection.
- *
- * Always use this over raw SSEClientTransport — it guarantees
- * cleanup on error paths and keeps connection lifecycle short.
- */
-async function withMcpClient<T>(
-  fn: (client: Client) => Promise<T>,
-): Promise<T> {
+let sharedClient: Client | null = null;
+
+/** Create a fresh Client+Transport and connect. */
+async function openClient(): Promise<Client> {
   const client = new Client(
     { name: "assembly-intelligence", version: "0.1.0" },
     { capabilities: {} },
   );
-
   const transport = new StreamableHTTPClientTransport(getMcpUrl());
+  await client.connect(transport);
+  return client;
+}
 
+/** Get (or create) the shared client. */
+async function getClient(): Promise<Client> {
+  if (sharedClient) return sharedClient;
+  sharedClient = await openClient();
+  return sharedClient;
+}
+
+/** Force-close the shared client and clear it (used after a hard error). */
+async function resetClient(): Promise<void> {
+  const prev = sharedClient;
+  sharedClient = null;
+  if (prev) {
+    await prev.close().catch(() => {});
+  }
+}
+
+/**
+ * Run `fn` against the shared client, recreating it on ANY failure.
+ *
+ * We're aggressive here because the upstream server (flaky fly.dev
+ * backend) returns "Invalid or expired session" errors with
+ * inconsistent message nesting (sometimes at the notification
+ * layer, sometimes as a wrapped cause). Rather than pattern-match
+ * all variants, just reset + retry once on any thrown error.
+ * Opening a new client is cheap (sub-100ms); this keeps the call
+ * sites dumb and the retry behavior consistent.
+ */
+async function runWithSharedClient<T>(
+  fn: (client: Client) => Promise<T>,
+): Promise<T> {
   try {
-    await client.connect(transport);
+    const client = await getClient();
     return await fn(client);
-  } finally {
-    // Best-effort close — swallow errors here because we're
-    // already in the finally block and the caller's result
-    // (success or failure) has priority.
-    await client.close().catch(() => {});
+  } catch (firstErr) {
+    await resetClient();
+    try {
+      const client = await getClient();
+      return await fn(client);
+    } catch {
+      // Surface the ORIGINAL error — the retry failure is usually
+      // just a propagation of the same upstream issue.
+      throw firstErr;
+    }
   }
 }
 
@@ -114,13 +151,12 @@ export async function callMcpTool<T = unknown>(
   return limit(() =>
     withRetry(
       async () => {
-        return withMcpClient(async (client) => {
+        return runWithSharedClient(async (client) => {
           const result = await client.callTool({
             name: toolName,
             arguments: args ?? {},
           });
 
-          // Locate first text part
           const content = Array.isArray(result.content) ? result.content : [];
           for (const part of content) {
             if (
@@ -131,7 +167,6 @@ export async function callMcpTool<T = unknown>(
               "text" in part &&
               typeof part.text === "string"
             ) {
-              // Try to parse as JSON; if it's plain text, return as-is
               try {
                 return JSON.parse(part.text) as T;
               } catch {
@@ -172,7 +207,7 @@ export async function listMcpTools(): Promise<
   return limit(() =>
     withRetry(
       () =>
-        withMcpClient(async (client) => {
+        runWithSharedClient(async (client) => {
           const result = await client.listTools();
           return result.tools.map((t) => ({
             name: t.name,
@@ -185,20 +220,29 @@ export async function listMcpTools(): Promise<
 }
 
 /**
- * Cheap health check. Opens a connection and immediately closes.
- * Used by /api/health and setup wizard to verify the key works
- * before proceeding.
+ * Cheap health check. Opens a connection if needed and tries
+ * listing tools. Used by /api/health and setup wizard to verify
+ * the key works before proceeding.
  */
 export async function pingMcp(): Promise<{
   ok: boolean;
   error?: string;
 }> {
   try {
-    await withMcpClient(async () => {
-      // Connect-and-close is enough to verify auth + reachability
+    await runWithSharedClient(async (client) => {
+      await client.listTools();
     });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: errorMessage(err) };
   }
+}
+
+/**
+ * Explicit cleanup — used by scripts/tests that want deterministic
+ * shutdown. Not required in serverless invocations (process exit
+ * drops the connection).
+ */
+export async function closeMcp(): Promise<void> {
+  await resetClient();
 }

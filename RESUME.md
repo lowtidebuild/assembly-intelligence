@@ -1,7 +1,7 @@
 # 🔖 다음에 이어서 작업하기 위한 기록
 
-**마지막 작업일:** 2026-04-10
-**현재 상태:** **Lane A scaffolding 진행 중** — DB + 프리셋 완료, MCP client 동작 검증됨, sync.ts는 실제 MCP API와 맞게 재작성 필요.
+**마지막 작업일:** 2026-04-10 (파트 2)
+**현재 상태:** **Lane A 완료** — DB + 프리셋 + MCP client + sync 모두 동작. 실제 MCP 서버로 end-to-end 검증됨 (morning 18.9s, evening 6.3s, 295 의원, 5 bills scored). 다음: Lane B (Gemini) 또는 Lane C (UI).
 **프로젝트:** 산업별 국회 인텔리전스 대시보드 (Assembly Intelligence Dashboard) — "ParlaWatch+"
 
 ---
@@ -59,24 +59,26 @@ RESUME.md 읽고 이어서
 - `src/app/api/health/route.ts` — DB + MCP health check
 - `vercel.json` — cron schedule: 21:30 UTC + 09:30 UTC
 
-### 🔴 중요 발견: MCP API 실제 구조가 design.md 가정과 다름
+### ✅ Lane A 완료 — 실제 MCP 서버와 완전 동기화
 
-**실제 MCP 서버 (assembly-api-mcp)는 6개 tools만 노출:**
-- `assembly_member` — 의원 검색/분석/정당통계
-- `assembly_bill` — 법안 검색/추적/상세 (bill_id 전달 시)
-- `assembly_session` — 일정/회의록/표결
-- `assembly_org` — 위원회/청원/입법예고
-- `discover_apis` — 276 API 탐색
-- `query_assembly` — API 코드 직접 호출 (범용 escape hatch)
+**검증된 sync 동작 (2026-04-10 pt 2):**
+- **Morning sync:** 18.9s, 338 bills processed (4 committees), 5 bills scored (게임 keyword 매치), status=success
+- **Evening sync:** 6.3s, 5 bills checked, 0 transitions, status=success
+- **Legislators:** 295명 전체 22대 국회의원 DB에 저장 (MONA_CD + 한자 + 위원회 배열)
+- **Daily briefing:** 1개 생성 (stub, key=0 because stub gives score=3, but schedule=59 포함)
 
-**응답 필드가 한글:** `의안ID`, `의안명`, `제안자`, `소관위원회`, `제안일` 등
+**핵심 해결 사항:**
+1. **6개 tools만 존재** — `assembly_member`, `assembly_bill`, `assembly_session`, `assembly_org`, `discover_apis`, `query_assembly`
+2. **`query_assembly("nwvrqwxyaytdsfvhu", {AGE:22})`** — 전체 의원 API. `MONA_CD` stable ID, `HJ_NM` 한자, `CMITS` 전체 위원회 comma-separated. 295명, page_size cap=100 → 3 페이지.
+3. **Two-phase bill fetch** — `assembly_bill({committee})` list → `assembly_bill({bill_id})` detail. Detail 응답에 `심사경과` 객체 (소관위_회부일/본회의_결과/공포일 등), `공동발의자[]` with 정당 per proposer.
+4. **제안이유/주요내용 항상 null** — MCP가 노출 안 함. `discover_apis` 5개 후보 (`OOWY4R001216HX11461` 등) 모두 total=0 리턴. 제목 + 위원회 + 제안자만으로 Gemini 스코어링해야 함.
+5. **Stage 파생:** 심사경과 timestamp → stage_1~6 매핑 (`stageFromSimsa`).
+6. **MCP client refactor** — 상용 fly.dev 서버가 parallel 세션 싫어함. 기존 per-call connection → persistent lazy client로 교체. 에러 시 reset + retry once. p-limit(1)로 완전 직렬화.
+7. **Schema delta:** drop `profile_image_url`, add `name_english/election_type/email/homepage/office_address` (migration `0001_legislator_mcp_fields.sql` 적용됨).
+8. **Legislator 빈도 제어:** 7일 freshness check. 매 morning sync마다 재fetch 안 함 (서버 cold start 60-90s).
 
-**핵심 문제:**
-- `assembly_bill` search 응답에 `제안이유`/`주요내용` 없음 → Gemini 스코어링 위해 `bill_id`로 **2차 호출** 필요 (검증 필요)
-- `assembly_member`에 `member_id` 없음 → primary key 전략 변경 필요
-- `legislator.committees[]` 배열도 MCP가 안 줌 → aggregation 필요
-
-**전체 분석:** [docs/mcp-api-reality.md](docs/mcp-api-reality.md) (실제 응답 샘플 + 필드 매핑 + schema 조정 필요 목록 포함)
+**전체 분석:** [docs/mcp-api-reality.md](docs/mcp-api-reality.md) (실제 응답 샘플 + 필드 매핑 + schema 조정 최종 버전)
+**Raw samples:** [docs/mcp-samples/](docs/mcp-samples/) (00~10번 JSON 덤프)
 
 ---
 
@@ -175,23 +177,14 @@ Lane B/C/D는 동시 시작 가능. Lane A 완료 후 Step 7에서 wire up.
 
 ## 🎯 다음 세션 우선순위
 
-### 1순위: sync.ts를 실제 MCP API에 맞게 재작성 (30-60분)
-1. `scripts-sample-mcp.mjs` 스타일로 더 많은 샘플 호출:
-   - `assembly_bill({ bill_id: <id> })` → 상세 응답에 `제안이유`/`주요내용` 있는지 확인
-   - `assembly_session({ type: "schedule", date_from: <today> })` → 일정 응답 구조
-   - `assembly_org({ type: "committee", include_members: true })` → 위원회 구성
-2. `docs/mcp-api-reality.md` 업데이트
-3. `src/services/sync.ts` 재작성:
-   - tool 이름: `assembly_bill`, `assembly_member`, `assembly_session`
-   - 한글 필드 → 영어 schema 필드 매핑 함수
-   - 2-phase bill fetch (search → bill_id detail) 구현
-4. `src/db/schema.ts` 조정:
-   - `legislator.member_id` 전략 변경 (composite key or 제거)
-   - `name_hanja`, `profile_image_url` 제거 고려 (MCP가 안 줌)
-5. `pnpm db:generate` → 새 migration → `pnpm db:migrate`
-6. `/api/cron/sync-morning` 직접 호출해서 dry-run 성공 확인
+### ✅ 1순위(완료): sync.ts 실제 MCP API와 맞게 재작성
+- 실제 샘플 10건 (`docs/mcp-samples/`), reality doc 업데이트, sync.ts 전면 재작성
+- MCP client → persistent shared client + reset-on-error pattern, p-limit(1)
+- Schema delta migration 적용, 295 의원 + 5 bills + schedule 검증 완료
+- Morning dry-run 18.9s success, evening 6.3s success
+- 실행: `pnpm tsx scripts/dry-run-morning-sync.ts` (또는 evening)
 
-### 2순위: Lane B — Gemini client (30-45분)
+### 1순위: Lane B — Gemini client (30-45분)
 - `src/lib/gemini-client.ts` — `@google/genai` SDK 사용
 - `src/lib/prompts/relevance-scoring.ts`
 - `src/lib/prompts/bill-summary.ts`

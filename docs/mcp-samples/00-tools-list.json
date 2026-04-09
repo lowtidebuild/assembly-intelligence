@@ -1,0 +1,26 @@
+[
+  {
+    "name": "assembly_member",
+    "description": "국회의원을 검색하고 의정활동을 분석합니다. 이름·정당·선거구·위원회로 검색, 1명이면 자동 상세 반환. analyze=true면 발의법안+표결 종합분석. scope='history'면 역대국회 데이터 조회. mode='party_stats'면 정당별 의석수 현황."
+  },
+  {
+    "name": "assembly_bill",
+    "description": "국회 의안을 검색·추적·분석합니다. 의안명/제안자로 검색, bill_id로 상세, keywords로 주제 추적, mode=stats로 통계 조회."
+  },
+  {
+    "name": "assembly_session",
+    "description": "국회 일정·회의록·표결을 조회합니다. type=schedule로 일정, meeting으로 회의록, vote로 표결. 자동 감지 가능."
+  },
+  {
+    "name": "assembly_org",
+    "description": "위원회·청원·입법예고·보도자료를 조회합니다. type=committee로 위원회, petition으로 청원, legislation_notice로 입법예고, press로 보도자료."
+  },
+  {
+    "name": "discover_apis",
+    "description": "국회 276개 API를 키워드/카테고리로 탐색합니다. 전용 도구가 없는 데이터(청원, 의안통계, 위원회 위원 명단 등)의 API 코드를 찾아 query_assembly로 호출할 수 있습니다."
+  },
+  {
+    "name": "query_assembly",
+    "description": "API 코드로 국회 데이터를 직접 호출합니다. discover_apis로 찾은 코드를 사용하거나, 알려진 코드를 직접 입력. 전용 도구가 없는 276개 API에 접근하는 범용 도구입니다."
+  }
+]
