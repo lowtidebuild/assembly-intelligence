@@ -1,44 +1,88 @@
 # 🔖 다음에 이어서 작업하기 위한 기록
 
-**마지막 작업일:** 2026-04-09
-**현재 상태:** 디자인 리뷰 + 엔지니어링 리뷰 모두 완료. **구현 시작 준비 완료.**
-**프로젝트:** 산업별 국회 인텔리전스 대시보드 (Assembly Intelligence Dashboard)
+**마지막 작업일:** 2026-04-10
+**현재 상태:** **Lane A scaffolding 진행 중** — DB + 프리셋 완료, MCP client 동작 검증됨, sync.ts는 실제 MCP API와 맞게 재작성 필요.
+**프로젝트:** 산업별 국회 인텔리전스 대시보드 (Assembly Intelligence Dashboard) — "ParlaWatch+"
 
 ---
 
 ## 🚀 다음 세션 시작 방법
 
 ```
-RESUME.md 읽고 구현 시작하자
+RESUME.md 읽고 이어서
 ```
 
-### 사전 작업 (다음 세션 전에 본인이 직접)
-
-1. **산업/섹터 결정** (예: 게임, 바이오, 금융 등) — Gemini 프롬프트 작성에 필요
-2. **GR/PA 담당자 2시간 옵저베이션** (The Assignment) — 안 했으면 강력 추천
-3. **API 키 3개 발급:**
-   - **assembly-api-mcp:** https://open.assembly.go.kr (10분)
-   - **Gemini API:** https://aistudio.google.com/apikey (즉시, 무료 tier)
-   - **Naver News:** https://developers.naver.com (앱 등록 → 뉴스 검색 API 활성화)
-4. **`.env.local` 만들기:**
-   ```bash
-   cd "/Users/lowtidebuild/코딩 프로젝트/assembly-intelligence"
-   cp .env.example .env.local
-   # 그런 다음 .env.local 열어서 키 값 채우기
-   chmod 600 .env.local
-   ```
-   `.env.example`은 모든 변수 이름과 발급 링크를 포함하고 있음.
-   `.gitignore`가 이미 `.env.local`을 보호함.
+### 사전 작업 없음
+`.env.local`은 이미 8개 변수로 채워져 있고 Neon DB에 12 tables migrated. 바로 이어가기.
 
 ### Production용 키 관리 (나중에)
 같은 변수 이름으로 GitHub Secrets + Vercel Env Vars에 등록.
-코드는 `process.env.GEMINI_API_KEY`만 읽으면 환경별로 알아서 동작.
+코드는 `process.env.*`만 읽으면 환경별로 알아서 동작. Vercel 배포 시 `CRON_SECRET` 추가 필요 (Vercel이 자동 생성 가능).
 
 ---
 
-## 📍 2026-04-09 세션에서 한 일
+## 📍 2026-04-10 세션에서 한 일
 
-### ✅ /plan-design-review 완료 (5/10 → 8/10)
+### ✅ 부트스트랩 완료 (commit `e2fd3d5`)
+- Next.js 15.5.15 + React 19 + Tailwind 4 + TypeScript 5.9
+- src/ 디렉토리 구조
+- 모든 runtime deps: Drizzle, Neon, MCP SDK, Gemini, TanStack Table, Radix, Lucide
+- 모든 dev deps: Vitest, Playwright, drizzle-kit
+- pnpm `onlyBuiltDependencies` approved
+- ParlaWatch 토큰 적용된 `globals.css` (light/dark)
+- `src/lib/utils.ts` (cn helper)
+
+### ✅ Lane A DB schema + 산업 프리셋 (commit `ade2822`)
+- **design.md 대규모 업데이트:** Level 2 specialization, hemicycle, 국회 현황 페이지, 12 tables
+- **12 tables migrated to Neon** (Singapore):
+  industry_profile, industry_committee, industry_legislator_watch,
+  legislator, bill, bill_timeline, vote, news_article, alert,
+  daily_briefing, relevance_override, sync_log
+- **7 산업 프리셋** (src/lib/industry-presets.ts):
+  게임, **정보보안/사이버시큐리티**, 바이오, 핀테크, 반도체, 이커머스, AI
+  - 각각 keywords (10-30개) + suggested_committees + llm_context (200-400 words)
+  - **의원은 프리셋에 없음** — 사용자가 hemicycle UI로 동적 선택
+- `src/db/schema.ts` (520 lines), `src/db/index.ts` (Neon HTTP driver)
+
+### 🟡 Lane A MCP client + sync service (미커밋)
+- **MCP client 동작 검증됨** — `/api/health` returns `ok: true` with mcp latency ~319ms
+- **Transport 발견:** SSE가 아니라 **Streamable HTTP** (MCP 1.x)
+  - `StreamableHTTPClientTransport` from `@modelcontextprotocol/sdk/client/streamableHttp.js`
+  - per-call connection pattern + p-limit(5) rate limiter
+- `src/lib/api-base.ts` — withRetry, NonRetryableError, sleep
+- `src/lib/mcp-client.ts` — callMcpTool, listMcpTools, pingMcp
+- `src/lib/cron-auth.ts` — CRON_SECRET 검증 (dev mode bypass)
+- `src/lib/gemini-stub.ts` — Lane B 임시 placeholder
+- `src/services/sync.ts` — 오케스트레이터 작성됨, but **MCP tool 이름이 틀림** (아래 참조)
+- `src/app/api/cron/sync-morning/route.ts` — Vercel Cron endpoint
+- `src/app/api/cron/sync-evening/route.ts` — Vercel Cron endpoint
+- `src/app/api/health/route.ts` — DB + MCP health check
+- `vercel.json` — cron schedule: 21:30 UTC + 09:30 UTC
+
+### 🔴 중요 발견: MCP API 실제 구조가 design.md 가정과 다름
+
+**실제 MCP 서버 (assembly-api-mcp)는 6개 tools만 노출:**
+- `assembly_member` — 의원 검색/분석/정당통계
+- `assembly_bill` — 법안 검색/추적/상세 (bill_id 전달 시)
+- `assembly_session` — 일정/회의록/표결
+- `assembly_org` — 위원회/청원/입법예고
+- `discover_apis` — 276 API 탐색
+- `query_assembly` — API 코드 직접 호출 (범용 escape hatch)
+
+**응답 필드가 한글:** `의안ID`, `의안명`, `제안자`, `소관위원회`, `제안일` 등
+
+**핵심 문제:**
+- `assembly_bill` search 응답에 `제안이유`/`주요내용` 없음 → Gemini 스코어링 위해 `bill_id`로 **2차 호출** 필요 (검증 필요)
+- `assembly_member`에 `member_id` 없음 → primary key 전략 변경 필요
+- `legislator.committees[]` 배열도 MCP가 안 줌 → aggregation 필요
+
+**전체 분석:** [docs/mcp-api-reality.md](docs/mcp-api-reality.md) (실제 응답 샘플 + 필드 매핑 + schema 조정 필요 목록 포함)
+
+---
+
+### ⚡ 이전 세션 (2026-04-09) 요약
+
+#### /plan-design-review 완료 (5/10 → 8/10)
 - ParlaWatch HTML 대시보드를 시각적 베이스로 채택 (Bloomberg Terminal 방향 폐기)
 - Variant C 선택: 240px 좌측 사이드바 + 2-column 워크스페이스
 - **GR/PA 실제 엑셀표 발견** — "당사 영향 사항" 컬럼 누락 발견
@@ -111,6 +155,12 @@ Lane B/C/D는 동시 시작 가능. Lane A 완료 후 Step 7에서 wire up.
 - `.env.example` — 환경 변수 템플릿
 - `.gitignore`
 - `assembly-intelligence-brainstorm.md` — 초기 브레인스토밍 (참고용)
+- **`docs/mcp-api-reality.md`** — 실제 MCP 서버 스키마 분석 (2026-04-10)
+- **`src/db/schema.ts`** — 12 tables Drizzle schema
+- **`src/lib/industry-presets.ts`** — 7 산업 프리셋
+- **`src/lib/mcp-client.ts`** — Streamable HTTP MCP wrapper (동작 검증됨)
+- **`src/services/sync.ts`** — 오케스트레이터 (실제 API와 맞게 재작성 필요)
+- **`vercel.json`** — Cron schedules
 
 ### gstack 프로젝트 데이터 (`~/.gstack/projects/assembly-intelligence/`)
 - `lowtidebuild-unknown-design-20260407-221000.md` — 디자인 doc 원본 복사본
@@ -120,6 +170,57 @@ Lane B/C/D는 동시 시작 가능. Lane A 완료 후 Step 7에서 wire up.
 - `learnings.jsonl` — 누적 학습 (12+ entries)
 - `timeline.jsonl` — 세션 타임라인
 - `unknown-reviews.jsonl` — 리뷰 로그
+
+---
+
+## 🎯 다음 세션 우선순위
+
+### 1순위: sync.ts를 실제 MCP API에 맞게 재작성 (30-60분)
+1. `scripts-sample-mcp.mjs` 스타일로 더 많은 샘플 호출:
+   - `assembly_bill({ bill_id: <id> })` → 상세 응답에 `제안이유`/`주요내용` 있는지 확인
+   - `assembly_session({ type: "schedule", date_from: <today> })` → 일정 응답 구조
+   - `assembly_org({ type: "committee", include_members: true })` → 위원회 구성
+2. `docs/mcp-api-reality.md` 업데이트
+3. `src/services/sync.ts` 재작성:
+   - tool 이름: `assembly_bill`, `assembly_member`, `assembly_session`
+   - 한글 필드 → 영어 schema 필드 매핑 함수
+   - 2-phase bill fetch (search → bill_id detail) 구현
+4. `src/db/schema.ts` 조정:
+   - `legislator.member_id` 전략 변경 (composite key or 제거)
+   - `name_hanja`, `profile_image_url` 제거 고려 (MCP가 안 줌)
+5. `pnpm db:generate` → 새 migration → `pnpm db:migrate`
+6. `/api/cron/sync-morning` 직접 호출해서 dry-run 성공 확인
+
+### 2순위: Lane B — Gemini client (30-45분)
+- `src/lib/gemini-client.ts` — `@google/genai` SDK 사용
+- `src/lib/prompts/relevance-scoring.ts`
+- `src/lib/prompts/bill-summary.ts`
+- `src/lib/prompts/daily-briefing.ts`
+- `src/lib/prompts/company-impact.ts`
+- `src/lib/prompts/bill-analysis.ts`
+- `gemini-stub.ts` → 실제 Gemini 호출로 교체
+- sync cron에서 stub import 제거
+
+### 3순위: Lane C — UI scaffolding (1-2시간)
+- `src/components/sidebar.tsx` (ParlaWatch 토큰, 6 nav items)
+- `src/app/(dashboard)/layout.tsx` — sidebar + main 레이아웃
+- `src/app/(dashboard)/briefing/page.tsx` — Variant C 구조
+- `src/app/(dashboard)/radar/page.tsx` — TanStack Table + slide-over
+- `src/app/(dashboard)/watch/page.tsx` — (reuse hemicycle)
+- `src/app/(dashboard)/impact/page.tsx`
+- `src/app/(dashboard)/assembly/page.tsx` — **국회 현황 (hemicycle)**
+- `src/app/(dashboard)/settings/page.tsx`
+- **`src/components/hemicycle.tsx`** — 재사용 가능한 의석도 SVG 컴포넌트 (키 컴포넌트)
+
+### 4순위: Setup wizard + Auth middleware
+- `src/app/setup/page.tsx` (5 steps: industry → keywords → committees → legislators via hemicycle → confirm)
+- `src/middleware.ts` — shared password gate
+
+### 5순위: Lane D — Naver News + API routes + Tests
+- `src/lib/news-client.ts`
+- `src/app/api/bills/[id]/generate-impact/route.ts`
+- `src/app/api/bills/[id]/impact/route.ts`
+- Vitest 유닛 테스트 + Playwright E2E
 
 ---
 
