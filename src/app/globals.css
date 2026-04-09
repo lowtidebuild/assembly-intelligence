@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+/*
+ * ParlaWatch+ design tokens
+ * See design.md §4 "Frontend design priority"
+ * Light default, dark toggle (via [data-theme="dark"] on <html>)
+ */
+
+:root {
+  /* Surface */
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-2: #f1f5f9;
+
+  /* Text */
+  --color-text: #1e293b;
+  --color-text-secondary: #64748b;
+  --color-text-tertiary: #94a3b8;
+
+  /* Borders */
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-light: #dbeafe;
+  --color-domain: #3b82f6;
+
+  /* Status */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+
+  /* Stage colors (from GR/PA Excel convention) */
+  --color-stage-0: #ffffff;
+  --color-stage-1: #fef3c7;
+  --color-stage-2: #fde68a;
+  --color-stage-3: #fed7aa;
+  --color-stage-4: #bbf7d0;
+  --color-stage-5: #a7f3d0;
+  --color-stage-6: #86efac;
+
+  /* Shape */
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] {
+  --color-bg: #1a1d21;
+  --color-surface: #222529;
+  --color-surface-2: #2a2d32;
+
+  --color-text: #d1d2d3;
+  --color-text-secondary: #9a9b9d;
+  --color-text-tertiary: #6e7072;
+
+  --color-border: #383a3e;
+  --color-border-strong: #4a4d52;
+
+  --color-primary: #1d9bd1;
+  --color-primary-hover: #4db8e0;
+  --color-primary-light: rgba(29, 155, 209, 0.15);
+  --color-domain: #1d9bd1;
+
+  --color-success: #2eb67d;
+  --color-warning: #e8a230;
+  --color-error: #e05555;
+  --color-info: #4db8e0;
+
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+/* Tailwind v4 theme binding — makes tokens available as Tailwind utilities */
+@theme inline {
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-text);
+  --color-muted: var(--color-surface-2);
+  --color-muted-foreground: var(--color-text-secondary);
+  --color-border: var(--color-border);
+  --color-primary: var(--color-primary);
+  --color-primary-foreground: #ffffff;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", Roboto,
+    "Noto Sans KR", sans-serif;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", Roboto,
+    "Noto Sans KR", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
