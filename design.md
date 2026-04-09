@@ -58,7 +58,7 @@ For each high-relevance bill (score 3+), auto-search recent news articles mentio
 
 ## Constraints
 
-- Internal tool for one organization (no multi-tenancy needed initially)
+- **Codebase is industry-agnostic; specialization happens via Industry Profile setup.** Any user clones/deploys → runs setup wizard → picks an industry preset → app configures keywords, committees, legislators, and LLM context for their domain. Same code, different configs.
 - Must integrate with assembly-api-mcp as primary data backend, supplemented by web search for news context
 - Korean language UI and content throughout
 - Polished, professional frontend design is critical — ParlaWatch+ aesthetic (professional gov-tech dashboard). Design quality signals seriousness to decision-makers and earns continued investment.
@@ -71,7 +71,7 @@ For each high-relevance bill (score 3+), auto-search recent news articles mentio
 2. **assembly-api-mcp is the primary data source**, supplemented by web search for news context. The 276 APIs cover all formal legislative data. News search adds political context and public sentiment that formal data cannot capture.
 3. **Ship the full dashboard from day one.** All four components are views on the same data source. The marginal cost of building all four is low, and phasing adds coordination overhead without meaningful risk reduction. (Note: challenged by second opinion — see below.)
 4. **LLM semantic relevance scoring is a key capability.** Reading full 제안이유 and determining industry relevance semantically (not just keyword matching) is what makes this tool dramatically better than checking 의안정보시스템 manually.
-5. **Internal tool first.** Productization for external organizations is deferred. Build for one org, one industry, one GR/PA person.
+5. **Generic by default, specialized by setup.** The codebase is industry-agnostic — sync pipeline, UI, Gemini client, database schema all work for any industry. Specialization happens at runtime via `IndustryProfile` + `IndustryCommittee` + `IndustryLegislatorWatch` rows that the setup wizard populates from a preset library. A new industry = one preset file entry, zero code changes.
 
 ## Cross-Model Perspective
 
@@ -392,6 +392,213 @@ Slack API is not available internally (company does not support API access). All
 | 6 | 입법 레이더 탭 → 테이블 뷰 | 상세 작업 모드 | 엑셀형 sortable/filterable table |
 | 7 | 법안 클릭 → 상세 패널 → 당사 영향 작성 | 전문가 판단 | Slide-over panel + editable field |
 | 8 | 보고서 생성 → 클립보드 복사 | 달성감 | HTML 보고서 + 복사 버튼 |
+
+## Level 2 Specialization Architecture (2026-04-09)
+
+The product is **a generic codebase with runtime specialization via industry profiles**. This decision was made during Lane A planning. Rationale: same code works for any Korean industry (game, cybersecurity, bio, fintech, semiconductor, ecommerce, AI); specialization is a data concern, not a code concern.
+
+### 17. Industry Presets Library
+
+`src/lib/industry-presets.ts` ships with 7 pre-configured industries. Each preset is **thin** — it defines *what the LLM should look for*, not *who to watch*. Legislator selection happens dynamically via the hemicycle UI (section 19) because (a) real-time MCP data is more accurate than hardcoded names and (b) users know their own stakeholders better than any preset.
+
+```typescript
+// src/lib/industry-presets.ts
+export interface IndustryPreset {
+  slug: string;                    // "game", "cybersecurity", etc.
+  name: string;                    // "게임"
+  name_en: string;                 // "Game"
+  icon: string;                    // "🎮"
+  keywords: string[];              // 10-20 terms for pre-filter
+  suggested_committees: string[];  // 상임위 names (Korean)
+  llm_context: string;             // 2-3 paragraphs for Gemini system prompt
+}
+
+export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
+  game: { ... },
+  cybersecurity: { ... },
+  bio: { ... },
+  fintech: { ... },
+  semiconductor: { ... },
+  commerce: { ... },
+  ai: { ... },
+};
+```
+
+The 7 presets ship with v1:
+
+| Slug | Name | Icon | Scope |
+|---|---|---|---|
+| `game` | 게임 | 🎮 | 게임산업법, 확률형 아이템, 등급분류, 이스포츠 |
+| `cybersecurity` | 정보보안 · 사이버시큐리티 | 🛡️ | 정보통신망법, 개인정보보호, 망분리, ISMS-P |
+| `bio` | 바이오 · 제약 | 💊 | 약사법, 생명윤리법, 첨단재생의료법, 임상 |
+| `fintech` | 핀테크 · 금융 | 💰 | 전자금융거래법, 신용정보법, 가상자산, 마이데이터 |
+| `semiconductor` | 반도체 | 💻 | 반도체특별법, 국가핵심기술, 수출통제 |
+| `commerce` | 이커머스 · 유통 | 🛒 | 전자상거래법, 유통산업발전법, 배달 플랫폼 |
+| `ai` | 인공지능 | 🤖 | AI 기본법, 저작권법, AI 생성물, 알고리즘 |
+
+Users can create custom profiles (not tied to presets) via "직접 입력" option in setup wizard.
+
+### 18. Setup Wizard Flow
+
+Multi-step wizard at `/setup`. Runs on first launch (no `IndustryProfile` row exists) or when user resets profile.
+
+```
+/setup
+  ├─ Step 1: Industry Picker
+  │    Grid of preset cards + "직접 입력" option
+  │
+  ├─ Step 2: Keywords Customization
+  │    Editable chips preloaded from preset.keywords
+  │    Add/remove freely
+  │
+  ├─ Step 3: Committees Selection
+  │    Checkboxes preloaded from preset.suggested_committees
+  │    Full list of 17 standing committees available
+  │
+  ├─ Step 4: Legislator Selection (hemicycle UI)
+  │    ← KEY STEP ← see section 19
+  │    Filter + click to add to tracked list
+  │
+  ├─ Step 5: Confirm + first sync
+  │    Shows summary, runs initial morning sync, redirects to /briefing
+```
+
+### 19. Hemicycle Chart Component (국회 의석도)
+
+A reusable React component that renders the National Assembly seating chart as an SVG hemicycle (반원). Each seat = one legislator, colored by party. Clickable for profile popover.
+
+**Props:**
+```typescript
+interface HemicycleProps {
+  legislators: Legislator[];       // From MCP
+  highlightFilter?: {
+    committees?: string[];
+    party?: string;
+    keywords?: string[];           // matches name/district
+  };
+  selectedIds?: string[];          // Selected seats (for setup wizard)
+  onSeatClick?: (legislator: Legislator) => void;
+  showInactive?: boolean;          // Gray out non-matching seats vs hide them
+}
+```
+
+**Reused in:**
+- **Setup Wizard Step 4** — User filters by committee/party, clicks seats to add to tracked list
+- **국회 현황 page** (new, section 20) — Main dashboard view
+- **의원 워치 page** — Filtered by `tracked_legislator_ids`
+
+**Implementation:** Math-based SVG (8-10 rows of seats arranged in a half-circle, each row slightly larger radius). Libraries evaluated:
+- `d3-parliament` — good but aging, pulls in all of d3
+- `parliament-svg` — lightweight, vanilla JS wrapper
+- **Custom SVG with React** — preferred, ~200 lines, full control, no dependencies
+
+**Data source:** `get_active_lawmakers` MCP tool → cached in `Legislator` table → served from DB to client via Server Component.
+
+**Interactions:**
+- Hover seat → tooltip with name + party chip
+- Click seat → popover with full profile (name, party, district, tenure, committee, recent bills)
+- Filter changes → non-matching seats fade to gray (don't hide — preserves spatial context)
+
+### 20. 국회 현황 Page (New — 6th Nav Item)
+
+A new page at `/assembly` that shows the current National Assembly status. Universal (no industry filtering), serves two purposes:
+
+1. **Greenlight demo impact** — Executives see the hemicycle and immediately grasp "oh, this is a serious tool"
+2. **Context for GR/PA work** — One-click overview of "who's in the assembly right now"
+
+**Layout:**
+```
+국회 현황
+┌─────────────────────────────────────────────────┐
+│ 제22대 국회 · 임기 2024-05-30 ~ 2028-05-29     │
+│ 재적 298명 · 민주당 170 · 국민의힘 108 · 기타 20 │
+└─────────────────────────────────────────────────┘
+
+┌─────────────────────────┐  ┌──────────────────┐
+│                         │  │ 정당별 분포      │
+│   [Hemicycle SVG]       │  │ ■ 민주 170      │
+│                         │  │ ■ 국힘 108      │
+│   🔵🔵🔴🔴             │  │ ■ 조국 8        │
+│  🔵🔵🔵🔴🔴🔴           │  │ ...              │
+│ 🔵🔵🔵🔵🔴🔴🔴🔴         │  ├──────────────────┤
+│                         │  │ 상임위 인원      │
+│ Filters:                │  │ 법사위 18        │
+│ [당 ▼] [위원회 ▼]       │  │ 정무위 24        │
+│ [검색 ___]              │  │ ...              │
+│                         │  ├──────────────────┤
+│                         │  │ 초선 비율 38%    │
+│                         │  │ 여성 의원 19%    │
+│                         │  │ 평균 연령 56세   │
+└─────────────────────────┘  └──────────────────┘
+```
+
+Updates sidebar nav from 5 to **6 items**: 브리핑봇, 입법 레이더, 의원 워치, 영향 분석기, **국회 현황** (new), 설정.
+
+### 21. Updated Data Model (12 tables instead of 10)
+
+Two new tables support Level 2 specialization:
+
+```
+IndustryProfile (extended)
+  - id, slug, name, name_en, icon, description,
+    keywords[] (jsonb),
+    llm_context (text),
+    preset_version (nullable; e.g. "game-v1.0"),
+    is_custom (boolean),
+    created_at, updated_at
+
+IndustryCommittee (NEW)
+  - id, industry_profile_id, committee_code, priority (1-3),
+    is_auto_added
+
+IndustryLegislatorWatch (NEW)
+  - id, industry_profile_id, legislator_id, reason (text),
+    is_auto_added, added_at
+```
+
+Total: 12 tables (was 10). Sync pipeline, Gemini prompts, and UI read from these three tables for specialization — everything else is industry-agnostic.
+
+### 22. Updated Architecture Diagram
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│              Frontend (Next.js 15 / Vercel)                   │
+│  ┌────────┐                                                  │
+│  │Sidebar │ ┌─────┐┌─────┐┌────┐┌─────┐┌──────────┐┌─────┐ │
+│  │  Nav   │ │브리 ││입법 ││의원││영향 ││국회 현황 ││설정 │ │
+│  │ (240px)│ │핑봇 ││레이더││워치││분석기││(NEW)   ││    │ │
+│  │        │ │(C)★ ││(A)★ ││(B) ││(D)  ││hemicycle││    │ │
+│  └────────┘ └─────┘└─────┘└────┘└─────┘└──────────┘└─────┘ │
+│                         │                                    │
+│     Next.js API Routes + Server Actions                      │
+│     POST /api/bills/[id]/generate-impact (Gemini Pro)        │
+│     PATCH /api/bills/[id]/impact (manual save)               │
+│     POST /api/setup/complete (initial sync trigger)          │
+└─────────────────────────┬────────────────────────────────────┘
+                          │
+┌─────────────────────────┴────────────────────────────────────┐
+│                   Backend Services                            │
+│  ┌──────────────┐  ┌───────────────┐  ┌───────────┐         │
+│  │ Data Sync    │  │ LLM Service   │  │ Alert     │         │
+│  │ 2x daily     │  │ Gemini        │  │ (DB only) │         │
+│  │ cron         │  │ Flash + Pro   │  │ in-app    │         │
+│  └──────┬───────┘  └───────┬───────┘  └───────────┘         │
+│         │                  │                                 │
+│  ┌──────┴───────┐  ┌──────┴────────┐                        │
+│  │ MCP Client   │  │ News Client   │                        │
+│  │ (per-call)   │  │ (Naver API)   │                        │
+│  └──────┬───────┘  └──────┬────────┘                        │
+│                                                              │
+│  Industry Profile (read by sync, LLM, UI)                    │
+│  ↓ reads preset → filters bills → scores with llm_context    │
+└─────────┼─────────────────┼──────────────────────────────────┘
+          │                 │
+┌─────────┴──────┐ ┌───────┴────┐   ┌─────────────────┐
+│ assembly-api   │ │ Naver News │   │ PostgreSQL      │
+│ -mcp (SSE)     │ │ Search API │   │ (Neon Free)     │
+│ (276 APIs)     │ │ (25K/day)  │   │ 12 tables       │
+└────────────────┘ └────────────┘   └─────────────────┘
+```
 
 ## Reviewer Concerns
 

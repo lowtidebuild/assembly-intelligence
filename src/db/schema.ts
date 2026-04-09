@@ -1,0 +1,571 @@
+/**
+ * Database schema — Assembly Intelligence Dashboard
+ *
+ * 12 tables split into 3 groups:
+ *
+ *   Industry config (3):  IndustryProfile, IndustryCommittee,
+ *                         IndustryLegislatorWatch
+ *   Assembly data (5):    Bill, BillTimeline, Legislator, Vote,
+ *                         NewsArticle
+ *   App state (4):        Alert, DailyBriefing, RelevanceOverride,
+ *                         SyncLog
+ *
+ * Relationships diagram:
+ *
+ *   IndustryProfile 1 ──── N IndustryCommittee
+ *                   1 ──── N IndustryLegislatorWatch ── N Legislator
+ *                   (no FK to Bill — filter is runtime via keywords/LLM)
+ *
+ *   Bill 1 ──── N BillTimeline
+ *        1 ──── N Vote ── N Legislator
+ *        1 ──── N NewsArticle (nullable bill_id for unassociated news)
+ *        1 ──── N RelevanceOverride
+ *
+ *   All tables use bigint id primary keys with generated identity.
+ *   Timestamps are `timestamp with time zone` (Postgres best practice).
+ */
+
+import {
+  pgTable,
+  bigint,
+  text,
+  boolean,
+  integer,
+  timestamp,
+  jsonb,
+  index,
+  uniqueIndex,
+  pgEnum,
+} from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
+
+/* ─────────────────────────────────────────────────────────────
+ * Enums
+ * ────────────────────────────────────────────────────────────── */
+
+/**
+ * Bill lifecycle stages — matches the GR/PA team's existing Excel
+ * color coding convention (stage 0-6).
+ *
+ *   0 = 발의예정           (white)
+ *   1 = 법안발의/입법예고  (light yellow)
+ *   2 = 상임위 심사/계류중 (yellow)
+ *   3 = 법제사법위 심사    (orange)
+ *   4 = 국회 비준          (green)
+ *   5 = 정부 이송          (light green)
+ *   6 = 공포               (green, completed)
+ */
+export const billStageEnum = pgEnum("bill_stage", [
+  "stage_0",
+  "stage_1",
+  "stage_2",
+  "stage_3",
+  "stage_4",
+  "stage_5",
+  "stage_6",
+]);
+
+export const syncTypeEnum = pgEnum("sync_type", ["morning", "evening", "manual"]);
+export const syncStatusEnum = pgEnum("sync_status", [
+  "success",
+  "partial",
+  "failed",
+]);
+
+export const voteResultEnum = pgEnum("vote_result", [
+  "yes",
+  "no",
+  "abstain",
+  "absent",
+  "unknown",
+]);
+
+export const alertTypeEnum = pgEnum("alert_type", [
+  "stage_change",
+  "new_bill",
+  "vote_scheduled",
+  "sync_failure",
+]);
+
+/* ─────────────────────────────────────────────────────────────
+ * Industry config
+ * ────────────────────────────────────────────────────────────── */
+
+/**
+ * IndustryProfile — one row per deployment. Populated by setup wizard.
+ * Drives keyword pre-filter + Gemini scoring prompt + UI branding.
+ *
+ * `preset_version` tracks which preset the user started from (e.g.
+ * "game-v1.0"). `null` means the profile was built from scratch via
+ * "직접 입력" option. This lets us detect presets that drifted from
+ * defaults and offer upgrades later.
+ */
+export const industryProfile = pgTable("industry_profile", {
+  id: bigint("id", { mode: "number" })
+    .primaryKey()
+    .generatedAlwaysAsIdentity(),
+  slug: text("slug").notNull().unique(), // "game", "cybersecurity", "custom-abc123"
+  name: text("name").notNull(), // "게임"
+  nameEn: text("name_en").notNull(), // "Game"
+  icon: text("icon").notNull().default("📊"), // emoji
+  description: text("description").notNull().default(""),
+  // Keywords used by sync pipeline for pre-filter before Gemini scoring.
+  // Stored as jsonb for efficient IN queries + future weighting.
+  keywords: jsonb("keywords")
+    .$type<string[]>()
+    .notNull()
+    .default([]),
+  // Injected as system prompt prefix for Gemini relevance scoring.
+  llmContext: text("llm_context").notNull().default(""),
+  presetVersion: text("preset_version"), // null = custom
+  isCustom: boolean("is_custom").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * IndustryCommittee — which Assembly standing committees matter for
+ * this industry. Populated from preset suggestions, editable by user.
+ *
+ *   priority 1 = core (always surface events)
+ *   priority 2 = relevant (surface domain-matching events)
+ *   priority 3 = occasional (surface only high-relevance events)
+ */
+export const industryCommittee = pgTable(
+  "industry_committee",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    industryProfileId: bigint("industry_profile_id", { mode: "number" })
+      .notNull()
+      .references(() => industryProfile.id, { onDelete: "cascade" }),
+    committeeCode: text("committee_code").notNull(), // "문체위", "과방위"
+    priority: integer("priority").notNull().default(2),
+    isAutoAdded: boolean("is_auto_added").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_industry_committee").on(
+      t.industryProfileId,
+      t.committeeCode,
+    ),
+  ],
+);
+
+/**
+ * IndustryLegislatorWatch — legislators this industry tracks.
+ * Populated by user during setup wizard (hemicycle selection UI),
+ * not from presets. Changes frequently as legislators enter/leave
+ * committees.
+ */
+export const industryLegislatorWatch = pgTable(
+  "industry_legislator_watch",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    industryProfileId: bigint("industry_profile_id", { mode: "number" })
+      .notNull()
+      .references(() => industryProfile.id, { onDelete: "cascade" }),
+    legislatorId: bigint("legislator_id", { mode: "number" })
+      .notNull()
+      .references(() => legislator.id, { onDelete: "cascade" }),
+    reason: text("reason"), // "게임산업법 대표발의"
+    isAutoAdded: boolean("is_auto_added").notNull().default(false),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_industry_legislator_watch").on(
+      t.industryProfileId,
+      t.legislatorId,
+    ),
+  ],
+);
+
+/* ─────────────────────────────────────────────────────────────
+ * Assembly data (synced from assembly-api-mcp)
+ * ────────────────────────────────────────────────────────────── */
+
+/**
+ * Legislator — synced from MCP `get_active_lawmakers`. Lives for the
+ * duration of an Assembly term (4 years). Indexed by committee for
+ * hemicycle filtering.
+ *
+ * `committees` is jsonb array because a legislator can serve on
+ * multiple committees simultaneously.
+ */
+export const legislator = pgTable(
+  "legislator",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    memberId: text("member_id").notNull().unique(), // Assembly official ID
+    name: text("name").notNull(),
+    nameHanja: text("name_hanja"),
+    party: text("party").notNull(), // "민주", "국민의힘", ...
+    district: text("district"), // "울산 북구" or "비례대표"
+    termNumber: integer("term_number"), // 몇 선 (1-10+)
+    // Committees this legislator serves on. JSON array of committee codes.
+    committees: jsonb("committees").$type<string[]>().notNull().default([]),
+    // Seat position on hemicycle (computed at sync time from party ordering)
+    seatIndex: integer("seat_index"),
+    profileImageUrl: text("profile_image_url"),
+    isActive: boolean("is_active").notNull().default(true),
+    lastSynced: timestamp("last_synced", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_legislator_party").on(t.party),
+    index("idx_legislator_active").on(t.isActive),
+  ],
+);
+
+/**
+ * Bill — the core entity. Synced from MCP `search_bills`.
+ *
+ * `companyImpact` is the GR/PA team's editable assessment (section 13
+ * of design.md). `companyImpactIsAiDraft` tracks whether it's a
+ * confirmed human judgment or an unreviewed Gemini draft.
+ *
+ * `summaryText` is pre-generated by Gemini Flash during sync (not
+ * on-demand) so the slide-over panel opens instantly.
+ *
+ * `externalLink` points to 의안정보시스템 so users can verify source.
+ */
+export const bill = pgTable(
+  "bill",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    billId: text("bill_id").notNull().unique(), // Assembly official ID (의안번호)
+    billName: text("bill_name").notNull(),
+    proposerName: text("proposer_name").notNull(),
+    proposerParty: text("proposer_party"),
+    coSponsorCount: integer("co_sponsor_count").notNull().default(0),
+    committee: text("committee"), // 소관위원회
+    stage: billStageEnum("stage").notNull().default("stage_1"),
+    status: text("status"), // raw status string from MCP
+    proposalDate: timestamp("proposal_date", { withTimezone: true }),
+    // Gemini Flash output — 1 to 5 score
+    relevanceScore: integer("relevance_score"),
+    relevanceReasoning: text("relevance_reasoning"),
+    // Full bill body (제안이유 + 주요내용) — used for impact analysis
+    proposalReason: text("proposal_reason"),
+    mainContent: text("main_content"),
+    // Pre-generated summary shown in slide-over panel (Gemini Flash, sync-time)
+    summaryText: text("summary_text"),
+    // User-editable company impact assessment (GR/PA judgment)
+    companyImpact: text("company_impact"),
+    companyImpactIsAiDraft: boolean("company_impact_is_ai_draft")
+      .notNull()
+      .default(false),
+    // Direct link to 의안정보시스템
+    externalLink: text("external_link"),
+    lastSynced: timestamp("last_synced", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_bill_relevance").on(t.relevanceScore),
+    index("idx_bill_stage").on(t.stage),
+    index("idx_bill_committee").on(t.committee),
+    index("idx_bill_proposal_date").on(t.proposalDate),
+  ],
+);
+
+/**
+ * BillTimeline — lifecycle events for a bill. Used by briefing
+ * generator to detect "bills that changed today".
+ */
+export const billTimeline = pgTable(
+  "bill_timeline",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    billId: bigint("bill_id", { mode: "number" })
+      .notNull()
+      .references(() => bill.id, { onDelete: "cascade" }),
+    stage: billStageEnum("stage").notNull(),
+    eventDate: timestamp("event_date", { withTimezone: true }).notNull(),
+    description: text("description"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_bill_timeline_bill").on(t.billId)],
+);
+
+/**
+ * Vote — individual legislator votes on a bill. Optional per bill
+ * (only final votes populate this). Used for "voting pattern analysis"
+ * in Bill Impact Analyzer.
+ */
+export const vote = pgTable(
+  "vote",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    billId: bigint("bill_id", { mode: "number" })
+      .notNull()
+      .references(() => bill.id, { onDelete: "cascade" }),
+    legislatorId: bigint("legislator_id", { mode: "number" })
+      .notNull()
+      .references(() => legislator.id, { onDelete: "cascade" }),
+    result: voteResultEnum("result").notNull(),
+    voteDate: timestamp("vote_date", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("uq_vote").on(t.billId, t.legislatorId),
+    index("idx_vote_bill").on(t.billId),
+  ],
+);
+
+/**
+ * NewsArticle — cached news search results from Naver News API.
+ * `billId` is nullable because some queries are context-based (e.g.
+ * "게임산업" general news) not bill-specific.
+ */
+export const newsArticle = pgTable(
+  "news_article",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    billId: bigint("bill_id", { mode: "number" }).references(() => bill.id, {
+      onDelete: "set null",
+    }),
+    query: text("query").notNull(), // What we searched for
+    title: text("title").notNull(),
+    url: text("url").notNull().unique(),
+    source: text("source"), // "전자신문", "디지털타임스"
+    description: text("description"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_news_bill").on(t.billId),
+    index("idx_news_published").on(t.publishedAt),
+  ],
+);
+
+/* ─────────────────────────────────────────────────────────────
+ * App state
+ * ────────────────────────────────────────────────────────────── */
+
+/**
+ * Alert — dashboard-only notifications. Slack delivery was removed
+ * (design.md section 15) because the company does not support
+ * Slack API integration.
+ */
+export const alert = pgTable(
+  "alert",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    type: alertTypeEnum("type").notNull(),
+    billId: bigint("bill_id", { mode: "number" }).references(() => bill.id, {
+      onDelete: "cascade",
+    }),
+    message: text("message").notNull(),
+    read: boolean("read").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_alert_unread").on(t.read, t.createdAt),
+    index("idx_alert_bill").on(t.billId),
+  ],
+);
+
+/**
+ * DailyBriefing — pre-rendered HTML briefing. One row per day.
+ * Generated by morning sync cron, served by 브리핑봇 page.
+ */
+export const dailyBriefing = pgTable(
+  "daily_briefing",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    date: text("date").notNull().unique(), // "2026-04-09" (KST date, not timestamp)
+    contentHtml: text("content_html").notNull(),
+    // Summary stats for sidebar/header display
+    keyItemCount: integer("key_item_count").notNull().default(0),
+    scheduleCount: integer("schedule_count").notNull().default(0),
+    newBillCount: integer("new_bill_count").notNull().default(0),
+    generatedAt: timestamp("generated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
+/**
+ * RelevanceOverride — feedback loop. When GR/PA person disagrees
+ * with Gemini's relevance score, they can override it. Overrides
+ * are stored here and later aggregated to refine the LLM prompt.
+ */
+export const relevanceOverride = pgTable(
+  "relevance_override",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    billId: bigint("bill_id", { mode: "number" })
+      .notNull()
+      .references(() => bill.id, { onDelete: "cascade" }),
+    originalScore: integer("original_score"),
+    overrideScore: integer("override_score").notNull(),
+    reason: text("reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_relevance_override_bill").on(t.billId)],
+);
+
+/**
+ * SyncLog — record of each sync cycle. Used for dashboard "last sync"
+ * indicator + debugging sync failures.
+ */
+export const syncLog = pgTable(
+  "sync_log",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    syncType: syncTypeEnum("sync_type").notNull(),
+    status: syncStatusEnum("status").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    billsProcessed: integer("bills_processed").notNull().default(0),
+    billsScored: integer("bills_scored").notNull().default(0),
+    legislatorsUpdated: integer("legislators_updated").notNull().default(0),
+    newsFetched: integer("news_fetched").notNull().default(0),
+    errorsJson: jsonb("errors_json").$type<unknown>(),
+  },
+  (t) => [index("idx_sync_log_started").on(t.startedAt)],
+);
+
+/* ─────────────────────────────────────────────────────────────
+ * Relations
+ * ────────────────────────────────────────────────────────────── */
+
+export const industryProfileRelations = relations(
+  industryProfile,
+  ({ many }) => ({
+    committees: many(industryCommittee),
+    legislatorWatches: many(industryLegislatorWatch),
+  }),
+);
+
+export const industryCommitteeRelations = relations(
+  industryCommittee,
+  ({ one }) => ({
+    profile: one(industryProfile, {
+      fields: [industryCommittee.industryProfileId],
+      references: [industryProfile.id],
+    }),
+  }),
+);
+
+export const industryLegislatorWatchRelations = relations(
+  industryLegislatorWatch,
+  ({ one }) => ({
+    profile: one(industryProfile, {
+      fields: [industryLegislatorWatch.industryProfileId],
+      references: [industryProfile.id],
+    }),
+    legislator: one(legislator, {
+      fields: [industryLegislatorWatch.legislatorId],
+      references: [legislator.id],
+    }),
+  }),
+);
+
+export const billRelations = relations(bill, ({ many }) => ({
+  timeline: many(billTimeline),
+  votes: many(vote),
+  news: many(newsArticle),
+  alerts: many(alert),
+  relevanceOverrides: many(relevanceOverride),
+}));
+
+export const billTimelineRelations = relations(billTimeline, ({ one }) => ({
+  bill: one(bill, {
+    fields: [billTimeline.billId],
+    references: [bill.id],
+  }),
+}));
+
+export const legislatorRelations = relations(legislator, ({ many }) => ({
+  votes: many(vote),
+  watchedBy: many(industryLegislatorWatch),
+}));
+
+export const voteRelations = relations(vote, ({ one }) => ({
+  bill: one(bill, { fields: [vote.billId], references: [bill.id] }),
+  legislator: one(legislator, {
+    fields: [vote.legislatorId],
+    references: [legislator.id],
+  }),
+}));
+
+export const newsArticleRelations = relations(newsArticle, ({ one }) => ({
+  bill: one(bill, { fields: [newsArticle.billId], references: [bill.id] }),
+}));
+
+export const alertRelations = relations(alert, ({ one }) => ({
+  bill: one(bill, { fields: [alert.billId], references: [bill.id] }),
+}));
+
+export const relevanceOverrideRelations = relations(
+  relevanceOverride,
+  ({ one }) => ({
+    bill: one(bill, {
+      fields: [relevanceOverride.billId],
+      references: [bill.id],
+    }),
+  }),
+);
+
+/* ─────────────────────────────────────────────────────────────
+ * Type exports — use these everywhere instead of raw inferences
+ * ────────────────────────────────────────────────────────────── */
+
+export type IndustryProfile = typeof industryProfile.$inferSelect;
+export type NewIndustryProfile = typeof industryProfile.$inferInsert;
+export type IndustryCommittee = typeof industryCommittee.$inferSelect;
+export type IndustryLegislatorWatch =
+  typeof industryLegislatorWatch.$inferSelect;
+export type Legislator = typeof legislator.$inferSelect;
+export type NewLegislator = typeof legislator.$inferInsert;
+export type Bill = typeof bill.$inferSelect;
+export type NewBill = typeof bill.$inferInsert;
+export type BillTimeline = typeof billTimeline.$inferSelect;
+export type Vote = typeof vote.$inferSelect;
+export type NewsArticle = typeof newsArticle.$inferSelect;
+export type Alert = typeof alert.$inferSelect;
+export type DailyBriefing = typeof dailyBriefing.$inferSelect;
+export type RelevanceOverride = typeof relevanceOverride.$inferSelect;
+export type SyncLog = typeof syncLog.$inferSelect;
