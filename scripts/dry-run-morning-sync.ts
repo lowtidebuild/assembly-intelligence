@@ -1,32 +1,46 @@
 /**
  * Dry-run the morning sync pipeline directly, without going through
- * the HTTP cron endpoint. Uses stub Gemini + briefing generator.
+ * the HTTP cron endpoint.
  *
- * Prints:
- *   - which committees were queried
- *   - how many bills were returned
- *   - how many passed keyword filter
- *   - how many got scored + upserted
- *   - final sync log row
+ * By default uses real Gemini (if GEMINI_API_KEY is set). Pass
+ * `--stub` to force the stub scorer instead (cheaper, zero cost):
+ *
+ *   pnpm tsx scripts/dry-run-morning-sync.ts          # real Gemini
+ *   pnpm tsx scripts/dry-run-morning-sync.ts --stub   # stub
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
 async function main() {
+  const useStub =
+    process.argv.includes("--stub") || !process.env.GEMINI_API_KEY;
+
   const { runMorningSync } = await import("../src/services/sync");
-  const { getStubBillScorer, getStubBriefingGenerator } = await import(
-    "../src/lib/gemini-stub"
-  );
   const { closeMcp } = await import("../src/lib/mcp-client");
 
-  console.log("🚀 starting morning sync dry-run...\n");
+  const { scorer, briefingGenerator, mode } = useStub
+    ? await (async () => {
+        const mod = await import("../src/lib/gemini-stub");
+        return {
+          scorer: mod.getStubBillScorer(),
+          briefingGenerator: mod.getStubBriefingGenerator(),
+          mode: "stub" as const,
+        };
+      })()
+    : await (async () => {
+        const mod = await import("../src/lib/gemini-client");
+        return {
+          scorer: mod.getGeminiBillScorer(),
+          briefingGenerator: mod.getGeminiBriefingGenerator(),
+          mode: "gemini" as const,
+        };
+      })();
+
+  console.log(`🚀 starting morning sync dry-run (scorer=${mode})...\n`);
   const t0 = Date.now();
 
   try {
-    const result = await runMorningSync({
-      scorer: getStubBillScorer(),
-      briefingGenerator: getStubBriefingGenerator(),
-    });
+    const result = await runMorningSync({ scorer, briefingGenerator });
 
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     console.log(`\n✅ completed in ${elapsed}s\n`);

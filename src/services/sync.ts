@@ -86,6 +86,7 @@ export interface BillScorer {
     proposerParty: string | null;
     proposalReason: string | null;
     mainContent: string | null;
+    industryName: string;
     industryContext: string;
     industryKeywords: string[];
   }): Promise<{ score: number; reasoning: string }>;
@@ -505,6 +506,7 @@ export async function runMorningSync(
           proposerParty: proposerPartyFromDetail(detail),
           proposalReason: detail.제안이유,
           mainContent: detail.주요내용,
+          industryName: activeProfile.name,
           industryContext: activeProfile.llmContext,
           industryKeywords: keywords,
         }),
