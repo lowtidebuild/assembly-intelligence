@@ -21,10 +21,18 @@ async function main() {
   }
 
   const sql = readFileSync(file, "utf-8");
-  const statements = sql
+  // Strip all -- line comments FIRST, then split on semicolons.
+  // Original bug: splitting first meant comment lines got glued to
+  // the next statement, and the filter's `startsWith("--")` check
+  // dropped the whole statement.
+  const stripped = sql
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n");
+  const statements = stripped
     .split(/;\s*$/m)
     .map((s) => s.trim())
-    .filter((s) => s && !s.startsWith("--"));
+    .filter((s) => s.length > 0);
 
   const client = neon(url);
   console.log(`Applying ${statements.length} statements from ${file}...`);

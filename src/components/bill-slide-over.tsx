@@ -17,7 +17,8 @@ import type { Bill } from "@/db/schema";
 import Link from "next/link";
 import { StageBadge } from "@/components/stage-badge";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
-import { X, ExternalLink, Sparkles } from "lucide-react";
+import { CompanyImpactEditor } from "@/components/company-impact-editor";
+import { X, ExternalLink } from "lucide-react";
 
 export function BillSlideOver({
   bill,
@@ -104,34 +105,12 @@ export function BillSlideOver({
 
           {/* Company impact — editable field per design.md section 13 */}
           <Block label="당사 영향 사항" sublabel="GR/PA 판단">
-            {bill.companyImpact ? (
-              <>
-                <p className="text-[13px] leading-relaxed text-[var(--color-text)]">
-                  {bill.companyImpact}
-                </p>
-                {bill.companyImpactIsAiDraft && (
-                  <div className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] bg-[#fef3c7] px-2 py-1 text-[10px] font-semibold text-[#b45309]">
-                    <Sparkles className="h-3 w-3" />
-                    AI 초안 · 검토 필요
-                  </div>
-                )}
-              </>
-            ) : (
-              <div>
-                <EmptyNote>
-                  당사 영향 사항이 아직 작성되지 않았습니다.
-                </EmptyNote>
-                <button
-                  type="button"
-                  disabled
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-tertiary)]"
-                  title="API 라우트 구현 예정"
-                >
-                  <Sparkles className="h-3 w-3" />
-                  AI 초안 생성 (준비 중)
-                </button>
-              </div>
-            )}
+            <CompanyImpactEditor
+              billId={bill.id}
+              initialImpact={bill.companyImpact}
+              initialIsAiDraft={bill.companyImpactIsAiDraft}
+              compact
+            />
           </Block>
 
           {/* External link */}

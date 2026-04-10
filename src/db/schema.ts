@@ -294,6 +294,13 @@ export const bill = pgTable(
     companyImpactIsAiDraft: boolean("company_impact_is_ai_draft")
       .notNull()
       .default(false),
+    // Gemini Pro deep analysis (5-section JSON) — generated on-demand
+    // from the impact page. Nullable; regenerated on request.
+    // Shape matches BillAnalysisResult in gemini-client.ts.
+    deepAnalysis: jsonb("deep_analysis").$type<unknown>(),
+    deepAnalysisGeneratedAt: timestamp("deep_analysis_generated_at", {
+      withTimezone: true,
+    }),
     // Direct link to 의안정보시스템
     externalLink: text("external_link"),
     lastSynced: timestamp("last_synced", { withTimezone: true })

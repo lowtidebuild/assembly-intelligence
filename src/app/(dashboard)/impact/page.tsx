@@ -19,6 +19,8 @@ import { PageHeader } from "@/components/page-header";
 import Link from "next/link";
 import { StageBadge } from "@/components/stage-badge";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
+import { CompanyImpactEditor } from "@/components/company-impact-editor";
+import { DeepAnalysisPanel } from "@/components/deep-analysis-panel";
 import { Sparkles, TrendingUp, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -156,55 +158,26 @@ export default async function ImpactPage(props: {
             <Block
               icon={<TrendingUp className="h-4 w-4" />}
               title="당사 영향 사항"
-              sublabel="GR/PA 판단 · 수동 편집 가능"
+              sublabel="GR/PA 판단 · Gemini Pro 초안 + 수동 편집"
             >
-              {selected.companyImpact ? (
-                <p className="text-[13px] leading-relaxed text-[var(--color-text)]">
-                  {selected.companyImpact}
-                </p>
-              ) : (
-                <p className="text-[12px] italic text-[var(--color-text-tertiary)]">
-                  아직 작성되지 않았습니다.
-                </p>
-              )}
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  disabled
-                  className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-tertiary)]"
-                  title="API 라우트 구현 예정"
-                >
-                  <Sparkles className="h-3 w-3" />
-                  AI 초안 생성
-                </button>
-                <button
-                  type="button"
-                  disabled
-                  className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-tertiary)]"
-                >
-                  수동 편집
-                </button>
-              </div>
+              <CompanyImpactEditor
+                billId={selected.id}
+                initialImpact={selected.companyImpact}
+                initialIsAiDraft={selected.companyImpactIsAiDraft}
+              />
             </Block>
 
-            {/* Deep analysis placeholder */}
+            {/* Deep analysis */}
             <Block
               icon={<Sparkles className="h-4 w-4" />}
               title="심층 분석"
-              sublabel="Gemini Pro · 요청 시 생성"
+              sublabel="Gemini Pro · 5-section 구조"
             >
-              <p className="text-[12px] italic text-[var(--color-text-tertiary)]">
-                아직 분석이 생성되지 않았습니다. Lane D에서 on-demand 버튼을
-                연결할 예정입니다.
-              </p>
-              <button
-                type="button"
-                disabled
-                className="mt-3 inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-tertiary)]"
-              >
-                <Sparkles className="h-3 w-3" />
-                심층 분석 생성 (준비 중)
-              </button>
+              <DeepAnalysisPanel
+                billId={selected.id}
+                initialAnalysis={selected.deepAnalysis}
+                initialGeneratedAt={selected.deepAnalysisGeneratedAt}
+              />
             </Block>
           </div>
         )}
