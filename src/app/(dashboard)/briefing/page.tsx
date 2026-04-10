@@ -20,12 +20,13 @@ import { PageHeader } from "@/components/page-header";
 import { ContextStrip } from "@/components/context-strip";
 import { BillKeyCard } from "@/components/bill-key-card";
 import { todayKst, weekdayKo } from "@/lib/dashboard-data";
-import { FileText, RefreshCw } from "lucide-react";
+import { loadRecentNews } from "@/services/news-sync";
+import { FileText, RefreshCw, Newspaper, ExternalLink } from "lucide-react";
 
 export const dynamic = "force-dynamic"; // always fresh DB reads
 
 export default async function BriefingPage() {
-  const [profileRows, latestBriefing, topBills, recentBills] =
+  const [profileRows, latestBriefing, topBills, recentBills, newsItems] =
     await Promise.all([
       db.select().from(industryProfile).limit(1),
       db
@@ -39,6 +40,7 @@ export default async function BriefingPage() {
         .orderBy(desc(bill.relevanceScore), desc(bill.proposalDate))
         .limit(4),
       db.select().from(bill).orderBy(desc(bill.proposalDate)).limit(10),
+      loadRecentNews(8),
     ]);
 
   const profile = profileRows[0];
@@ -124,9 +126,69 @@ export default async function BriefingPage() {
               </p>
             )}
           </SideSection>
+
+          <SideSection
+            title="관련 뉴스"
+            icon={<Newspaper className="h-4 w-4" />}
+            sublabel="Naver News"
+          >
+            {newsItems.length === 0 ? (
+              <p className="text-[12px] text-[var(--color-text-tertiary)]">
+                아직 수집된 뉴스가 없습니다.
+              </p>
+            ) : (
+              <ul className="flex flex-col">
+                {newsItems.map((n) => (
+                  <NewsRow key={n.id} item={n} />
+                ))}
+              </ul>
+            )}
+          </SideSection>
         </aside>
       </div>
     </>
+  );
+}
+
+function NewsRow({
+  item,
+}: {
+  item: {
+    id: number;
+    title: string;
+    url: string;
+    source: string | null;
+    description: string | null;
+    publishedAt: Date | null;
+  };
+}) {
+  return (
+    <li className="border-b border-[var(--color-border)] py-[10px] last:border-b-0 last:pb-0 first:pt-0">
+      <a
+        href={item.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group block"
+      >
+        <div className="mb-1 flex items-start gap-1.5 text-[12px] font-medium leading-snug text-[var(--color-text)] group-hover:text-[var(--color-primary)]">
+          <span className="line-clamp-2 flex-1">{item.title}</span>
+          <ExternalLink className="mt-[2px] h-3 w-3 shrink-0 text-[var(--color-text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100" />
+        </div>
+        <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-text-tertiary)]">
+          {item.source && (
+            <span className="font-semibold text-[var(--color-primary)]">
+              {item.source}
+            </span>
+          )}
+          {item.source && item.publishedAt && <span>·</span>}
+          {item.publishedAt && (
+            <span>
+              {item.publishedAt.toISOString().slice(0, 10).replaceAll("-", ".")}
+            </span>
+          )}
+        </div>
+      </a>
+    </li>
   );
 }
 
@@ -175,10 +237,12 @@ function SectionEmpty({ message }: { message: string }) {
 
 function SideSection({
   title,
+  sublabel,
   icon,
   children,
 }: {
   title: string;
+  sublabel?: string;
   icon?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -187,6 +251,11 @@ function SideSection({
       <div className="mb-3 flex items-center gap-2 border-b border-[var(--color-border)] pb-[10px] text-[13px] font-bold text-[var(--color-text)]">
         {icon}
         {title}
+        {sublabel && (
+          <span className="text-[10px] font-normal text-[var(--color-text-tertiary)]">
+            · {sublabel}
+          </span>
+        )}
       </div>
       {children}
     </div>

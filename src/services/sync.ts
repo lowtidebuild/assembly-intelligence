@@ -58,6 +58,7 @@ import {
 } from "@/db/schema";
 import { callMcpToolOrThrow } from "@/lib/mcp-client";
 import { errorMessage } from "@/lib/api-base";
+import { syncNews } from "@/services/news-sync";
 
 /* ─────────────────────────────────────────────────────────────
  * Bill stage enum literal — matches `bill_stage` postgres enum.
@@ -539,6 +540,21 @@ export async function runMorningSync(
     errors.push(`upsert_bills: ${errorMessage(err)}`);
   }
 
+  // 8.5. News fetch (Naver) — uses the freshly-upserted bill scores
+  //      to pick which ones to query. Failures don't block the sync.
+  let newsFetched = 0;
+  try {
+    const newsResult = await syncNews(keywords, {
+      maxBills: 10,
+      perBillDisplay: 5,
+      industryDisplay: 10,
+    });
+    newsFetched = newsResult.articlesUpserted;
+    errors.push(...newsResult.errors);
+  } catch (err) {
+    errors.push(`news: ${errorMessage(err)}`);
+  }
+
   // 9. Fetch upcoming schedule (next 30 days)
   let scheduleItems: ScheduleItem[] = [];
   try {
@@ -604,7 +620,7 @@ export async function runMorningSync(
       billsProcessed,
       billsScored,
       legislatorsUpdated,
-      newsFetched: 0,
+      newsFetched,
       errorsJson: errors.length > 0 ? errors : null,
     })
     .returning({ id: syncLog.id });
