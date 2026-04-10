@@ -18,7 +18,8 @@ import {
 } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
-import { Settings as SettingsIcon, Database, Sparkles, Globe } from "lucide-react";
+import Link from "next/link";
+import { Settings as SettingsIcon, Database, Sparkles, Globe, Edit3 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,19 @@ export default async function SettingsPage() {
 
       <div className="mx-auto grid max-w-[900px] grid-cols-1 gap-6 p-6">
         {/* Industry profile */}
-        <Card icon={<SettingsIcon className="h-4 w-4" />} title="산업 프로필">
+        <Card
+          icon={<SettingsIcon className="h-4 w-4" />}
+          title="산업 프로필"
+          action={
+            <Link
+              href="/setup"
+              className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-primary)]"
+            >
+              <Edit3 className="h-3 w-3" />
+              {profile ? "편집" : "시작하기"}
+            </Link>
+          }
+        >
           {profile ? (
             <dl className="grid grid-cols-[120px_1fr] gap-y-3 text-[13px]">
               <Row label="이름">
@@ -185,17 +198,20 @@ export default async function SettingsPage() {
 function Card({
   icon,
   title,
+  action,
   children,
 }: {
   icon: React.ReactNode;
   title: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-card)]">
       <div className="mb-4 flex items-center gap-2 border-b border-[var(--color-border)] pb-3 text-[14px] font-bold text-[var(--color-text)]">
         {icon}
-        {title}
+        <span>{title}</span>
+        {action && <span className="ml-auto">{action}</span>}
       </div>
       {children}
     </div>

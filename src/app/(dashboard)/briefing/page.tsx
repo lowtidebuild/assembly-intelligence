@@ -50,10 +50,10 @@ export default async function BriefingPage() {
   if (!profile) {
     return (
       <EmptyState
-        title="프로필이 설정되지 않았습니다"
-        message="설정 페이지에서 산업을 선택하고 키워드/위원회를 구성하세요."
-        ctaLabel="설정으로 이동"
-        ctaHref="/settings"
+        title="환영합니다! 설정을 시작하세요"
+        message="산업을 선택하고 키워드/위원회/의원을 구성하세요. 1분이면 충분합니다."
+        ctaLabel="설정 시작하기"
+        ctaHref="/setup"
       />
     );
   }

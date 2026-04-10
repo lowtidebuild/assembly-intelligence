@@ -780,7 +780,7 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
  *
  * Returns the number of rows inserted/updated.
  */
-async function syncLegislators(): Promise<number> {
+export async function syncLegislators(): Promise<number> {
   const PAGE_SIZE = 100;
   const rows: McpLegislatorRow[] = [];
   let page = 1;
