@@ -23,6 +23,7 @@ import {
   Landmark,
   Settings,
   MessageSquare,
+  LogOut,
 } from "lucide-react";
 
 export interface SidebarCounts {
@@ -195,10 +196,19 @@ export function Sidebar({ counts, lastSync, industryName }: SidebarProps) {
           <span>{syncLabel}</span>
         </div>
         {lastSync?.timestamp && (
-          <div className="ml-4 text-[11px] text-[var(--color-text-tertiary)]">
+          <div className="mb-3 ml-4 text-[11px] text-[var(--color-text-tertiary)]">
             {lastSync.timestamp}
           </div>
         )}
+        <form action="/api/auth/logout" method="POST">
+          <button
+            type="submit"
+            className="flex w-full items-center gap-[10px] rounded-[var(--radius-sm)] px-2 py-1.5 text-[12px] font-medium text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
+          >
+            <LogOut className="h-[14px] w-[14px]" />
+            로그아웃
+          </button>
+        </form>
       </div>
     </aside>
   );
