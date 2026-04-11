@@ -14,37 +14,29 @@
  */
 
 import { db } from "@/db";
-import { bill, dailyBriefing, industryProfile } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import {
+  bill,
+  dailyBriefing,
+  industryCommittee,
+  industryProfile,
+  legislator,
+} from "@/db/schema";
+import { desc, eq, inArray } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { ContextStrip } from "@/components/context-strip";
 import { BillKeyCard } from "@/components/bill-key-card";
 import { todayKst, weekdayKo } from "@/lib/dashboard-data";
+import {
+  computeImportance,
+  type ImportanceRecord,
+} from "@/lib/legislator-importance";
 import { loadRecentNews } from "@/services/news-sync";
 import { FileText, RefreshCw, Newspaper, ExternalLink } from "lucide-react";
 
 export const dynamic = "force-dynamic"; // always fresh DB reads
 
 export default async function BriefingPage() {
-  const [profileRows, latestBriefing, topBills, recentBills, newsItems] =
-    await Promise.all([
-      db.select().from(industryProfile).limit(1),
-      db
-        .select()
-        .from(dailyBriefing)
-        .orderBy(desc(dailyBriefing.date))
-        .limit(1),
-      db
-        .select()
-        .from(bill)
-        .orderBy(desc(bill.relevanceScore), desc(bill.proposalDate))
-        .limit(4),
-      db.select().from(bill).orderBy(desc(bill.proposalDate)).limit(10),
-      loadRecentNews(8),
-    ]);
-
-  const profile = profileRows[0];
-  const briefing = latestBriefing[0];
+  const [profile] = await db.select().from(industryProfile).limit(1);
   const today = todayKst();
 
   if (!profile) {
@@ -57,6 +49,40 @@ export default async function BriefingPage() {
       />
     );
   }
+
+  const committees = await db
+    .select({ committeeCode: industryCommittee.committeeCode })
+    .from(industryCommittee)
+    .where(eq(industryCommittee.industryProfileId, profile.id));
+
+  const [latestBriefing, topBills, recentBills, newsItems, importanceById] =
+    await Promise.all([
+      db
+        .select()
+        .from(dailyBriefing)
+        .orderBy(desc(dailyBriefing.date))
+        .limit(1),
+      db
+        .select()
+        .from(bill)
+        .orderBy(desc(bill.relevanceScore), desc(bill.proposalDate))
+        .limit(4),
+      db.select().from(bill).orderBy(desc(bill.proposalDate)).limit(10),
+      loadRecentNews(8),
+      computeImportance({
+        profileId: profile.id,
+        committeeCodes: committees.map((c) => c.committeeCode),
+      }),
+    ]);
+
+  const briefing = latestBriefing[0];
+  const proposerImportance = await loadProposerImportance(
+    topBills.map((entry) => ({
+      name: entry.proposerName,
+      party: entry.proposerParty,
+    })),
+    importanceById,
+  );
 
   return (
     <>
@@ -96,6 +122,10 @@ export default async function BriefingPage() {
                     key={b.id}
                     number={String(i + 1).padStart(2, "0")}
                     bill={b}
+                    proposerImportance={
+                      proposerImportance.get(makeProposerKey(b.proposerName, b.proposerParty)) ??
+                      null
+                    }
                   />
                 ))}
               </div>
@@ -148,6 +178,36 @@ export default async function BriefingPage() {
       </div>
     </>
   );
+}
+
+async function loadProposerImportance(
+  proposers: Array<{ name: string; party: string | null }>,
+  importanceById: Map<number, ImportanceRecord>,
+): Promise<Map<string, ImportanceRecord>> {
+  const names = [...new Set(proposers.map((proposer) => proposer.name))];
+  if (names.length === 0) return new Map();
+
+  const matchedLegislators = await db
+    .select({
+      id: legislator.id,
+      name: legislator.name,
+      party: legislator.party,
+    })
+    .from(legislator)
+    .where(inArray(legislator.name, names));
+
+  const result = new Map<string, ImportanceRecord>();
+  for (const matched of matchedLegislators) {
+    const importance = importanceById.get(matched.id);
+    if (!importance) continue;
+    result.set(makeProposerKey(matched.name, matched.party), importance);
+    result.set(makeProposerKey(matched.name, null), importance);
+  }
+  return result;
+}
+
+function makeProposerKey(name: string, party: string | null): string {
+  return `${name}::${party ?? ""}`;
 }
 
 function NewsRow({

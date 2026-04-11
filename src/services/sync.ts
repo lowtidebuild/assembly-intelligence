@@ -334,6 +334,63 @@ function parseKstDate(s: string | null | undefined): Date | null {
   );
 }
 
+/** Normalize a Postgres date column input (YYYY-MM-DD or null). */
+function normalizeDateOnly(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const trimmed = s.trim();
+  if (!trimmed) return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+}
+
+/** Join MCP staff/secretary name fragments into a single raw string. */
+function joinRawNames(
+  ...parts: Array<string | null | undefined>
+): string | null {
+  const normalized = parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part));
+  return normalized.length > 0 ? normalized.join(", ") : null;
+}
+
+function committeesFromRow(row: McpLegislatorRow): string[] {
+  if (row.CMITS) {
+    return row.CMITS.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  return row.CMIT_NM ? [row.CMIT_NM] : [];
+}
+
+function ingestLegislatorRow(
+  row: McpLegislatorRow,
+  seatIndex: number,
+): NewLegislator {
+  return {
+    memberId: row.MONA_CD,
+    name: row.HG_NM,
+    nameHanja: row.HJ_NM,
+    nameEnglish: row.ENG_NM,
+    party: row.POLY_NM,
+    district: row.ORIG_NM,
+    electionType: row.ELECT_GBN_NM,
+    termNumber: parseTermNumber(row.REELE_GBN_NM),
+    birthDate: normalizeDateOnly(row.BTH_DATE),
+    birthCalendar: row.BTH_GBN_NM,
+    gender: row.SEX_GBN_NM,
+    termHistory: row.UNITS,
+    committeeRole: row.JOB_RES_NM,
+    committees: committeesFromRow(row),
+    seatIndex,
+    email: row.E_MAIL,
+    homepage: row.HOMEPAGE,
+    officePhone: row.TEL_NO,
+    officeAddress: row.ASSEM_ADDR,
+    staffRaw: row.STAFF,
+    secretaryRaw: joinRawNames(row.SECRETARY, row.SECRETARY2),
+    memTitle: row.MEM_TITLE,
+    isActive: true,
+    lastSynced: new Date(),
+  };
+}
+
 /**
  * Keyword pre-filter against the 의안명 only. MCP does not give us
  * body text, so title is all we have for cheap filtering.
@@ -838,28 +895,7 @@ export async function syncLegislators(): Promise<number> {
     const list = byParty.get(party)!;
     list.sort((a, b) => a.MONA_CD.localeCompare(b.MONA_CD));
     for (const r of list) {
-      inserts.push({
-        memberId: r.MONA_CD,
-        name: r.HG_NM,
-        nameHanja: r.HJ_NM,
-        nameEnglish: r.ENG_NM,
-        party: r.POLY_NM,
-        district: r.ORIG_NM,
-        electionType: r.ELECT_GBN_NM,
-        termNumber: parseTermNumber(r.REELE_GBN_NM),
-        // CMITS is comma-separated ("A위원회, B위원회"); split + trim
-        committees: r.CMITS
-          ? r.CMITS.split(",").map((s) => s.trim()).filter(Boolean)
-          : r.CMIT_NM
-            ? [r.CMIT_NM]
-            : [],
-        seatIndex: seatCursor++,
-        email: r.E_MAIL,
-        homepage: r.HOMEPAGE,
-        officeAddress: r.ASSEM_ADDR,
-        isActive: true,
-        lastSynced: new Date(),
-      });
+      inserts.push(ingestLegislatorRow(r, seatCursor++));
     }
   }
 
@@ -877,11 +913,20 @@ export async function syncLegislators(): Promise<number> {
         district: sql`excluded.district`,
         electionType: sql`excluded.election_type`,
         termNumber: sql`excluded.term_number`,
+        birthDate: sql`excluded.birth_date`,
+        birthCalendar: sql`excluded.birth_calendar`,
+        gender: sql`excluded.gender`,
+        termHistory: sql`excluded.term_history`,
+        committeeRole: sql`excluded.committee_role`,
         committees: sql`excluded.committees`,
         seatIndex: sql`excluded.seat_index`,
         email: sql`excluded.email`,
         homepage: sql`excluded.homepage`,
+        officePhone: sql`excluded.office_phone`,
         officeAddress: sql`excluded.office_address`,
+        staffRaw: sql`excluded.staff_raw`,
+        secretaryRaw: sql`excluded.secretary_raw`,
+        memTitle: sql`excluded.mem_title`,
         isActive: sql`true`,
         lastSynced: sql`NOW()`,
       },

@@ -31,6 +31,7 @@ import {
   text,
   boolean,
   integer,
+  date,
   timestamp,
   jsonb,
   index,
@@ -224,6 +225,11 @@ export const legislator = pgTable(
     district: text("district"), // ORIG_NM — "울산 북구" or "비례대표"
     electionType: text("election_type"), // ELECT_GBN_NM — "지역구"/"비례대표"
     termNumber: integer("term_number"), // 몇 선 (parsed from REELE_GBN_NM)
+    birthDate: date("birth_date"),
+    birthCalendar: text("birth_calendar"), // BTH_GBN_NM — "양"/"음"
+    gender: text("gender"), // SEX_GBN_NM — "남"/"여"
+    termHistory: text("term_history"), // UNITS — "제21대, 제22대"
+    committeeRole: text("committee_role"), // JOB_RES_NM — "위원장"/"간사"/"위원"
     // Committees this legislator serves on. JSON array of committee names.
     committees: jsonb("committees").$type<string[]>().notNull().default([]),
     // Seat position on hemicycle (computed at sync time from party ordering)
@@ -231,7 +237,11 @@ export const legislator = pgTable(
     // Contact / office info — displayed in 의원 워치 detail + setup wizard
     email: text("email"),
     homepage: text("homepage"),
+    officePhone: text("office_phone"), // TEL_NO
     officeAddress: text("office_address"), // ASSEM_ADDR — "의원회관 515호"
+    staffRaw: text("staff_raw"), // STAFF — comma-separated raw names
+    secretaryRaw: text("secretary_raw"), // SECRETARY + SECRETARY2
+    memTitle: text("mem_title"), // 주요 약력 (multi-line)
     isActive: boolean("is_active").notNull().default(true),
     lastSynced: timestamp("last_synced", { withTimezone: true })
       .notNull()

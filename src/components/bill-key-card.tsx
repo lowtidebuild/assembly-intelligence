@@ -10,10 +10,15 @@
 import type { Bill } from "@/db/schema";
 import { StageBadge } from "@/components/stage-badge";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
+import {
+  LegislatorImportanceStar,
+} from "@/components/legislator-importance-star";
+import type { ImportanceRecord } from "@/lib/legislator-importance";
 
 export function BillKeyCard({
   number,
   bill,
+  proposerImportance,
 }: {
   number: string;
   bill: Pick<
@@ -28,6 +33,7 @@ export function BillKeyCard({
     | "proposalDate"
     | "summaryText"
   >;
+  proposerImportance?: ImportanceRecord | null;
 }) {
   return (
     <div className="grid grid-cols-[24px_1fr_auto] gap-3 rounded-[var(--radius)] border border-l-4 border-[var(--color-border)] border-l-[var(--color-domain)] bg-[var(--color-surface)] p-[13px_15px] shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]">
@@ -47,8 +53,13 @@ export function BillKeyCard({
           <StageBadge stage={bill.stage} />
           {bill.committee && <span>{bill.committee}</span>}
           <span>·</span>
-          <span>
+          <span className="inline-flex items-center gap-1">
             {bill.proposerName}
+            <LegislatorImportanceStar
+              level={proposerImportance?.level ?? null}
+              size={12}
+              reasons={proposerImportance?.reasons}
+            />
             {bill.proposerParty && (
               <span className="ml-1 text-[var(--color-text-tertiary)]">
                 ({bill.proposerParty})
