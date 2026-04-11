@@ -30,9 +30,9 @@ import { LegislatorImportanceStar } from "@/components/legislator-importance-sta
 import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import {
   computeImportance,
-  type ImportanceLevel,
   type ImportanceRecord,
 } from "@/lib/legislator-importance";
+import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
 import { Plus, Sparkles, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";

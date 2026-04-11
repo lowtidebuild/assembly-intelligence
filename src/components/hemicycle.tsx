@@ -43,7 +43,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
-import type { ImportanceLevel } from "@/lib/legislator-importance";
+import type { ImportanceLevel } from "@/lib/legislator-importance-ui";
 
 export interface HemicycleMember {
   id: number;

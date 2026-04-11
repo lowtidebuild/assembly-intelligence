@@ -1,8 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { bill, industryLegislatorWatch, legislator } from "@/db/schema";
-
-export type ImportanceLevel = "S" | "A" | "B" | null;
+import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
 
 export interface ImportanceRecord {
   level: ImportanceLevel;
@@ -62,13 +61,6 @@ function levelFor({
     return "B";
   }
   return null;
-}
-
-export function importanceBadgeClass(level: ImportanceLevel): string {
-  if (level === "S") return "text-[#eab308]";
-  if (level === "A") return "text-[#2563eb]";
-  if (level === "B") return "text-[#94a3b8]";
-  return "text-[var(--color-text-tertiary)]";
 }
 
 export function makeProposerKey(name: string, party: string | null): string {

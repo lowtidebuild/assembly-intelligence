@@ -2,7 +2,7 @@ import { Star } from "lucide-react";
 import {
   importanceBadgeClass,
   type ImportanceLevel,
-} from "@/lib/legislator-importance";
+} from "@/lib/legislator-importance-ui";
 
 const STAR_COLOR: Record<Exclude<ImportanceLevel, null>, string> = {
   S: "#eab308",
