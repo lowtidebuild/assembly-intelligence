@@ -197,7 +197,15 @@ async function upsertArticles(
 
 /**
  * Load recent news articles for the briefing page right rail.
- * Latest 30 days, ordered by publishedAt desc.
+ *
+ * Prioritizes bill-linked articles over industry-wide ones because
+ * the industry-wide query (profile keywords joined with a space)
+ * tends to surface noisy adjacent stories (e.g. "무등록 성인 PC방"
+ * for the 게임 industry). Bill-linked results use the specific bill
+ * title as the query, which is far higher-signal.
+ *
+ * Ordering: bill-linked first (billId IS NOT NULL), then by
+ * publishedAt desc inside each group.
  */
 export async function loadRecentNews(limit = 8) {
   const since = new Date(Date.now() - 30 * 86400 * 1000);
@@ -205,6 +213,11 @@ export async function loadRecentNews(limit = 8) {
     .select()
     .from(newsArticle)
     .where(gte(newsArticle.publishedAt, since))
-    .orderBy(desc(newsArticle.publishedAt))
+    .orderBy(
+      // billId IS NOT NULL → false (0) sorts before true (1) in ASC,
+      // so we use DESC to push NULL-billId rows to the bottom.
+      sql`${newsArticle.billId} IS NULL`,
+      desc(newsArticle.publishedAt),
+    )
     .limit(limit);
 }
