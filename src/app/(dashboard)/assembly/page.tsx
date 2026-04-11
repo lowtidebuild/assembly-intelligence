@@ -12,22 +12,41 @@
  */
 
 import { db } from "@/db";
-import { legislator } from "@/db/schema";
+import { industryCommittee, industryProfile, legislator } from "@/db/schema";
 import { asc, eq, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
+import { computeImportance } from "@/lib/legislator-importance";
 
 export const dynamic = "force-dynamic";
 
 export default async function AssemblyPage() {
+  const [profile] = await db.select().from(industryProfile).limit(1);
+  const committees = profile
+    ? await db
+        .select({ committeeCode: industryCommittee.committeeCode })
+        .from(industryCommittee)
+        .where(eq(industryCommittee.industryProfileId, profile.id))
+    : [];
+  const importanceById = profile
+    ? await computeImportance({
+        profileId: profile.id,
+        committeeCodes: committees.map((c) => c.committeeCode),
+      })
+    : new Map();
+
   const [members, partyStats] = await Promise.all([
     db
       .select({
         id: legislator.id,
         memberId: legislator.memberId,
         name: legislator.name,
+        nameHanja: legislator.nameHanja,
         party: legislator.party,
         district: legislator.district,
+        electionType: legislator.electionType,
+        termNumber: legislator.termNumber,
+        committeeRole: legislator.committeeRole,
         committees: legislator.committees,
       })
       .from(legislator)
@@ -47,9 +66,15 @@ export default async function AssemblyPage() {
     id: m.id,
     memberId: m.memberId,
     name: m.name,
+    nameHanja: m.nameHanja,
     party: m.party,
     district: m.district,
+    electionType: m.electionType,
+    termNumber: m.termNumber,
+    committeeRole: m.committeeRole,
     committees: m.committees ?? [],
+    importance: importanceById.get(m.id)?.level ?? null,
+    importanceReasons: importanceById.get(m.id)?.reasons ?? [],
   }));
 
   const totalActive = members.length;
@@ -70,7 +95,7 @@ export default async function AssemblyPage() {
               본회의장 의석 배치
             </h2>
             <p className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
-              정당별로 좌측(민주) → 우측(국힘) 순으로 배치 · 클릭하여 상세 확인
+              정당별 3-sector 배치 · 산업 관련 위원/발의 의원은 outline ring으로 강조
             </p>
           </div>
           <Hemicycle members={hemicycleMembers} width={720} />
