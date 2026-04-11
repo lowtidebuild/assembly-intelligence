@@ -88,12 +88,23 @@ interface SeatPosition {
 
 /**
  * Generate (x, y, radius) positions for `totalSeats` seats laid out
- * in a half-moon (hemicycle) from left to right along the bottom edge.
+ * in a half-moon (hemicycle).
  *
- * We use a fixed number of rows (9 matches the 국회 본회의장 layout
- * closely enough for a schematic). Inner rows have fewer seats,
- * outer rows more. Row seat counts are proportional to row radius
- * to keep seat-to-seat spacing roughly constant.
+ * 9 concentric rows, each with seats proportional to its arc length
+ * so seat spacing is roughly uniform. The returned array is sorted
+ * **by angle (leftmost first)** so that when the caller assigns
+ * members[i] → positions[i] sequentially, each party occupies a
+ * contiguous angular WEDGE radiating from inner to outer ring.
+ *
+ * This is how real parliament diagrams work (en.wikipedia.org
+ * "Diagram of a parliament seating"). The previous implementation
+ * filled seats row-by-row which produced concentric ring bands
+ * rather than wedges — visually unclear which party was where.
+ *
+ * Tiebreaker: when two seats from different rows have the same
+ * angular index, the outer row wins (larger-radius seats sit on
+ * the physical periphery, matching the 본회의장 layout where back
+ * rows are further from the podium).
  */
 function computeSeatPositions(totalSeats: number): SeatPosition[] {
   const ROWS = 9;
@@ -124,20 +135,32 @@ function computeSeatPositions(totalSeats: number): SeatPosition[] {
     idx = (idx - 1 + ROWS) % ROWS;
   }
 
-  const positions: SeatPosition[] = [];
+  // Step 1: generate raw seats row-by-row with their angles.
+  const raw: Array<{ x: number; y: number; angle: number; row: number }> = [];
   for (let row = 0; row < ROWS; row++) {
     const n = rowSeatCounts[row];
     const r = rowRadii[row];
-    // Distribute angles from π (left) to 0 (right) across n seats.
-    // Use (n+1) gaps so first/last seats sit inside the edges, not on them.
     for (let i = 0; i < n; i++) {
+      // angle = π (left) → 0 (right). Use (i + 0.5) / n so first/last
+      // seats sit inside the edges, not on them.
       const angle = Math.PI - (Math.PI * (i + 0.5)) / n;
       const x = CENTER_X + r * Math.cos(angle);
       const y = CENTER_Y - r * Math.sin(angle);
-      positions.push({ x, y, r: SEAT_RADIUS });
+      raw.push({ x, y, angle, row });
     }
   }
-  return positions;
+
+  // Step 2: sort by angle descending (π → 0 = left → right), then
+  // by row descending (outer row first for a given angular slot).
+  // This ordering, combined with sequential member assignment,
+  // produces the wedge layout: each party fills a left-to-right
+  // angular range spanning all 9 rows.
+  raw.sort((a, b) => {
+    if (b.angle !== a.angle) return b.angle - a.angle;
+    return b.row - a.row;
+  });
+
+  return raw.map((s) => ({ x: s.x, y: s.y, r: SEAT_RADIUS }));
 }
 
 /**
