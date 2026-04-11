@@ -1,7 +1,9 @@
-# Walkthrough Findings — 2026-04-11
+# Walkthrough Findings — 2026-04-11 (legislator importance lane)
 
-Full visual walkthrough of the app via scripts/walkthrough.ts.
-17 pages captured, inspected one by one, two substantive fixes shipped.
+Full visual walkthrough of the app via `scripts/walkthrough.ts`.
+17 pages re-captured after the legislator importance release, plus
+`screenshots/after/*.png` comparison captures and refreshed static
+examples.
 
 ## What passes
 
@@ -12,20 +14,22 @@ throughout. Korean text wraps and spaces correctly.
 
 Specific highlights:
 - **01-03 login flow** — branded, error state visible in red
-- **04 briefing** — 2-column workspace matches variant-C mockup exactly
+- **04 briefing** — proposer name now carries S/A/B importance star
 - **05-06 radar** — table, filter chips, URL-driven sort all work
-- **07 radar slide-over** — backdrop click-to-close + full detail panel
+- **07 radar slide-over** — proposer star + legislator deep-link visible
 - **08-09 impact page** — bill picker + analysis shell with real editors
-- **10 assembly hemicycle** — 295 seats rendering with party legend
-- **11 watch** — empty state copy points to the hemicycle picker
+- **10 assembly hemicycle** — 295 seats rendering with party legend +
+  importance outline rings
+- **11 watch** — S/A recommendation cards + hemicycle picker +
+  legislator profile slide-over
 - **12 settings** — 4 cards with profile, env status, sync logs
 - **13-16 setup wizard** — all 5 steps, edit mode works, step indicator
   shows completion state properly
 - **17 logout** — cookie cleared, back to login
 
-## Issues found + fixes
+## Resolved from previous run
 
-### P0 — Stub artifacts leaking into rendered UI
+### P0 — Stub artifacts leaking into rendered UI (resolved)
 
 **Symptom:** bill.summary_text on every card showed `[STUB 요약]`,
 daily_briefing.content_html contained `[STUB] Gemini 브리핑 생성기는
@@ -43,7 +47,7 @@ with full Korean prose. See `after/04-briefing.png` for proof.
 `[STUB]` markers and lose trust. Sync logic was fine; this was a
 lifecycle oversight during development.
 
-### P1 — News rail surfaced industry-wide noise over bill-linked signal
+### P1 — News rail surfaced industry-wide noise over bill-linked signal (resolved)
 
 **Symptom:** The briefing "관련 뉴스" section led with articles about
 "무등록 성인 PC방 적발" because the industry-wide Naver query for
@@ -61,6 +65,30 @@ for the new news order.
 **Why it matters:** The whole point of filtering news by an
 industry profile is to show the user actionable signal. Noise on
 top defeats the purpose.
+
+## Issues found + fixed in this release
+
+### P0 — Client pages imported server-only importance logic
+
+**Symptom:** `/assembly` and `/watch` could render a blank shell in the
+browser, and Playwright walkthroughs timed out waiting for `svg circle`
+even though the HTTP response itself was `200`.
+
+**Root cause:** `LegislatorImportanceStar` is used inside the client
+`Hemicycle` component, but it imported `importanceBadgeClass` from
+`src/lib/legislator-importance.ts`. That file also imports `db`, so the
+browser tried to execute `src/db/index.ts` and crashed with
+`DATABASE_URL is not set`.
+
+**Fix:** Split the UI-safe type and color helper into
+`src/lib/legislator-importance-ui.ts`, then pointed the client
+components at that file. Rebuilt, re-ran walkthrough, and confirmed
+`/assembly` renders `358` SVG circles in Playwright before capture.
+
+**Why it matters:** This was a real runtime regression on two of the
+main pages, not just a screenshot script problem. Fixing the import
+boundary restored the hemicycle, watch recommendations, and profile
+slide-over flows.
 
 ## Issues NOT fixed (tracked as P2)
 
