@@ -8,6 +8,7 @@
  */
 
 import type { Bill } from "@/db/schema";
+import Link from "next/link";
 import { StageBadge } from "@/components/stage-badge";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
 import {
@@ -19,6 +20,7 @@ export function BillKeyCard({
   number,
   bill,
   proposerImportance,
+  proposerHref,
 }: {
   number: string;
   bill: Pick<
@@ -34,6 +36,7 @@ export function BillKeyCard({
     | "summaryText"
   >;
   proposerImportance?: ImportanceRecord | null;
+  proposerHref?: string | null;
 }) {
   return (
     <div className="grid grid-cols-[24px_1fr_auto] gap-3 rounded-[var(--radius)] border border-l-4 border-[var(--color-border)] border-l-[var(--color-domain)] bg-[var(--color-surface)] p-[13px_15px] shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]">
@@ -53,19 +56,39 @@ export function BillKeyCard({
           <StageBadge stage={bill.stage} />
           {bill.committee && <span>{bill.committee}</span>}
           <span>·</span>
-          <span className="inline-flex items-center gap-1">
-            {bill.proposerName}
-            <LegislatorImportanceStar
-              level={proposerImportance?.level ?? null}
-              size={12}
-              reasons={proposerImportance?.reasons}
-            />
-            {bill.proposerParty && (
-              <span className="ml-1 text-[var(--color-text-tertiary)]">
-                ({bill.proposerParty})
-              </span>
-            )}
-          </span>
+          {proposerHref ? (
+            <Link
+              href={proposerHref}
+              scroll={false}
+              className="inline-flex items-center gap-1 hover:text-[var(--color-primary)]"
+            >
+              {bill.proposerName}
+              <LegislatorImportanceStar
+                level={proposerImportance?.level ?? null}
+                size={12}
+                reasons={proposerImportance?.reasons}
+              />
+              {bill.proposerParty && (
+                <span className="ml-1 text-[var(--color-text-tertiary)]">
+                  ({bill.proposerParty})
+                </span>
+              )}
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-1">
+              {bill.proposerName}
+              <LegislatorImportanceStar
+                level={proposerImportance?.level ?? null}
+                size={12}
+                reasons={proposerImportance?.reasons}
+              />
+              {bill.proposerParty && (
+                <span className="ml-1 text-[var(--color-text-tertiary)]">
+                  ({bill.proposerParty})
+                </span>
+              )}
+            </span>
+          )}
           {bill.proposalDate && (
             <>
               <span>·</span>

@@ -18,14 +18,20 @@ import Link from "next/link";
 import { StageBadge } from "@/components/stage-badge";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
 import { CompanyImpactEditor } from "@/components/company-impact-editor";
+import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
+import type { ImportanceRecord } from "@/lib/legislator-importance";
 import { X, ExternalLink } from "lucide-react";
 
 export function BillSlideOver({
   bill,
   closeHref,
+  proposerImportance,
+  proposerHref,
 }: {
   bill: Bill;
   closeHref: string;
+  proposerImportance?: ImportanceRecord | null;
+  proposerHref?: string | null;
 }) {
   return (
     <>
@@ -50,10 +56,37 @@ export function BillSlideOver({
               {bill.billName}
             </h2>
             <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
-              {bill.proposerName}
-              {bill.proposerParty && (
-                <span className="ml-1 text-[var(--color-text-tertiary)]">
-                  ({bill.proposerParty})
+              {proposerHref ? (
+                <Link
+                  href={proposerHref}
+                  scroll={false}
+                  className="inline-flex items-center gap-1 hover:text-[var(--color-primary)]"
+                >
+                  {bill.proposerName}
+                  <LegislatorImportanceStar
+                    level={proposerImportance?.level ?? null}
+                    size={14}
+                    reasons={proposerImportance?.reasons}
+                  />
+                  {bill.proposerParty && (
+                    <span className="ml-1 text-[var(--color-text-tertiary)]">
+                      ({bill.proposerParty})
+                    </span>
+                  )}
+                </Link>
+              ) : (
+                <span className="inline-flex items-center gap-1">
+                  {bill.proposerName}
+                  <LegislatorImportanceStar
+                    level={proposerImportance?.level ?? null}
+                    size={14}
+                    reasons={proposerImportance?.reasons}
+                  />
+                  {bill.proposerParty && (
+                    <span className="ml-1 text-[var(--color-text-tertiary)]">
+                      ({bill.proposerParty})
+                    </span>
+                  )}
                 </span>
               )}
               {bill.coSponsorCount > 0 && (

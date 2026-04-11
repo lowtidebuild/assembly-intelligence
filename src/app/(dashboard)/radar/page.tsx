@@ -21,15 +21,28 @@
  */
 
 import { db } from "@/db";
-import { bill, industryProfile, type Bill } from "@/db/schema";
+import {
+  bill,
+  industryCommittee,
+  industryProfile,
+  type Bill,
+} from "@/db/schema";
 import { and, desc, asc, eq, gte, ilike, or, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { ContextStrip } from "@/components/context-strip";
 import { StageBadge } from "@/components/stage-badge";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
 import { BillSlideOver } from "@/components/bill-slide-over";
+import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
+import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import {
+  computeImportance,
+  loadProposerImportanceMap,
+  makeProposerKey,
+  type ImportanceRecord,
+} from "@/lib/legislator-importance";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +53,7 @@ interface SearchParams {
   cte?: string;
   sort?: string;
   bill?: string;
+  legislator?: string;
 }
 
 export default async function RadarPage(props: {
@@ -52,6 +66,9 @@ export default async function RadarPage(props: {
   const cteFilter = sp.cte || "";
   const sort = sp.sort || "-date";
   const selectedBillId = sp.bill ? parseInt(sp.bill, 10) : null;
+  const selectedLegislatorId = sp.legislator
+    ? Number.parseInt(sp.legislator, 10)
+    : null;
 
   // Build WHERE clauses
   const conditions = [];
@@ -82,8 +99,21 @@ export default async function RadarPage(props: {
   };
   const orderBy = sortMap[sort] ?? sortMap["-date"];
 
-  const [profileRows, rows, totalCount, committees] = await Promise.all([
-    db.select().from(industryProfile).limit(1),
+  const [profile] = await db.select().from(industryProfile).limit(1);
+  const industryCommittees = profile
+    ? await db
+        .select({ committeeCode: industryCommittee.committeeCode })
+        .from(industryCommittee)
+        .where(eq(industryCommittee.industryProfileId, profile.id))
+    : [];
+  const importanceById = profile
+    ? await computeImportance({
+        profileId: profile.id,
+        committeeCodes: industryCommittees.map((c) => c.committeeCode),
+      })
+    : new Map();
+
+  const [rows, totalCount, committees] = await Promise.all([
     db.select().from(bill).where(whereExpr).orderBy(orderBy).limit(200),
     db.select({ total: sql<number>`count(*)::int` }).from(bill),
     db
@@ -95,7 +125,6 @@ export default async function RadarPage(props: {
       .groupBy(bill.committee),
   ]);
 
-  const profile = profileRows[0];
   const [c] = totalCount;
   const selectedBill = selectedBillId
     ? rows.find((r) => r.id === selectedBillId) ??
@@ -104,6 +133,18 @@ export default async function RadarPage(props: {
         .from(bill)
         .where(eq(bill.id, selectedBillId))
         .then((r) => r[0] ?? null))
+    : null;
+  const proposerImportance = await loadProposerImportanceMap(
+    [...rows, ...(selectedBill ? [selectedBill] : [])].map((entry) => ({
+      name: entry.proposerName,
+      party: entry.proposerParty,
+    })),
+    importanceById,
+  );
+  const selectedProposerEntry = selectedBill
+    ? proposerImportance.get(
+        makeProposerKey(selectedBill.proposerName, selectedBill.proposerParty),
+      )
     : null;
 
   return (
@@ -174,6 +215,10 @@ export default async function RadarPage(props: {
                     bill={b}
                     selected={b.id === selectedBillId}
                     searchParams={sp}
+                    proposerImportance={
+                      proposerImportance.get(makeProposerKey(b.proposerName, b.proposerParty))
+                        ?.importance ?? null
+                    }
                   />
                 ))
               )}
@@ -182,10 +227,27 @@ export default async function RadarPage(props: {
         </div>
       </div>
 
-      {selectedBill && (
+      {selectedBill && !selectedLegislatorId && (
         <BillSlideOver
           bill={selectedBill}
           closeHref={buildHref({ ...sp, bill: undefined })}
+          proposerImportance={selectedProposerEntry?.importance ?? null}
+          proposerHref={
+            selectedProposerEntry
+              ? buildHref({
+                  ...sp,
+                  legislator: String(selectedProposerEntry.legislatorId),
+                })
+              : null
+          }
+        />
+      )}
+
+      {selectedLegislatorId && (
+        <LegislatorProfileSlideOver
+          legislatorId={selectedLegislatorId}
+          closeHref={buildHref({ ...sp, legislator: undefined })}
+          importance={importanceById.get(selectedLegislatorId) ?? null}
         />
       )}
     </>
@@ -350,10 +412,12 @@ function BillRow({
   bill: b,
   selected,
   searchParams,
+  proposerImportance,
 }: {
   bill: Bill;
   selected: boolean;
   searchParams: SearchParams;
+  proposerImportance?: ImportanceRecord | null;
 }) {
   const href = buildHref({ ...searchParams, bill: String(b.id) });
   return (
@@ -384,12 +448,19 @@ function BillRow({
         {b.committee ?? "—"}
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-[11px] text-[var(--color-text-secondary)]">
-        {b.proposerName}
-        {b.proposerParty && (
-          <span className="ml-1 text-[var(--color-text-tertiary)]">
-            ({b.proposerParty})
-          </span>
-        )}
+        <span className="inline-flex items-center gap-1">
+          {b.proposerName}
+          <LegislatorImportanceStar
+            level={proposerImportance?.level ?? null}
+            size={12}
+            reasons={proposerImportance?.reasons}
+          />
+          {b.proposerParty && (
+            <span className="ml-1 text-[var(--color-text-tertiary)]">
+              ({b.proposerParty})
+            </span>
+          )}
+        </span>
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-right">
         {b.relevanceScore !== null ? (

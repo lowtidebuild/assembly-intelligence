@@ -19,23 +19,30 @@ import {
   dailyBriefing,
   industryCommittee,
   industryProfile,
-  legislator,
 } from "@/db/schema";
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { ContextStrip } from "@/components/context-strip";
 import { BillKeyCard } from "@/components/bill-key-card";
+import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import { todayKst, weekdayKo } from "@/lib/dashboard-data";
 import {
   computeImportance,
-  type ImportanceRecord,
+  loadProposerImportanceMap,
+  makeProposerKey,
 } from "@/lib/legislator-importance";
 import { loadRecentNews } from "@/services/news-sync";
 import { FileText, RefreshCw, Newspaper, ExternalLink } from "lucide-react";
 
 export const dynamic = "force-dynamic"; // always fresh DB reads
 
-export default async function BriefingPage() {
+export default async function BriefingPage(props: {
+  searchParams: Promise<{ legislator?: string }>;
+}) {
+  const sp = await props.searchParams;
+  const selectedLegislatorId = sp.legislator
+    ? Number.parseInt(sp.legislator, 10)
+    : null;
   const [profile] = await db.select().from(industryProfile).limit(1);
   const today = todayKst();
 
@@ -76,7 +83,7 @@ export default async function BriefingPage() {
     ]);
 
   const briefing = latestBriefing[0];
-  const proposerImportance = await loadProposerImportance(
+  const proposerImportance = await loadProposerImportanceMap(
     topBills.map((entry) => ({
       name: entry.proposerName,
       party: entry.proposerParty,
@@ -123,8 +130,13 @@ export default async function BriefingPage() {
                     number={String(i + 1).padStart(2, "0")}
                     bill={b}
                     proposerImportance={
-                      proposerImportance.get(makeProposerKey(b.proposerName, b.proposerParty)) ??
-                      null
+                      proposerImportance.get(makeProposerKey(b.proposerName, b.proposerParty))
+                        ?.importance ?? null
+                    }
+                    proposerHref={
+                      proposerImportance.get(makeProposerKey(b.proposerName, b.proposerParty))
+                        ? `/briefing?legislator=${proposerImportance.get(makeProposerKey(b.proposerName, b.proposerParty))?.legislatorId}`
+                        : null
                     }
                   />
                 ))}
@@ -176,38 +188,16 @@ export default async function BriefingPage() {
           </SideSection>
         </aside>
       </div>
+
+      {selectedLegislatorId && (
+        <LegislatorProfileSlideOver
+          legislatorId={selectedLegislatorId}
+          closeHref="/briefing"
+          importance={importanceById.get(selectedLegislatorId) ?? null}
+        />
+      )}
     </>
   );
-}
-
-async function loadProposerImportance(
-  proposers: Array<{ name: string; party: string | null }>,
-  importanceById: Map<number, ImportanceRecord>,
-): Promise<Map<string, ImportanceRecord>> {
-  const names = [...new Set(proposers.map((proposer) => proposer.name))];
-  if (names.length === 0) return new Map();
-
-  const matchedLegislators = await db
-    .select({
-      id: legislator.id,
-      name: legislator.name,
-      party: legislator.party,
-    })
-    .from(legislator)
-    .where(inArray(legislator.name, names));
-
-  const result = new Map<string, ImportanceRecord>();
-  for (const matched of matchedLegislators) {
-    const importance = importanceById.get(matched.id);
-    if (!importance) continue;
-    result.set(makeProposerKey(matched.name, matched.party), importance);
-    result.set(makeProposerKey(matched.name, null), importance);
-  }
-  return result;
-}
-
-function makeProposerKey(name: string, party: string | null): string {
-  return `${name}::${party ?? ""}`;
 }
 
 function NewsRow({

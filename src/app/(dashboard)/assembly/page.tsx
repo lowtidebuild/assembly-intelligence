@@ -16,11 +16,18 @@ import { industryCommittee, industryProfile, legislator } from "@/db/schema";
 import { asc, eq, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
+import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import { computeImportance } from "@/lib/legislator-importance";
 
 export const dynamic = "force-dynamic";
 
-export default async function AssemblyPage() {
+export default async function AssemblyPage(props: {
+  searchParams: Promise<{ legislator?: string }>;
+}) {
+  const sp = await props.searchParams;
+  const selectedLegislatorId = sp.legislator
+    ? Number.parseInt(sp.legislator, 10)
+    : null;
   const [profile] = await db.select().from(industryProfile).limit(1);
   const committees = profile
     ? await db
@@ -76,6 +83,8 @@ export default async function AssemblyPage() {
     importance: importanceById.get(m.id)?.level ?? null,
     importanceReasons: importanceById.get(m.id)?.reasons ?? [],
   }));
+  const selectedMemberId =
+    members.find((member) => member.id === selectedLegislatorId)?.memberId ?? null;
 
   const totalActive = members.length;
   const sortedParties = [...partyStats].sort((a, b) => b.count - a.count);
@@ -98,7 +107,12 @@ export default async function AssemblyPage() {
               정당별 3-sector 배치 · 산업 관련 위원/발의 의원은 outline ring으로 강조
             </p>
           </div>
-          <Hemicycle members={hemicycleMembers} width={720} />
+          <Hemicycle
+            members={hemicycleMembers}
+            width={720}
+            selectedMemberId={selectedMemberId}
+            detailHrefBase="/assembly"
+          />
         </div>
 
         {/* Sidebar stats */}
@@ -141,6 +155,14 @@ export default async function AssemblyPage() {
           </div>
         </aside>
       </div>
+
+      {selectedLegislatorId && (
+        <LegislatorProfileSlideOver
+          legislatorId={selectedLegislatorId}
+          closeHref="/assembly"
+          importance={importanceById.get(selectedLegislatorId) ?? null}
+        />
+      )}
     </>
   );
 }

@@ -23,9 +23,11 @@ import {
 } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
+import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import {
   computeImportance,
   type ImportanceLevel,
@@ -35,7 +37,13 @@ import { Plus, Sparkles, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-export default async function WatchPage() {
+export default async function WatchPage(props: {
+  searchParams: Promise<{ legislator?: string }>;
+}) {
+  const sp = await props.searchParams;
+  const selectedLegislatorId = sp.legislator
+    ? Number.parseInt(sp.legislator, 10)
+    : null;
   const [profile] = await db.select().from(industryProfile).limit(1);
   const committees = profile
     ? await db
@@ -111,6 +119,8 @@ export default async function WatchPage() {
     importanceReasons: importanceById.get(m.id)?.reasons ?? [],
     highlighted: watchedIds.has(m.id),
   }));
+  const selectedMemberId =
+    allMembers.find((member) => member.id === selectedLegislatorId)?.memberId ?? null;
 
   async function addRecommendedWatch(formData: FormData) {
     "use server";
@@ -208,6 +218,8 @@ export default async function WatchPage() {
           <Hemicycle
             members={hemicycleMembers}
             width={440}
+            selectedMemberId={selectedMemberId}
+            detailHrefBase="/watch"
             hideLegend
           />
           <p className="mt-3 text-[11px] text-[var(--color-text-tertiary)]">
@@ -215,6 +227,14 @@ export default async function WatchPage() {
           </p>
         </aside>
       </div>
+
+      {selectedLegislatorId && (
+        <LegislatorProfileSlideOver
+          legislatorId={selectedLegislatorId}
+          closeHref="/watch"
+          importance={importanceById.get(selectedLegislatorId) ?? null}
+        />
+      )}
     </>
   );
 }
@@ -240,7 +260,11 @@ function WatchCard({
 }) {
   const initials = member.name.slice(0, 1);
   return (
-    <div className="flex gap-3 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]">
+    <Link
+      href={`/watch?legislator=${member.id}`}
+      scroll={false}
+      className="flex gap-3 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]"
+    >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-light)] text-[15px] font-bold text-[var(--color-primary)]">
         {initials}
       </div>
@@ -297,7 +321,7 @@ function WatchCard({
           발의 {importance?.sponsoredBillCount ?? 0}
         </span>
       </div>
-    </div>
+    </Link>
   );
 }
 

@@ -40,6 +40,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
 import type { ImportanceLevel } from "@/lib/legislator-importance";
@@ -70,6 +71,7 @@ export interface HemicycleProps {
   /** Which member is selected (memberId). Emits onSelect on click. */
   selectedMemberId?: string | null;
   onSelect?: (member: HemicycleMember) => void;
+  detailHrefBase?: string;
   /** Hide legend */
   hideLegend?: boolean;
 }
@@ -377,8 +379,10 @@ export function Hemicycle({
   width = 400,
   selectedMemberId,
   onSelect,
+  detailHrefBase,
   hideLegend = false,
 }: HemicycleProps) {
+  const router = useRouter();
   const [hovered, setHovered] = useState<HemicycleMember | null>(null);
 
   const { sectorMembers, sectorPositions, partyCounts, totalRendered } =
@@ -446,8 +450,17 @@ export function Hemicycle({
           className={cn(
             "transition-all",
             onSelect && "cursor-pointer hover:opacity-80",
+            !onSelect && detailHrefBase && "cursor-pointer hover:opacity-80",
           )}
-          onClick={() => onSelect?.(member)}
+          onClick={() => {
+            if (onSelect) {
+              onSelect(member);
+              return;
+            }
+            if (detailHrefBase) {
+              router.push(`${detailHrefBase}?legislator=${member.id}`);
+            }
+          }}
           onMouseEnter={() => setHovered(member)}
           onMouseLeave={() => setHovered(null)}
         >

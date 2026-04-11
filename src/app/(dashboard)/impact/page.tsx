@@ -13,7 +13,7 @@
  */
 
 import { db } from "@/db";
-import { bill } from "@/db/schema";
+import { bill, industryCommittee, industryProfile } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import Link from "next/link";
@@ -21,16 +21,40 @@ import { StageBadge } from "@/components/stage-badge";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
 import { CompanyImpactEditor } from "@/components/company-impact-editor";
 import { DeepAnalysisPanel } from "@/components/deep-analysis-panel";
+import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
+import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import { Sparkles, TrendingUp, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  computeImportance,
+  loadProposerImportanceMap,
+  makeProposerKey,
+} from "@/lib/legislator-importance";
 
 export const dynamic = "force-dynamic";
 
 export default async function ImpactPage(props: {
-  searchParams: Promise<{ bill?: string }>;
+  searchParams: Promise<{ bill?: string; legislator?: string }>;
 }) {
   const sp = await props.searchParams;
   const selectedBillId = sp.bill ? parseInt(sp.bill, 10) : null;
+  const selectedLegislatorId = sp.legislator
+    ? Number.parseInt(sp.legislator, 10)
+    : null;
+
+  const [profile] = await db.select().from(industryProfile).limit(1);
+  const committees = profile
+    ? await db
+        .select({ committeeCode: industryCommittee.committeeCode })
+        .from(industryCommittee)
+        .where(eq(industryCommittee.industryProfileId, profile.id))
+    : [];
+  const importanceById = profile
+    ? await computeImportance({
+        profileId: profile.id,
+        committeeCodes: committees.map((c) => c.committeeCode),
+      })
+    : new Map();
 
   const [recentBills, selected] = await Promise.all([
     db
@@ -46,6 +70,18 @@ export default async function ImpactPage(props: {
           .then((r) => r[0] ?? null)
       : Promise.resolve(null),
   ]);
+  const proposerImportance = await loadProposerImportanceMap(
+    [...recentBills, ...(selected ? [selected] : [])].map((entry) => ({
+      name: entry.proposerName,
+      party: entry.proposerParty,
+    })),
+    importanceById,
+  );
+  const selectedProposerEntry = selected
+    ? proposerImportance.get(
+        makeProposerKey(selected.proposerName, selected.proposerParty),
+      )
+    : null;
 
   return (
     <>
@@ -78,8 +114,23 @@ export default async function ImpactPage(props: {
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-medium">{b.billName}</div>
                       <div className="mt-0.5 text-[10px] text-[var(--color-text-tertiary)]">
-                        {b.proposerName}
-                        {b.proposerParty && ` (${b.proposerParty})`}
+                        <span className="inline-flex items-center gap-1">
+                          {b.proposerName}
+                          <LegislatorImportanceStar
+                            level={
+                              proposerImportance.get(
+                                makeProposerKey(b.proposerName, b.proposerParty),
+                              )?.importance.level ?? null
+                            }
+                            size={12}
+                            reasons={
+                              proposerImportance.get(
+                                makeProposerKey(b.proposerName, b.proposerParty),
+                              )?.importance.reasons
+                            }
+                          />
+                          {b.proposerParty && ` (${b.proposerParty})`}
+                        </span>
                       </div>
                     </div>
                     {b.relevanceScore !== null && (
@@ -120,8 +171,26 @@ export default async function ImpactPage(props: {
                 {selected.billName}
               </h2>
               <div className="mt-1 text-[12px] text-[var(--color-text-secondary)]">
-                {selected.proposerName}
-                {selected.proposerParty && ` (${selected.proposerParty})`}
+                {selectedProposerEntry ? (
+                  <Link
+                    href={`/impact?bill=${selected.id}&legislator=${selectedProposerEntry.legislatorId}`}
+                    scroll={false}
+                    className="inline-flex items-center gap-1 hover:text-[var(--color-primary)]"
+                  >
+                    {selected.proposerName}
+                    <LegislatorImportanceStar
+                      level={selectedProposerEntry.importance.level}
+                      size={14}
+                      reasons={selectedProposerEntry.importance.reasons}
+                    />
+                    {selected.proposerParty && ` (${selected.proposerParty})`}
+                  </Link>
+                ) : (
+                  <>
+                    {selected.proposerName}
+                    {selected.proposerParty && ` (${selected.proposerParty})`}
+                  </>
+                )}
                 {selected.coSponsorCount > 0 &&
                   ` · 공동발의 ${selected.coSponsorCount}인`}
                 {selected.committee && ` · ${selected.committee}`}
@@ -182,6 +251,14 @@ export default async function ImpactPage(props: {
           </div>
         )}
       </div>
+
+      {selectedLegislatorId && (
+        <LegislatorProfileSlideOver
+          legislatorId={selectedLegislatorId}
+          closeHref={selected ? `/impact?bill=${selected.id}` : "/impact"}
+          importance={importanceById.get(selectedLegislatorId) ?? null}
+        />
+      )}
     </>
   );
 }

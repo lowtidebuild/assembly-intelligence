@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { bill, industryLegislatorWatch, legislator } from "@/db/schema";
 
@@ -16,6 +16,11 @@ export interface ImportanceRecord {
 export interface ImportanceContext {
   profileId: number;
   committeeCodes: string[];
+}
+
+export interface ProposerImportanceEntry {
+  legislatorId: number;
+  importance: ImportanceRecord;
 }
 
 function isLeadershipRole(role: string | null): boolean {
@@ -64,6 +69,10 @@ export function importanceBadgeClass(level: ImportanceLevel): string {
   if (level === "A") return "text-[#2563eb]";
   if (level === "B") return "text-[#94a3b8]";
   return "text-[var(--color-text-tertiary)]";
+}
+
+export function makeProposerKey(name: string, party: string | null): string {
+  return `${name}::${party ?? ""}`;
 }
 
 export async function computeImportance(
@@ -140,5 +149,35 @@ export async function computeImportance(
     });
   }
 
+  return result;
+}
+
+export async function loadProposerImportanceMap(
+  proposers: Array<{ name: string; party: string | null }>,
+  importanceById: Map<number, ImportanceRecord>,
+): Promise<Map<string, ProposerImportanceEntry>> {
+  const names = [...new Set(proposers.map((proposer) => proposer.name))];
+  if (names.length === 0) return new Map();
+
+  const matchedLegislators = await db
+    .select({
+      id: legislator.id,
+      name: legislator.name,
+      party: legislator.party,
+    })
+    .from(legislator)
+    .where(inArray(legislator.name, names));
+
+  const result = new Map<string, ProposerImportanceEntry>();
+  for (const matched of matchedLegislators) {
+    const importance = importanceById.get(matched.id);
+    if (!importance) continue;
+    const entry = {
+      legislatorId: matched.id,
+      importance,
+    };
+    result.set(makeProposerKey(matched.name, matched.party), entry);
+    result.set(makeProposerKey(matched.name, null), entry);
+  }
   return result;
 }
