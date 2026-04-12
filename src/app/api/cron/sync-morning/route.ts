@@ -25,6 +25,7 @@ import {
   getStubBriefingGenerator,
 } from "@/lib/gemini-stub";
 import { verifyCronRequest } from "@/lib/cron-auth";
+import { demoGuardResponse } from "@/lib/demo-mode";
 
 // Vercel function duration. Morning sync:
 //   - 1 legislator fetch (cached ≥7 days) — 0-90s
@@ -60,6 +61,9 @@ function chooseDeps() {
 }
 
 export async function GET(req: NextRequest) {
+  const blocked = demoGuardResponse();
+  if (blocked) return blocked;
+
   const auth = verifyCronRequest(req);
   if (!auth.ok) {
     return NextResponse.json(

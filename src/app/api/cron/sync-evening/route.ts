@@ -15,10 +15,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runEveningSync } from "@/services/sync";
 import { verifyCronRequest } from "@/lib/cron-auth";
+import { demoGuardResponse } from "@/lib/demo-mode";
 
 export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
+  const blocked = demoGuardResponse();
+  if (blocked) return blocked;
+
   const auth = verifyCronRequest(req);
   if (!auth.ok) {
     return NextResponse.json(
