@@ -96,21 +96,22 @@ function partyColor(party: string): string {
   return PARTY_COLORS[party] ?? "#9ca3af";
 }
 
-function importanceRing(level: ImportanceLevel): {
-  color: string;
-  strokeWidth: number;
-  radiusOffset: number;
-} | null {
-  if (level === "S") {
-    return { color: "#eab308", strokeWidth: 2, radiusOffset: 3 };
-  }
-  if (level === "A") {
-    return { color: "#2563eb", strokeWidth: 2, radiusOffset: 3 };
-  }
-  if (level === "B") {
-    return { color: "#94a3b8", strokeWidth: 1.5, radiusOffset: 2.5 };
-  }
-  return null;
+/**
+ * Seat opacity based on importance. Non-important seats fade to let
+ * S/A/B seats pop visually, without adding rings or extra colors
+ * that compete with party colors.
+ *
+ * Highlighted (watched) seats always stay bright regardless of level.
+ */
+function seatOpacity(
+  level: ImportanceLevel,
+  isHighlighted: boolean,
+): number {
+  if (isHighlighted) return 1;
+  if (level === "S") return 1;
+  if (level === "A") return 0.85;
+  if (level === "B") return 0.6;
+  return 0.28;
 }
 
 /**
@@ -139,9 +140,9 @@ interface SeatPosition {
 }
 
 const VIEWBOX_W = 400;
-const VIEWBOX_H = 210;
+const VIEWBOX_H = 235;
 const CENTER_X = 200;
-const CENTER_Y = 195;
+const CENTER_Y = 220;
 const INNER_R = 55;
 const OUTER_R = 175;
 const SEAT_RADIUS = 3.5;
@@ -443,7 +444,8 @@ export function Hemicycle({
       }
       const isSelected = selectedMemberId === member.memberId;
       const isHighlighted = member.highlighted || isSelected;
-      const importance = importanceRing(member.importance ?? null);
+      const level = member.importance ?? null;
+      const opacity = seatOpacity(level, isHighlighted);
       return (
         <g
           key={member.memberId}
@@ -463,17 +465,8 @@ export function Hemicycle({
           }}
           onMouseEnter={() => setHovered(member)}
           onMouseLeave={() => setHovered(null)}
+          opacity={opacity}
         >
-          {importance && (
-            <circle
-              cx={pos.x}
-              cy={pos.y}
-              r={pos.r + importance.radiusOffset}
-              fill="none"
-              stroke={importance.color}
-              strokeWidth={importance.strokeWidth}
-            />
-          )}
           <circle
             cx={pos.x}
             cy={pos.y}
@@ -503,22 +496,23 @@ export function Hemicycle({
         aria-label="대한민국 국회 본회의장 의석 배치도"
         className="select-none"
       >
-        {/* Podium marker (의장석) at top center */}
+        {/* Podium marker (의장석) at the arc's origin — where all seats face */}
         <rect
-          x={CENTER_X - 18}
-          y={6}
-          width={36}
-          height={12}
-          rx={2}
+          x={CENTER_X - 22}
+          y={CENTER_Y - 20}
+          width={44}
+          height={16}
+          rx={4}
           fill="var(--color-surface-2)"
           stroke="var(--color-border)"
           strokeWidth={1}
         />
         <text
           x={CENTER_X}
-          y={15}
+          y={CENTER_Y - 9}
           textAnchor="middle"
-          fontSize="7"
+          fontSize="8"
+          fontWeight="600"
           fill="var(--color-text-secondary)"
         >
           의장석
