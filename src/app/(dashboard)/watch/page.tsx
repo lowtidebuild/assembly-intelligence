@@ -223,7 +223,7 @@ export default async function WatchPage(props: {
             hideLegend
           />
           <p className="mt-3 text-[11px] text-[var(--color-text-tertiary)]">
-            클릭 추가/제거는 setup wizard 완성 후 지원됩니다.
+            좌석을 클릭하면 프로필에서 워치리스트에 바로 추가·제거할 수 있습니다.
           </p>
         </aside>
       </div>

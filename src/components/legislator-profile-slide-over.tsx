@@ -1,12 +1,21 @@
 import Link from "next/link";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { ExternalLink, X } from "lucide-react";
+import { ExternalLink, Minus, Plus, X } from "lucide-react";
 import { db } from "@/db";
-import { bill, legislator } from "@/db/schema";
+import {
+  bill,
+  industryLegislatorWatch,
+  industryProfile,
+  legislator,
+} from "@/db/schema";
 import {
   LegislatorImportanceStar,
 } from "@/components/legislator-importance-star";
 import type { ImportanceRecord } from "@/lib/legislator-importance";
+import {
+  addLegislatorToWatchAction,
+  removeLegislatorFromWatchAction,
+} from "@/lib/watch-actions";
 
 export async function LegislatorProfileSlideOver({
   legislatorId,
@@ -24,6 +33,25 @@ export async function LegislatorProfileSlideOver({
     .limit(1);
 
   if (!member) return null;
+
+  // Load active profile + check whether this legislator is in its watch list.
+  const [profile] = await db
+    .select({ id: industryProfile.id, name: industryProfile.name })
+    .from(industryProfile)
+    .limit(1);
+  const watchRows = profile
+    ? await db
+        .select({ legislatorId: industryLegislatorWatch.legislatorId })
+        .from(industryLegislatorWatch)
+        .where(
+          and(
+            eq(industryLegislatorWatch.industryProfileId, profile.id),
+            eq(industryLegislatorWatch.legislatorId, legislatorId),
+          ),
+        )
+        .limit(1)
+    : [];
+  const isWatched = watchRows.length > 0;
 
   const sponsoredBills = await db
     .select({
@@ -103,6 +131,15 @@ export async function LegislatorProfileSlideOver({
             <X className="h-4 w-4" />
           </Link>
         </header>
+
+        {profile && (
+          <WatchToggleRow
+            legislatorId={legislatorId}
+            isWatched={isWatched}
+            profileName={profile.name}
+            defaultReason={buildDefaultReason(importance, member.name)}
+          />
+        )}
 
         <div className="space-y-5 px-5 py-5">
           <FactsGrid
@@ -261,4 +298,65 @@ function formatStaff(
   if (staffRaw) parts.push(`보좌진: ${staffRaw}`);
   if (secretaryRaw) parts.push(`비서관: ${secretaryRaw}`);
   return parts.join(" · ");
+}
+
+function buildDefaultReason(
+  importance: ImportanceRecord | null | undefined,
+  name: string,
+): string {
+  if (importance?.reasons && importance.reasons.length > 0) {
+    return importance.reasons.join(" · ");
+  }
+  return `${name} 수동 추가`;
+}
+
+function WatchToggleRow({
+  legislatorId,
+  isWatched,
+  profileName,
+  defaultReason,
+}: {
+  legislatorId: number;
+  isWatched: boolean;
+  profileName: string;
+  defaultReason: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-2)] px-5 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-tertiary)]">
+          워치리스트 · {profileName}
+        </div>
+        <div className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
+          {isWatched
+            ? "현재 워치리스트에서 모니터링 중입니다."
+            : "아직 워치리스트에 없습니다."}
+        </div>
+      </div>
+      {isWatched ? (
+        <form action={removeLegislatorFromWatchAction}>
+          <input type="hidden" name="legislatorId" value={legislatorId} />
+          <button
+            type="submit"
+            className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]"
+          >
+            <Minus className="h-3 w-3" />
+            워치리스트에서 제거
+          </button>
+        </form>
+      ) : (
+        <form action={addLegislatorToWatchAction}>
+          <input type="hidden" name="legislatorId" value={legislatorId} />
+          <input type="hidden" name="reason" value={defaultReason} />
+          <button
+            type="submit"
+            className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--color-primary)] px-3 py-1.5 text-[11px] font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            <Plus className="h-3 w-3" />
+            워치리스트에 추가
+          </button>
+        </form>
+      )}
+    </div>
+  );
 }
