@@ -257,7 +257,7 @@ src/
 
 ## 라이선스
 
-MIT License
+Apache License 2.0 — [LICENSE](./LICENSE)
 
 ---
 
@@ -269,9 +269,9 @@ MIT License
 |---|---|
 | **MCP 데이터** | [@hollobit](https://www.threads.com/@hollobit) / [assembly-api-mcp](https://github.com/hollobit/assembly-api-mcp) |
 | **디자인 영감** | [ParlaWatch](https://parlawatch.org) |
-| **AI 엔진** | Google Gemini 2.5 Flash / Pro |
+| **AI 엔진** | Google Gemini 2.5 Flash / 3.1 Pro |
 | **뉴스 소스** | Naver News Search API |
-| **개발 도구** | Claude Code (Anthropic) |
+| **개발 도구** | [Claude Code](https://claude.ai/code) + [OpenAI Codex](https://openai.com/codex) |
 
 ---
 
