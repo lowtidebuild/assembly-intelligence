@@ -121,6 +121,12 @@ export async function LegislatorProfileSlideOver({
                 {member.electionType && ` · ${member.electionType}`}
                 {member.termNumber && ` · ${member.termNumber}선`}
               </div>
+              <Link
+                href={`/legislators/${legislatorId}`}
+                className="mt-1 inline-flex text-[11px] text-[var(--color-primary)] hover:underline"
+              >
+                상세 페이지로 이동 →
+              </Link>
             </div>
           </div>
           <Link

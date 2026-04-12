@@ -19,6 +19,7 @@ import {
   FileText,
   Radar,
   Users,
+  UserSearch,
   TrendingUp,
   Landmark,
   Settings,
@@ -71,6 +72,13 @@ function buildItems(counts: SidebarCounts): NavItem[] {
       label: "의원 워치",
       icon: Users,
       badge: counts.watchedLegislators,
+    },
+    {
+      section: "tracking",
+      href: "/legislators",
+      label: "의원 프로필",
+      icon: UserSearch,
+      badge: 295,
     },
     {
       section: "tracking",
