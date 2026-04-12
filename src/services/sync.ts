@@ -58,6 +58,7 @@ import {
 } from "@/db/schema";
 import { callMcpToolOrThrow } from "@/lib/mcp-client";
 import { errorMessage } from "@/lib/api-base";
+import { decodeHtmlEntities } from "@/lib/html-entities";
 import { syncNews } from "@/services/news-sync";
 
 /* ─────────────────────────────────────────────────────────────
@@ -352,6 +353,17 @@ function joinRawNames(
   return normalized.length > 0 ? normalized.join(", ") : null;
 }
 
+/**
+ * Decode HTML entities from MCP text fields. The Assembly API returns
+ * raw entities (`&middot;`, `&amp;`, numeric) inside HG_NM, MEM_TITLE,
+ * STAFF, SECRETARY, ORIG_NM, etc. We decode at the boundary so the rest
+ * of the app treats text as plain Unicode.
+ */
+function cleanText(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  return decodeHtmlEntities(value);
+}
+
 function committeesFromRow(row: McpLegislatorRow): string[] {
   if (row.CMITS) {
     return row.CMITS.split(",").map((s) => s.trim()).filter(Boolean);
@@ -365,27 +377,27 @@ function ingestLegislatorRow(
 ): NewLegislator {
   return {
     memberId: row.MONA_CD,
-    name: row.HG_NM,
-    nameHanja: row.HJ_NM,
-    nameEnglish: row.ENG_NM,
-    party: row.POLY_NM,
-    district: row.ORIG_NM,
-    electionType: row.ELECT_GBN_NM,
+    name: decodeHtmlEntities(row.HG_NM),
+    nameHanja: cleanText(row.HJ_NM),
+    nameEnglish: cleanText(row.ENG_NM),
+    party: decodeHtmlEntities(row.POLY_NM),
+    district: cleanText(row.ORIG_NM),
+    electionType: cleanText(row.ELECT_GBN_NM),
     termNumber: parseTermNumber(row.REELE_GBN_NM),
     birthDate: normalizeDateOnly(row.BTH_DATE),
-    birthCalendar: row.BTH_GBN_NM,
-    gender: row.SEX_GBN_NM,
-    termHistory: row.UNITS,
-    committeeRole: row.JOB_RES_NM,
-    committees: committeesFromRow(row),
+    birthCalendar: cleanText(row.BTH_GBN_NM),
+    gender: cleanText(row.SEX_GBN_NM),
+    termHistory: cleanText(row.UNITS),
+    committeeRole: cleanText(row.JOB_RES_NM),
+    committees: committeesFromRow(row).map((c) => decodeHtmlEntities(c)),
     seatIndex,
-    email: row.E_MAIL,
-    homepage: row.HOMEPAGE,
-    officePhone: row.TEL_NO,
-    officeAddress: row.ASSEM_ADDR,
-    staffRaw: row.STAFF,
-    secretaryRaw: joinRawNames(row.SECRETARY, row.SECRETARY2),
-    memTitle: row.MEM_TITLE,
+    email: cleanText(row.E_MAIL),
+    homepage: cleanText(row.HOMEPAGE),
+    officePhone: cleanText(row.TEL_NO),
+    officeAddress: cleanText(row.ASSEM_ADDR),
+    staffRaw: cleanText(row.STAFF),
+    secretaryRaw: cleanText(joinRawNames(row.SECRETARY, row.SECRETARY2)),
+    memTitle: cleanText(row.MEM_TITLE),
     isActive: true,
     lastSynced: new Date(),
   };
