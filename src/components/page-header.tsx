@@ -5,11 +5,11 @@
  *   [title] [date/sublabel]                 [search] [actions]
  *
  * Server component. Pages pass `title` + optional `subtitle` and
- * optional `actions` (e.g. a refresh button). Search is rendered as
- * a form GET against /radar for now — unified search can come later.
+ * optional `actions` (e.g. a refresh button). Search is delegated to
+ * the client-side SearchCommand.
  */
 
-import { Search } from "lucide-react";
+import { SearchCommand } from "@/components/search-command";
 
 export function PageHeader({
   title,
@@ -33,15 +33,7 @@ export function PageHeader({
         )}
       </div>
       <div className="flex items-center gap-[10px]">
-        <form action="/radar" method="GET" className="relative">
-          <Search className="pointer-events-none absolute left-[10px] top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-[var(--color-text-secondary)]" />
-          <input
-            type="search"
-            name="q"
-            placeholder="법안, 의원, 키워드 검색..."
-            className="w-[260px] rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface-2)] py-2 pl-8 pr-3 text-[13px] text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
-          />
-        </form>
+        <SearchCommand />
         {actions}
       </div>
     </div>
