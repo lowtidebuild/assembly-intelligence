@@ -52,8 +52,9 @@ Thumbs.db
 .turbo/
 *.tsbuildinfo
 
-# Local handoff briefs (not part of the public repo)
+# Local handoff briefs + archive (not part of the public repo)
 CODEX_BRIEF_*.md
+docs/archive/
 
 # Design docs / internal planning (keep local, not public)
 RESUME.md
