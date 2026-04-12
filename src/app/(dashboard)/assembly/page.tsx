@@ -96,7 +96,7 @@ export default async function AssemblyPage(props: {
         subtitle={`제22대 국회 · ${totalActive}명 활동 중`}
       />
 
-      <div className="mx-auto grid max-w-[1100px] grid-cols-1 gap-8 p-6 lg:grid-cols-[1fr_280px]">
+      <div className="grid grid-cols-1 gap-8 p-6 lg:grid-cols-[1fr_280px]">
         {/* Hemicycle */}
         <div className="flex flex-col items-center rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-card)]">
           <div className="mb-4 text-center">
@@ -107,7 +107,7 @@ export default async function AssemblyPage(props: {
               정당별 3-sector 배치 · 산업 중요 의원이 밝게 표시됩니다
             </p>
           </div>
-          <div className="w-full max-w-[900px]">
+          <div className="w-full">
             <Hemicycle
               members={hemicycleMembers}
               selectedMemberId={selectedMemberId}
