@@ -330,18 +330,6 @@ pnpm tsx scripts/dry-run-morning-sync.ts
 ### Q: 의원 정보가 오래된 것 같아요
 **A**: 아침 동기화 시 295명 전체를 국회 API에서 최신 정보로 갱신합니다. 의원직 변동(보궐선거, 사퇴 등)도 자동 반영됩니다.
 
-### Q: 데모 모드로 배포하고 싶어요
-**A**: Vercel에서 같은 코드를 새 프로젝트로 배포하되, 환경변수에 `DEMO_MODE=true`를 추가하세요. 인증 없이 읽기만 가능한 공개 버전이 됩니다. DB를 분리하려면 Neon에서 브랜치를 만들어 별도 `DATABASE_URL`을 사용하세요.
-
----
-
-## 다음 단계
-
-- [ ] 팀원에게 비밀번호 공유
-- [ ] 매일 아침 `/briefing` 확인하는 루틴 만들기
-- [ ] 핵심 의원 워치리스트 채우기
-- [ ] 중요 법안에 "당사 영향 사항" 작성 시작
-
 ---
 
 > 문제가 있으면 [GitHub Issues](https://github.com/lowtidebuild/assembly-intelligence/issues)에 남겨주세요.

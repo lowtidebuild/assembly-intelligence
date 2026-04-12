@@ -54,3 +54,8 @@ Thumbs.db
 
 # Local handoff briefs (not part of the public repo)
 CODEX_BRIEF_*.md
+
+# Design docs / internal planning (keep local, not public)
+RESUME.md
+design.md
+assembly-intelligence-brainstorm.md

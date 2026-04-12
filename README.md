@@ -1,37 +1,18 @@
-<p align="center">
-  <img src="./screenshots/after/04-briefing.png" width="720" alt="ParlaWatch+ 브리핑봇 화면" />
-</p>
-
 <h1 align="center">ParlaWatch+</h1>
 
 <p align="center">
-  <strong>Industry-specific National Assembly Intelligence Dashboard for Korea</strong><br/>
-  AI-powered bill tracking, legislator profiling, and daily GR/PA briefings.<br/>
-  Built on <a href="https://github.com/hollobit/assembly-api-mcp">assembly-api-mcp</a> by <a href="https://www.threads.com/@hollobit">@hollobit</a>.
+  <strong>산업별 국회 인텔리전스 대시보드</strong><br/>
+  AI 기반 법안 추적, 의원 프로파일링, 매일 아침 GR/PA 브리핑 자동 생성
 </p>
 
 <p align="center">
-  <a href="https://assembly-intelligence-demo.vercel.app"><img src="https://img.shields.io/badge/Live%20Demo-Try%20Now-blue?style=for-the-badge" alt="Live Demo" /></a>
-  <a href="https://lowtidebuild.github.io/assembly-intelligence/"><img src="https://img.shields.io/badge/Static%20Demo-GitHub%20Pages-green?style=for-the-badge" alt="Static Demo" /></a>
+  <a href="https://assembly-intelligence-demo.vercel.app"><img src="https://img.shields.io/badge/라이브_데모-바로_체험-blue?style=for-the-badge" alt="라이브 데모" /></a>
+  <a href="https://lowtidebuild.github.io/assembly-intelligence/"><img src="https://img.shields.io/badge/정적_데모-GitHub_Pages-green?style=for-the-badge" alt="정적 데모" /></a>
 </p>
 
 ---
 
-## TL;DR (English)
-
-ParlaWatch+ is a **full-stack legislative intelligence dashboard** for Korean industry GR/PA teams. It connects to the National Assembly's open data via MCP, scores every bill with Gemini AI, and generates daily briefings automatically.
-
-**What it does:**
-- Syncs bills from 17+ standing committees twice daily via [assembly-api-mcp](https://github.com/hollobit/assembly-api-mcp)
-- Scores relevance (1-5) and generates 2-3 sentence summaries with Gemini Flash
-- Produces daily HTML briefings with Gemini Pro
-- Profiles all 295 legislators with importance scoring (S/A/B)
-- Collects related news from Naver News API
-- Ships with 7 industry presets (Game, Cybersecurity, Bio, Fintech, Semiconductor, E-commerce, AI)
-
-**Stack:** Next.js 15 + React 19 + Tailwind v4 + Neon Postgres + Drizzle ORM + Gemini 2.5 + Vercel
-
-> For a non-developer setup guide, see [docs/setup-guide.md](./docs/setup-guide.md).
+> **TL;DR** — Full-stack legislative intelligence dashboard for Korean GR/PA teams. Syncs bills via MCP, scores with Gemini AI, generates daily briefings. 7 industry presets, 295 legislator profiles, auto-sync twice daily. Next.js 15 + Neon Postgres + Gemini. [Non-developer setup guide](./docs/setup-guide.md)
 
 ---
 
@@ -77,25 +58,25 @@ ParlaWatch+ is a **full-stack legislative intelligence dashboard** for Korean in
 
 ### 브리핑봇 — 매일 아침의 출발점
 
-![브리핑봇](./screenshots/after/04-briefing.png)
+![브리핑봇](./screenshots/04-briefing.png)
 
 Gemini가 점수 매긴 핵심 법안 카드와 제안자 중요도 별표(S/A/B). 오른쪽은 Gemini Pro가 쓴 일일 브리핑과 Naver News에서 가져온 법안 관련 뉴스.
 
-### 입법 레이더 — GR/PA 엑셀 대체
+### 입법 레이더 — 법안 추적 테이블
 
-![입법 레이더](./screenshots/after/07-radar-slide-over.png)
+![입법 레이더](./screenshots/07-radar-slide-over.png)
 
 필터 가능한 법안 테이블 + 슬라이드오버 상세 패널. AI 요약, 중요도 판단, 당사 영향 사항 편집기, 의원 프로필 딥링크가 한 화면에.
 
 ### 법안 영향 분석기 — Gemini Pro 심층 분석
 
-![영향 분석기](./screenshots/after/09-impact-selected.png)
+![영향 분석기](./screenshots/09-impact-selected.png)
 
 법안 선택 시 5개 섹션 구조화 분석: Executive Summary, 핵심 조항, 운영/재무/컴플라이언스 영향, 통과 가능성, 권장 액션.
 
 ### 국회 현황 — 22대 295명 의석 배치
 
-![국회 현황](./screenshots/after/10-assembly.png)
+![국회 현황](./screenshots/10-assembly.png)
 
 실제 본회의장 배치를 반영한 3-sector hemicycle. 산업 중요도에 따라 좌석 밝기가 달라지고, 클릭하면 의원 상세 프로필.
 
@@ -164,7 +145,7 @@ MCP에서 법안 수집 → Gemini Flash 평가 → 브리핑 생성 → 뉴스 
 |---|---|
 | **Frontend** | Next.js 15 App Router, React 19, Tailwind CSS v4, TypeScript 5 |
 | **Database** | PostgreSQL (Neon, HTTP driver), Drizzle ORM |
-| **AI** | Gemini 2.5 Flash (scoring), Gemini Pro (briefing, 심층 분석) |
+| **AI** | Gemini 2.5 Flash (scoring), Gemini 3.1 Pro (briefing, 심층 분석) |
 | **Data Source** | [assembly-api-mcp](https://github.com/hollobit/assembly-api-mcp) (MCP Streamable HTTP) |
 | **News** | Naver News Search API |
 | **Hosting** | Vercel (App + Cron), Neon (DB), GitHub Pages (정적 데모) |
@@ -295,5 +276,5 @@ MIT License
 ---
 
 <p align="center">
-  <sub>Made for GR/PA teams who want to stop reading Excel at 7am.</sub>
+  <sub>매일 아침 출근하면, 우리 산업에 영향 주는 법안을 AI가 정리해서 알려줍니다.</sub>
 </p>

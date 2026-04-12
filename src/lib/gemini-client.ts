@@ -58,7 +58,7 @@ export type { CompanyImpactInput } from "@/lib/prompts/company-impact";
  * ────────────────────────────────────────────────────────────── */
 
 const MODEL_FLASH = "gemini-2.5-flash";
-const MODEL_PRO = "gemini-2.5-pro";
+const MODEL_PRO = "gemini-3.1-pro-preview";
 
 /** Max 3 concurrent Gemini calls. */
 const limit = pLimit(3);
