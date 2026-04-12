@@ -18,7 +18,7 @@
 
 ## 배경
 
-[ParlaWatch](https://parlawatch.org)는 국정감사 등 국회 유튜브 방송을 모니터링하는 도구였습니다.
+[ParlaWatch](https://github.com/lowtidebuild/parlawatch)는 국정감사 등 국회 유튜브 방송을 모니터링하는 도구였습니다.
 **ParlaWatch+** 는 그 철학을 확장한 **산업별 종합 국회 모니터링 시스템**입니다.
 
 [@hollobit](https://www.threads.com/@hollobit) 님이 만든 [assembly-api-mcp](https://github.com/hollobit/assembly-api-mcp) 를 보고 아이디어가 떠올라 바로 기획 + 개발했습니다. 국회 공공데이터를 MCP(Model Context Protocol)로 깔끔하게 노출해주는 이 서버 덕분에, 법안 수집부터 의원 프로필까지 모든 데이터를 실시간으로 가져올 수 있게 되었습니다.
@@ -268,7 +268,7 @@ Apache License 2.0 — [LICENSE](./LICENSE)
 | | |
 |---|---|
 | **MCP 데이터** | [@hollobit](https://www.threads.com/@hollobit) / [assembly-api-mcp](https://github.com/hollobit/assembly-api-mcp) |
-| **디자인 영감** | [ParlaWatch](https://parlawatch.org) |
+| **디자인 영감** | [ParlaWatch](https://github.com/lowtidebuild/parlawatch) |
 | **AI 엔진** | Google Gemini 2.5 Flash / 3.1 Pro |
 | **뉴스 소스** | Naver News Search API |
 | **개발 도구** | [Claude Code](https://claude.ai/code) + [OpenAI Codex](https://openai.com/codex) |
