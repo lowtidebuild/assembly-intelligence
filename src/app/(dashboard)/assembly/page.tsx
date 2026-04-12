@@ -107,7 +107,7 @@ export default async function AssemblyPage(props: {
               정당별 3-sector 배치 · 산업 중요 의원이 밝게 표시됩니다
             </p>
           </div>
-          <div className="w-full max-w-[720px]">
+          <div className="w-full max-w-[900px]">
             <Hemicycle
               members={hemicycleMembers}
               selectedMemberId={selectedMemberId}
