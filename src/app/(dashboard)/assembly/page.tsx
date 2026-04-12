@@ -96,65 +96,46 @@ export default async function AssemblyPage(props: {
         subtitle={`제22대 국회 · ${totalActive}명 활동 중`}
       />
 
-      <div className="grid grid-cols-1 gap-8 p-6 lg:grid-cols-[1fr_280px]">
-        {/* Hemicycle */}
-        <div className="flex flex-col items-center rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-card)]">
-          <div className="mb-4 text-center">
+      <div className="mx-auto max-w-[1200px] p-6">
+        {/* Hemicycle — full width */}
+        <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] px-6 pb-6 pt-4 shadow-[var(--shadow-card)]">
+          <div className="mb-2 text-center">
             <h2 className="text-[14px] font-bold text-[var(--color-text)]">
               본회의장 의석 배치
             </h2>
-            <p className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
-              정당별 3-sector 배치 · 산업 중요 의원이 밝게 표시됩니다
+            <p className="mt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
+              의석을 클릭하면 의원 프로필이 열립니다 · 밝은 좌석 = 산업 중요 의원
             </p>
           </div>
-          <div className="w-full">
-            <Hemicycle
-              members={hemicycleMembers}
-              selectedMemberId={selectedMemberId}
-              detailHrefBase="/assembly"
-            />
-          </div>
+          <Hemicycle
+            members={hemicycleMembers}
+            selectedMemberId={selectedMemberId}
+            detailHrefBase="/assembly"
+          />
         </div>
 
-        {/* Sidebar stats */}
-        <aside className="flex flex-col gap-4">
-          <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-card)]">
-            <h3 className="mb-3 text-[12px] font-bold uppercase tracking-wide text-[var(--color-text-tertiary)]">
-              정당별 의석
-            </h3>
-            <ul className="space-y-2 text-[13px]">
-              {sortedParties.map((p) => {
-                const pct = ((p.count / totalActive) * 100).toFixed(1);
-                return (
-                  <li
-                    key={p.party}
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <span className="truncate text-[var(--color-text)]">
-                      {p.party}
-                    </span>
-                    <span className="flex shrink-0 items-baseline gap-2">
-                      <span className="font-semibold text-[var(--color-text)]">
-                        {p.count}
-                      </span>
-                      <span className="text-[10px] text-[var(--color-text-tertiary)]">
-                        {pct}%
-                      </span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-
-          <div className="rounded-[var(--radius)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-[12px] text-[var(--color-text-secondary)]">
-            <strong className="mb-1 block text-[var(--color-text)]">
-              💡 팁
-            </strong>
-            의석을 클릭하면 의원 상세 프로필이 열립니다. 산업별 워치리스트에
-            추가하려면 의원 워치 페이지에서 진행하세요.
-          </div>
-        </aside>
+        {/* Party stats — horizontal below hemicycle */}
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+          {sortedParties.map((p) => {
+            const pct = ((p.count / totalActive) * 100).toFixed(1);
+            return (
+              <div
+                key={p.party}
+                className="flex flex-col items-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2"
+              >
+                <span className="text-[11px] text-[var(--color-text-secondary)]">
+                  {p.party}
+                </span>
+                <span className="text-[18px] font-bold text-[var(--color-text)]">
+                  {p.count}
+                </span>
+                <span className="text-[10px] text-[var(--color-text-tertiary)]">
+                  {pct}%
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {selectedLegislatorId && (
