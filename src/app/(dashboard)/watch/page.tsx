@@ -169,7 +169,7 @@ export default async function WatchPage(props: {
         subtitle={`${watchRows.length}명 모니터링 중`}
       />
 
-      <div className="grid grid-cols-[1fr_480px] items-start gap-6 p-6">
+      <div className="grid grid-cols-1 items-start gap-6 p-6 lg:grid-cols-[1fr_480px]">
         {/* Watched list */}
         <section>
           {profile && !isDemoMode() && (
@@ -209,7 +209,7 @@ export default async function WatchPage(props: {
         </section>
 
         {/* Hemicycle picker */}
-        <aside className="sticky top-[80px] flex flex-col items-center rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-card)]">
+        <aside className="flex flex-col items-center rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-card)] lg:sticky lg:top-[80px]">
           <div className="mb-2 text-center">
             <h3 className="text-[13px] font-bold text-[var(--color-text)]">
               의원 선택
@@ -218,13 +218,14 @@ export default async function WatchPage(props: {
               흰 링은 현재 워치 · 색 링은 산업 중요도
             </p>
           </div>
-          <Hemicycle
-            members={hemicycleMembers}
-            width={440}
-            selectedMemberId={selectedMemberId}
-            detailHrefBase="/watch"
-            hideLegend
-          />
+          <div className="w-full max-w-[480px]">
+            <Hemicycle
+              members={hemicycleMembers}
+              selectedMemberId={selectedMemberId}
+              detailHrefBase="/watch"
+              hideLegend
+            />
+          </div>
           <p className="mt-3 text-[11px] text-[var(--color-text-tertiary)]">
             좌석을 클릭하면 프로필에서 워치리스트에 바로 추가·제거할 수 있습니다.
           </p>

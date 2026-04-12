@@ -90,7 +90,7 @@ export default async function ImpactPage(props: {
         subtitle="Gemini Pro 기반 심층 분석"
       />
 
-      <div className="grid grid-cols-[320px_1fr] items-start gap-6 p-6">
+      <div className="grid grid-cols-1 items-start gap-6 p-6 lg:grid-cols-[320px_1fr]">
         {/* Bill picker */}
         <aside className="rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-card)]">
           <h3 className="mb-3 text-[12px] font-bold uppercase tracking-wide text-[var(--color-text-tertiary)]">

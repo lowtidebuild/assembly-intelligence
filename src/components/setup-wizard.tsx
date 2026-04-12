@@ -831,19 +831,20 @@ function Step4Legislators({
         </p>
       </div>
 
-      <div className="grid grid-cols-[1fr_280px] gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
         <div className="flex flex-col items-center rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-card)]">
-          <Hemicycle
-            members={hemicycleMembers}
-            width={600}
-            onSelect={(m) => toggle(m.id)}
-          />
+          <div className="w-full max-w-[600px]">
+            <Hemicycle
+              members={hemicycleMembers}
+              onSelect={(m) => toggle(m.id)}
+            />
+          </div>
           <p className="mt-3 text-[11px] text-[var(--color-text-tertiary)]">
             의석을 클릭해서 선택/해제 · 흰 링이 선택된 의원
           </p>
         </div>
 
-        <aside className="sticky top-6 self-start rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-card)]">
+        <aside className="self-start rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-card)] lg:sticky lg:top-6">
           <div className="mb-3 flex items-center justify-between border-b border-[var(--color-border)] pb-2">
             <h3 className="text-[12px] font-bold text-[var(--color-text)]">
               선택된 의원

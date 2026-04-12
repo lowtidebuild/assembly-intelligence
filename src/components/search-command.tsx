@@ -187,7 +187,7 @@ export function SearchCommand() {
   const showDropdown = open && query.trim().length >= 2;
 
   return (
-    <div ref={rootRef} className="relative w-[260px]">
+    <div ref={rootRef} className="relative w-full md:w-[260px]">
       <Search className="pointer-events-none absolute left-[10px] top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-[var(--color-text-secondary)]" />
       <input
         type="search"

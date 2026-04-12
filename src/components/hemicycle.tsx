@@ -66,7 +66,7 @@ export interface HemicycleProps {
   members: HemicycleMember[];
   /** Total seats (default 300 for 22대) */
   totalSeats?: number;
-  /** Render size (width in px). Height is derived (≈ width/2 + padding). */
+  /** Render size (width in px). Omit for responsive width="100%". */
   width?: number;
   /** Which member is selected (memberId). Emits onSelect on click. */
   selectedMemberId?: string | null;
@@ -377,7 +377,7 @@ function sortMembersBySector(members: HemicycleMember[]): {
 export function Hemicycle({
   members,
   totalSeats = 300,
-  width = 400,
+  width,
   selectedMemberId,
   onSelect,
   detailHrefBase,
@@ -421,8 +421,9 @@ export function Hemicycle({
       };
     }, [members, totalSeats]);
 
+  const isResponsive = width === undefined;
   const heightRatio = VIEWBOX_H / VIEWBOX_W;
-  const height = Math.round(width * heightRatio);
+  const height = typeof width === "number" ? Math.round(width * heightRatio) : undefined;
 
   // Render helper: walk through positions in each sector, pair with
   // members (with trailing vacancies).
@@ -487,14 +488,14 @@ export function Hemicycle({
   };
 
   return (
-    <div className="inline-block">
+    <div className={cn("inline-block", isResponsive && "w-full")}>
       <svg
         viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
-        width={width}
+        width={isResponsive ? undefined : width}
         height={height}
         role="img"
         aria-label="대한민국 국회 본회의장 의석 배치도"
-        className="select-none"
+        className={cn("select-none", isResponsive && "h-auto w-full")}
       >
         {/* Podium marker (의장석) at the arc's origin — where all seats face */}
         <rect

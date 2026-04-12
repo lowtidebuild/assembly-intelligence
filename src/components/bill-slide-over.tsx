@@ -43,7 +43,7 @@ export function BillSlideOver({
         className="fixed inset-0 z-20 animate-[fadeIn_200ms_ease-out_both] bg-black/20 backdrop-blur-[1px]"
       />
       {/* Panel */}
-      <aside className="fixed right-0 top-0 z-30 h-screen w-[500px] animate-[slideInRight_250ms_cubic-bezier(0.16,1,0.3,1)_both] overflow-y-auto border-l border-[var(--color-border)] bg-[var(--color-surface)] shadow-[-4px_0_20px_rgba(0,0,0,0.08)]">
+      <aside className="fixed right-0 top-0 z-30 h-screen w-full animate-[slideInRight_250ms_cubic-bezier(0.16,1,0.3,1)_both] overflow-y-auto border-l border-[var(--color-border)] bg-[var(--color-surface)] shadow-[-4px_0_20px_rgba(0,0,0,0.08)] md:w-[500px]">
         <header className="sticky top-0 z-10 flex items-start justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-4">
           <div className="flex-1 pr-4">
             <div className="mb-2 flex flex-wrap items-center gap-2">

@@ -25,6 +25,7 @@ import {
   Settings,
   MessageSquare,
   LogOut,
+  X,
 } from "lucide-react";
 
 export interface SidebarCounts {
@@ -41,6 +42,8 @@ export interface SidebarProps {
   };
   /** Brand line (industry name appears as sub-label) */
   industryName?: string;
+  mobileOpen?: boolean;
+  onClose?: () => void;
 }
 
 interface NavItem {
@@ -107,7 +110,13 @@ const sectionLabel: Record<NavItem["section"], string> = {
   system: "System",
 };
 
-export function Sidebar({ counts, lastSync, industryName }: SidebarProps) {
+export function Sidebar({
+  counts,
+  lastSync,
+  industryName,
+  mobileOpen = false,
+  onClose,
+}: SidebarProps) {
   const pathname = usePathname();
   const items = buildItems(counts);
 
@@ -135,13 +144,40 @@ export function Sidebar({ counts, lastSync, industryName }: SidebarProps) {
           : "동기화 대기";
 
   return (
-    <aside className="sticky top-0 flex h-screen flex-col overflow-y-auto border-r border-[var(--color-border)] bg-[var(--color-surface)]">
+    <>
+      <button
+        type="button"
+        aria-label="메뉴 닫기"
+        onClick={onClose}
+        className={cn(
+          "fixed inset-0 z-30 bg-black/20 backdrop-blur-[1px] md:hidden",
+          mobileOpen ? "block" : "hidden",
+        )}
+      />
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 flex h-screen w-[240px] flex-col overflow-y-auto border-r border-[var(--color-border)] bg-[var(--color-surface)] transition-transform duration-200 md:sticky md:top-0 md:z-auto md:w-auto md:translate-x-0",
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
       <div className="border-b border-[var(--color-border)] px-5 pb-4 pt-5">
-        <div className="mb-[3px] text-[18px] font-extrabold leading-tight tracking-[-0.01em] text-[var(--color-primary)]">
-          ParlaWatch+
-        </div>
-        <div className="text-[11px] font-medium text-[var(--color-text-secondary)]">
-          {industryName ? `${industryName} 인텔리전스` : "산업별 국회 인텔리전스"}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="mb-[3px] text-[18px] font-extrabold leading-tight tracking-[-0.01em] text-[var(--color-primary)]">
+              ParlaWatch+
+            </div>
+            <div className="text-[11px] font-medium text-[var(--color-text-secondary)]">
+              {industryName ? `${industryName} 인텔리전스` : "산업별 국회 인텔리전스"}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="사이드바 닫기"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] md:hidden"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
@@ -163,6 +199,7 @@ export function Sidebar({ counts, lastSync, industryName }: SidebarProps) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    onClick={() => onClose?.()}
                     className={cn(
                       "relative flex items-center gap-[10px] px-5 py-[9px] text-[14px] font-medium transition-colors",
                       isActive
@@ -218,7 +255,8 @@ export function Sidebar({ counts, lastSync, industryName }: SidebarProps) {
           </button>
         </form>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 

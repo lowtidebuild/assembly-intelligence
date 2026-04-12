@@ -190,8 +190,8 @@ export default async function RadarPage(props: {
                   params={sp}
                 />
                 <th className="px-3 py-2">단계</th>
-                <th className="px-3 py-2">소관위</th>
-                <th className="px-3 py-2">대표발의</th>
+                <th className="hidden px-3 py-2 md:table-cell">소관위</th>
+                <th className="hidden px-3 py-2 md:table-cell">대표발의</th>
                 <SortHeader
                   label="중요도"
                   sortKey="score"
@@ -444,10 +444,10 @@ function BillRow({
       <td className="whitespace-nowrap px-3 py-2">
         <StageBadge stage={b.stage} />
       </td>
-      <td className="max-w-[180px] truncate px-3 py-2 text-[11px] text-[var(--color-text-secondary)]">
+      <td className="hidden max-w-[180px] truncate px-3 py-2 text-[11px] text-[var(--color-text-secondary)] md:table-cell">
         {b.committee ?? "—"}
       </td>
-      <td className="whitespace-nowrap px-3 py-2 text-[11px] text-[var(--color-text-secondary)]">
+      <td className="hidden whitespace-nowrap px-3 py-2 text-[11px] text-[var(--color-text-secondary)] md:table-cell">
         <span className="inline-flex items-center gap-1">
           {b.proposerName}
           <LegislatorImportanceStar

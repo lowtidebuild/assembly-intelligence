@@ -21,8 +21,8 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-4">
-      <div className="flex items-baseline gap-3">
+    <div className="sticky top-0 z-10 flex flex-col gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-wrap items-baseline gap-3">
         <h1 className="text-[18px] font-bold tracking-[-0.01em] text-[var(--color-text)]">
           {title}
         </h1>
@@ -32,7 +32,7 @@ export function PageHeader({
           </span>
         )}
       </div>
-      <div className="flex items-center gap-[10px]">
+      <div className="flex w-full items-center gap-[10px] md:w-auto">
         <SearchCommand />
         {actions}
       </div>

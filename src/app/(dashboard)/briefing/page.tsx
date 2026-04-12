@@ -116,7 +116,7 @@ export default async function BriefingPage(props: {
         ]}
       />
 
-      <div className="grid grid-cols-[1fr_360px] items-start gap-6 p-6">
+      <div className="grid grid-cols-1 items-start gap-6 p-6 lg:grid-cols-[1fr_360px]">
         {/* LEFT COLUMN */}
         <div className="min-w-0">
           <Section title="오늘의 핵심" sublabel="Gemini 평가" count={topBills.length}>
