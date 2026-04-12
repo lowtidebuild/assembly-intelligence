@@ -6,19 +6,21 @@
 
 ## 라이브 데모
 
-> **[https://lowtidebuild.github.io/assembly-intelligence/](https://lowtidebuild.github.io/assembly-intelligence/)**
->
-> 10개 페이지를 탭으로 넘겨볼 수 있는 인터랙티브 정적 스냅샷입니다.
-> 서버 실행 불필요, 브라우저에서 바로 열립니다.
+| | URL | 설명 |
+|---|---|---|
+| **데모** | [assembly-intelligence.vercel.app/demo/](https://assembly-intelligence.vercel.app/demo/) | 정적 스냅샷, 인증 불필요, 10개 탭 |
+| **실앱** | [assembly-intelligence.vercel.app](https://assembly-intelligence.vercel.app/) | 실제 DB + Gemini, 비밀번호 필요 |
 
-상단 탭으로 브리핑봇 → 입법 레이더 → 슬라이드오버 → 영향 분석기 →
+데모는 상단 탭으로 브리핑봇 → 입법 레이더 → 슬라이드오버 → 영향 분석기 →
 의원 워치 → 국회 현황 → 설정 → 설정 위저드 → 로그인까지 전부 넘겨볼
-수 있습니다 (실제 Gemini/Naver 출력 그대로).
+수 있습니다 (실제 Gemini/Naver 출력 그대로). 편집·필터 제출 등
+서버 인터랙션은 동작하지 않습니다.
 
-> **참고:** 정적 스냅샷이라 편집·필터 제출·슬라이드오버 닫기 등
-> 인터랙션은 동작하지 않습니다. 시각적 확인용입니다.
+실앱 접속 비밀번호는 관리자에게 문의하세요.
 
-오프라인 공유가 필요하면 [`examples/app.html`](./examples/app.html) 파일 하나만 보내면 됩니다.
+> GitHub Pages 미러: [lowtidebuild.github.io/assembly-intelligence/](https://lowtidebuild.github.io/assembly-intelligence/)
+>
+> 오프라인 공유: [`examples/app.html`](./examples/app.html) 파일 하나만 보내면 됩니다.
 
 ## 스크린샷
 

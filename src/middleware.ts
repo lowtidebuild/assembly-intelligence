@@ -105,6 +105,6 @@ function redirectToLogin(
  */
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon\\.ico|robots\\.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp)).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|robots\\.txt|demo/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)).*)",
   ],
 };
