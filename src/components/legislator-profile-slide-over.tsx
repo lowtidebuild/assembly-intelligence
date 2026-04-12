@@ -177,7 +177,7 @@ export async function LegislatorProfileSlideOver({
             ]}
           />
 
-          <Section title="주요 약력" sublabel="MEM_TITLE">
+          <Section title="주요 약력">
             {member.memTitle ? (
               <pre className="whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-[var(--color-text)]">
                 {member.memTitle}

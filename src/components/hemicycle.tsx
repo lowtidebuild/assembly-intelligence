@@ -488,7 +488,7 @@ export function Hemicycle({
   };
 
   return (
-    <div className={cn("inline-block", isResponsive && "w-full")}>
+    <div className={cn("relative inline-block", isResponsive && "w-full")}>
       <svg
         viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
         width={isResponsive ? undefined : width}
@@ -525,9 +525,9 @@ export function Hemicycle({
         {renderSector("right")}
       </svg>
 
-      {/* Tooltip — shows on hover */}
+      {/* Tooltip — shows on hover, absolute to prevent layout shift */}
       {hovered && (
-        <div className="pointer-events-none mt-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[12px] shadow-[var(--shadow-card)]">
+        <div className="pointer-events-none absolute left-0 right-0 bottom-0 translate-y-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[12px] shadow-[var(--shadow-card)]">
           <div className="flex items-center gap-2">
             <span
               className="h-2 w-2 rounded-full"

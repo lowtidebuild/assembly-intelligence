@@ -197,7 +197,7 @@ export default async function LegislatorDetailPage(props: {
           </InfoCard>
         </div>
 
-        <InfoCard title="주요 약력 (MEM_TITLE)">
+        <InfoCard title="주요 약력">
           {member.memTitle ? (
             <pre className="whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-[var(--color-text)]">
               {member.memTitle}

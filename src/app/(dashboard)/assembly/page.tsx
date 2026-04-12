@@ -104,7 +104,7 @@ export default async function AssemblyPage(props: {
               본회의장 의석 배치
             </h2>
             <p className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
-              정당별 3-sector 배치 · 산업 관련 위원/발의 의원은 outline ring으로 강조
+              정당별 3-sector 배치 · 산업 중요 의원이 밝게 표시됩니다
             </p>
           </div>
           <div className="w-full max-w-[720px]">

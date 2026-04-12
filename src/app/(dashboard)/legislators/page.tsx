@@ -162,7 +162,7 @@ export default async function LegislatorsPage(props: {
                             href={href}
                             className="block text-[14px] font-semibold text-[var(--color-text)] hover:text-[var(--color-primary)]"
                           >
-                            <span className="inline-flex items-center gap-2">
+                            <span className="inline-flex items-center gap-2 whitespace-nowrap">
                               <span>{row.name}</span>
                               <LegislatorImportanceStar
                                 level={importance?.level ?? null}
