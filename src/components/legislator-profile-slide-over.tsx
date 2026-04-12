@@ -16,6 +16,7 @@ import {
   addLegislatorToWatchAction,
   removeLegislatorFromWatchAction,
 } from "@/lib/watch-actions";
+import { isDemoMode } from "@/lib/demo-mode";
 
 export async function LegislatorProfileSlideOver({
   legislatorId,
@@ -132,7 +133,7 @@ export async function LegislatorProfileSlideOver({
           </Link>
         </header>
 
-        {profile && (
+        {profile && !isDemoMode() && (
           <WatchToggleRow
             legislatorId={legislatorId}
             isWatched={isWatched}

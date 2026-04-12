@@ -30,6 +30,7 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
+import { demoGuardResponse } from "@/lib/demo-mode";
 import { z } from "zod";
 import { db } from "@/db";
 import {
@@ -62,6 +63,9 @@ function errorResponse(status: number, code: string, message: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = demoGuardResponse();
+  if (blocked) return blocked;
+
   let body: unknown;
   try {
     body = await req.json();

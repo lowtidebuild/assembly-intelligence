@@ -17,6 +17,7 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
+import { demoGuardResponse } from "@/lib/demo-mode";
 import { db } from "@/db";
 import { bill } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -36,6 +37,9 @@ export async function POST(
   _req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const blocked = demoGuardResponse();
+  if (blocked) return blocked;
+
   const { id } = await ctx.params;
   const loaded = await requireBillAndProfile(id);
   if (isErrorResponse(loaded)) return loaded;

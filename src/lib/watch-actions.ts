@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { industryLegislatorWatch, industryProfile } from "@/db/schema";
+import { isDemoMode } from "@/lib/demo-mode";
 
 const PAGES_TO_REVALIDATE = [
   "/briefing",
@@ -39,6 +40,7 @@ function parseLegislatorId(raw: FormDataEntryValue | null): number | null {
  * Idempotent: duplicate adds are a no-op.
  */
 export async function addLegislatorToWatchAction(formData: FormData) {
+  if (isDemoMode()) return;
   const profileId = await loadActiveProfileId();
   if (!profileId) return;
 
@@ -74,6 +76,7 @@ export async function addLegislatorToWatchAction(formData: FormData) {
  * Idempotent: removing a non-existing row is a no-op.
  */
 export async function removeLegislatorFromWatchAction(formData: FormData) {
+  if (isDemoMode()) return;
   const profileId = await loadActiveProfileId();
   if (!profileId) return;
 

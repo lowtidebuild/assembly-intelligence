@@ -33,6 +33,7 @@ import {
   type ImportanceRecord,
 } from "@/lib/legislator-importance";
 import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
+import { isDemoMode } from "@/lib/demo-mode";
 import { Plus, Sparkles, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -125,6 +126,8 @@ export default async function WatchPage(props: {
   async function addRecommendedWatch(formData: FormData) {
     "use server";
 
+    const { isDemoMode } = await import("@/lib/demo-mode");
+    if (isDemoMode()) return;
     if (!profile) return;
 
     const rawLegislatorId = formData.get("legislatorId");
@@ -169,7 +172,7 @@ export default async function WatchPage(props: {
       <div className="grid grid-cols-[1fr_480px] items-start gap-6 p-6">
         {/* Watched list */}
         <section>
-          {profile && (
+          {profile && !isDemoMode() && (
             <RecommendationSection
               members={recommendations}
               importanceById={importanceById}

@@ -26,6 +26,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_COOKIE_NAME, RETURN_TO_PARAM, getAuthMode, verifyToken } from "@/lib/auth";
+import { isDemoMode } from "@/lib/demo-mode";
 
 const PUBLIC_PATH_PREFIXES = [
   "/login",
@@ -45,7 +46,7 @@ let devBypassWarned = false;
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
-  if (isPublicPath(pathname)) {
+  if (isPublicPath(pathname) || isDemoMode()) {
     return NextResponse.next();
   }
 

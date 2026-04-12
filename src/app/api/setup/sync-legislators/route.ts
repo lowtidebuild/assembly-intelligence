@@ -12,12 +12,16 @@
  */
 
 import { NextResponse } from "next/server";
+import { demoGuardResponse } from "@/lib/demo-mode";
 import { syncLegislators } from "@/services/sync";
 import { errorMessage } from "@/lib/api-base";
 
 export const maxDuration = 120;
 
 export async function POST() {
+  const blocked = demoGuardResponse();
+  if (blocked) return blocked;
+
   try {
     const count = await syncLegislators();
     return NextResponse.json({ ok: true, count }, { status: 200 });

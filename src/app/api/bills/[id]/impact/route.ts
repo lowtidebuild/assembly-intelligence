@@ -12,6 +12,7 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
+import { demoGuardResponse } from "@/lib/demo-mode";
 import { z } from "zod";
 import { db } from "@/db";
 import { bill } from "@/db/schema";
@@ -30,6 +31,9 @@ export async function PATCH(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const blocked = demoGuardResponse();
+  if (blocked) return blocked;
+
   const { id } = await ctx.params;
   const billId = parseBillId(id);
   if (!billId) {
