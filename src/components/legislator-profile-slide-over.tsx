@@ -17,6 +17,7 @@ import {
   removeLegislatorFromWatchAction,
 } from "@/lib/watch-actions";
 import { isDemoMode } from "@/lib/demo-mode";
+import { DemoWatchToggleRow } from "@/components/demo-watch-controls";
 
 export async function LegislatorProfileSlideOver({
   legislatorId,
@@ -139,14 +140,32 @@ export async function LegislatorProfileSlideOver({
           </Link>
         </header>
 
-        {profile && !isDemoMode() && (
-          <WatchToggleRow
-            legislatorId={legislatorId}
-            isWatched={isWatched}
-            profileName={profile.name}
-            defaultReason={buildDefaultReason(importance, member.name)}
-          />
-        )}
+        {profile &&
+          (isDemoMode() ? (
+            <DemoWatchToggleRow
+              legislatorId={legislatorId}
+              profileName={profile.name}
+              defaultReason={buildDefaultReason(importance, member.name)}
+              initialEntries={
+                isWatched
+                  ? [
+                      {
+                        legislatorId,
+                        reason: buildDefaultReason(importance, member.name),
+                        addedAt: new Date().toISOString(),
+                      },
+                    ]
+                  : []
+              }
+            />
+          ) : (
+            <WatchToggleRow
+              legislatorId={legislatorId}
+              isWatched={isWatched}
+              profileName={profile.name}
+              defaultReason={buildDefaultReason(importance, member.name)}
+            />
+          ))}
 
         <div className="space-y-5 px-5 py-5">
           <FactsGrid

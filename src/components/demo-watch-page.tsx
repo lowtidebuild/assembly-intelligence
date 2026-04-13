@@ -1,228 +1,137 @@
-/**
- * /watch — 의원 워치.
- *
- * Shows the legislators in the current industry's watch list +
- * offers adding more via the hemicycle picker.
- *
- * Watch list comes from industry_legislator_watch joined against
- * legislator. For each watched member we show:
- *   - avatar (initials)
- *   - name + party + district + committees
- *   - count of bills they've proposed that matched our industry filter
- *
- * The hemicycle on the right lets the user click into the legislator
- * profile slide-over and add/remove watch entries from there.
- */
+"use client";
 
-import { db } from "@/db";
-import {
-  industryCommittee,
-  legislator,
-  industryLegislatorWatch,
-  industryProfile,
-} from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
-import Link from "next/link";
-import { PageHeader } from "@/components/page-header";
-import { DemoWatchPage } from "@/components/demo-watch-page";
+import { useMemo } from "react";
+import { Plus, Sparkles, Users } from "lucide-react";
+import { SearchCommand } from "@/components/search-command";
 import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
-import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
-import {
-  computeImportance,
-  type ImportanceRecord,
-} from "@/lib/legislator-importance";
+import { type ImportanceRecord } from "@/lib/legislator-importance";
 import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
-import { isDemoMode } from "@/lib/demo-mode";
-import { Plus, Sparkles, Users } from "lucide-react";
+import { type DemoWatchEntry, useDemoWatchlist } from "@/lib/demo-watchlist";
 
-export const dynamic = "force-dynamic";
+interface DemoWatchMember {
+  id: number;
+  memberId: string;
+  name: string;
+  nameHanja: string | null;
+  party: string;
+  district: string | null;
+  electionType: string | null;
+  committees: string[] | null;
+  termNumber: number | null;
+  committeeRole: string | null;
+}
 
-export default async function WatchPage(props: {
-  searchParams: Promise<{ legislator?: string }>;
+interface DemoImportanceEntry {
+  legislatorId: number;
+  importance: ImportanceRecord;
+}
+
+export function DemoWatchPage({
+  members,
+  importanceEntries,
+  initialEntries,
+  selectedLegislatorId,
+}: {
+  members: DemoWatchMember[];
+  importanceEntries: DemoImportanceEntry[];
+  initialEntries: DemoWatchEntry[];
+  selectedLegislatorId: number | null;
 }) {
-  const sp = await props.searchParams;
-  const selectedLegislatorId = sp.legislator
-    ? Number.parseInt(sp.legislator, 10)
-    : null;
-  const [profile] = await db.select().from(industryProfile).limit(1);
-  const committees = profile
-    ? await db
-        .select({ committeeCode: industryCommittee.committeeCode })
-        .from(industryCommittee)
-        .where(eq(industryCommittee.industryProfileId, profile.id))
-    : [];
-  const importanceById = profile
-    ? await computeImportance({
-        profileId: profile.id,
-        committeeCodes: committees.map((c) => c.committeeCode),
-      })
-    : new Map<number, ImportanceRecord>();
+  const { entries, watchedIds, addEntry } = useDemoWatchlist(initialEntries);
 
-  const [allMembers, watchRows] = await Promise.all([
-    db
-      .select({
-        id: legislator.id,
-        memberId: legislator.memberId,
-        name: legislator.name,
-        nameHanja: legislator.nameHanja,
-        party: legislator.party,
-        district: legislator.district,
-        electionType: legislator.electionType,
-        committees: legislator.committees,
-        termNumber: legislator.termNumber,
-        committeeRole: legislator.committeeRole,
-      })
-      .from(legislator)
-      .where(eq(legislator.isActive, true))
-      .orderBy(asc(legislator.seatIndex)),
-    profile
-      ? db
-          .select({
-            legislatorId: industryLegislatorWatch.legislatorId,
-            reason: industryLegislatorWatch.reason,
-            addedAt: industryLegislatorWatch.addedAt,
-            legislator: legislator,
-          })
-          .from(industryLegislatorWatch)
-          .innerJoin(
-            legislator,
-            eq(legislator.id, industryLegislatorWatch.legislatorId),
-          )
-          .where(eq(industryLegislatorWatch.industryProfileId, profile.id))
-      : Promise.resolve([]),
-  ]);
+  const importanceById = useMemo(
+    () => new Map(importanceEntries.map((entry) => [entry.legislatorId, entry.importance])),
+    [importanceEntries],
+  );
 
-  const watchedIds = new Set(watchRows.map((w) => w.legislatorId));
-  const recommendations = allMembers
-    .filter((member) => {
-      const importance = importanceById.get(member.id);
-      return (
-        !watchedIds.has(member.id) &&
-        (importance?.level === "S" || importance?.level === "A")
-      );
-    })
-    .sort((a, b) => compareImportance(importanceById.get(a.id), importanceById.get(b.id)))
-    .slice(0, 12);
+  const watchedMembers = useMemo(
+    () =>
+      entries
+        .map((entry) => {
+          const member = members.find((candidate) => candidate.id === entry.legislatorId);
+          if (!member) return null;
+          return {
+            member,
+            reason: entry.reason,
+          };
+        })
+        .filter(
+          (
+            entry,
+          ): entry is {
+            member: DemoWatchMember;
+            reason: string;
+          } => Boolean(entry),
+        ),
+    [entries, members],
+  );
 
-  const hemicycleMembers: HemicycleMember[] = allMembers.map((m) => ({
-    id: m.id,
-    memberId: m.memberId,
-    name: m.name,
-    nameHanja: m.nameHanja,
-    party: m.party,
-    district: m.district,
-    electionType: m.electionType,
-    termNumber: m.termNumber,
-    committeeRole: m.committeeRole,
-    committees: m.committees ?? [],
-    importance: importanceById.get(m.id)?.level ?? null,
-    importanceReasons: importanceById.get(m.id)?.reasons ?? [],
-    highlighted: watchedIds.has(m.id),
-  }));
+  const recommendations = useMemo(
+    () =>
+      members
+        .filter((member) => {
+          const importance = importanceById.get(member.id);
+          return (
+            !watchedIds.has(member.id) &&
+            (importance?.level === "S" || importance?.level === "A")
+          );
+        })
+        .sort((a, b) =>
+          compareImportance(importanceById.get(a.id), importanceById.get(b.id)),
+        )
+        .slice(0, 12),
+    [importanceById, members, watchedIds],
+  );
+
+  const hemicycleMembers: HemicycleMember[] = useMemo(
+    () =>
+      members.map((member) => ({
+        ...member,
+        committees: member.committees ?? [],
+        importance: importanceById.get(member.id)?.level ?? null,
+        importanceReasons: importanceById.get(member.id)?.reasons ?? [],
+        highlighted: watchedIds.has(member.id),
+      })),
+    [importanceById, members, watchedIds],
+  );
+
   const selectedMemberId =
-    allMembers.find((member) => member.id === selectedLegislatorId)?.memberId ?? null;
-
-  if (isDemoMode()) {
-    return (
-      <>
-        <DemoWatchPage
-          members={allMembers}
-          importanceEntries={Array.from(importanceById.entries()).map(
-            ([legislatorId, importance]) => ({
-              legislatorId,
-              importance,
-            }),
-          )}
-          initialEntries={watchRows.map((row) => ({
-            legislatorId: row.legislatorId,
-            reason: row.reason ?? "데모 초기 워치",
-            addedAt:
-              row.addedAt instanceof Date
-                ? row.addedAt.toISOString()
-                : new Date(row.addedAt).toISOString(),
-          }))}
-          selectedLegislatorId={selectedLegislatorId}
-        />
-
-        {selectedLegislatorId && (
-          <LegislatorProfileSlideOver
-            legislatorId={selectedLegislatorId}
-            closeHref="/watch"
-            importance={importanceById.get(selectedLegislatorId) ?? null}
-          />
-        )}
-      </>
-    );
-  }
-
-  async function addRecommendedWatch(formData: FormData) {
-    "use server";
-
-    const { isDemoMode } = await import("@/lib/demo-mode");
-    if (isDemoMode()) return;
-    if (!profile) return;
-
-    const rawLegislatorId = formData.get("legislatorId");
-    const rawReason = formData.get("reason");
-    const legislatorId =
-      typeof rawLegislatorId === "string" ? Number.parseInt(rawLegislatorId, 10) : NaN;
-    const reason = typeof rawReason === "string" && rawReason.trim()
-      ? rawReason.trim()
-      : "산업 중요도 자동 추천";
-
-    if (!Number.isFinite(legislatorId)) return;
-
-    await db
-      .insert(industryLegislatorWatch)
-      .values({
-        industryProfileId: profile.id,
-        legislatorId,
-        reason,
-        isAutoAdded: false,
-      })
-      .onConflictDoNothing({
-        target: [
-          industryLegislatorWatch.industryProfileId,
-          industryLegislatorWatch.legislatorId,
-        ],
-      });
-
-    revalidatePath("/watch");
-    revalidatePath("/assembly");
-    revalidatePath("/briefing");
-    revalidatePath("/radar");
-    revalidatePath("/impact");
-  }
+    members.find((member) => member.id === selectedLegislatorId)?.memberId ?? null;
 
   return (
     <>
-      <PageHeader
-        title="의원 워치"
-        subtitle={`${watchRows.length}명 모니터링 중`}
-      />
+      <div className="sticky top-0 z-10 flex flex-col gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h1 className="text-[18px] font-bold tracking-[-0.01em] text-[var(--color-text)]">
+            의원 워치
+          </h1>
+          <span className="border-l border-[var(--color-border)] pl-3 text-[13px] text-[var(--color-text-secondary)]">
+            {watchedMembers.length}명 모니터링 중 · 브라우저 데모 저장
+          </span>
+        </div>
+        <div className="flex w-full items-center gap-[10px] md:w-auto">
+          <SearchCommand />
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 items-start gap-6 p-6 lg:grid-cols-[1fr_480px]">
-        {/* Watched list */}
         <section>
-          {profile && !isDemoMode() && (
-            <RecommendationSection
-              members={recommendations}
-              importanceById={importanceById}
-              action={addRecommendedWatch}
-            />
-          )}
+          <DemoRecommendationSection
+            members={recommendations}
+            importanceById={importanceById}
+            onAdd={(legislatorId, reason) => addEntry(legislatorId, reason)}
+          />
 
           <div className="mb-3 flex items-center gap-2 border-b-2 border-[var(--color-border)] pb-2 text-[15px] font-bold text-[var(--color-text)]">
             <Users className="h-4 w-4" />
             워치리스트
             <span className="ml-auto text-[12px] font-normal text-[var(--color-text-secondary)]">
-              {watchRows.length}명
+              {watchedMembers.length}명
             </span>
           </div>
 
-          {watchRows.length === 0 ? (
+          {watchedMembers.length === 0 ? (
             <div className="rounded-[var(--radius)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-12 text-center text-[13px] text-[var(--color-text-tertiary)]">
               워치리스트가 비어 있습니다.
               <br />
@@ -230,19 +139,18 @@ export default async function WatchPage(props: {
             </div>
           ) : (
             <div className="flex flex-col gap-[10px]">
-              {watchRows.map((w) => (
-                <WatchCard
-                  key={w.legislatorId}
-                  member={w.legislator}
-                  importance={importanceById.get(w.legislatorId) ?? null}
-                  reason={w.reason}
+              {watchedMembers.map(({ member, reason }) => (
+                <DemoWatchCard
+                  key={member.id}
+                  member={member}
+                  importance={importanceById.get(member.id) ?? null}
+                  reason={reason}
                 />
               ))}
             </div>
           )}
         </section>
 
-        {/* Hemicycle picker */}
         <aside className="flex flex-col items-center rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-card)] lg:sticky lg:top-[80px]">
           <div className="mb-2 text-center">
             <h3 className="text-[13px] font-bold text-[var(--color-text)]">
@@ -265,42 +173,23 @@ export default async function WatchPage(props: {
           </p>
         </aside>
       </div>
-
-      {selectedLegislatorId && (
-        <LegislatorProfileSlideOver
-          legislatorId={selectedLegislatorId}
-          closeHref="/watch"
-          importance={importanceById.get(selectedLegislatorId) ?? null}
-        />
-      )}
     </>
   );
 }
 
-function WatchCard({
+function DemoWatchCard({
   member,
   importance,
   reason,
 }: {
-  member: {
-    id: number;
-    name: string;
-    nameHanja: string | null;
-    party: string;
-    district: string | null;
-    electionType: string | null;
-    committees: string[] | null;
-    termNumber: number | null;
-    committeeRole: string | null;
-  };
+  member: DemoWatchMember;
   importance: ImportanceRecord | null;
   reason: string | null;
 }) {
   const initials = member.name.slice(0, 1);
   return (
-    <Link
+    <a
       href={`/watch?legislator=${member.id}`}
-      scroll={false}
       className="flex gap-3 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]"
     >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-light)] text-[15px] font-bold text-[var(--color-primary)]">
@@ -359,26 +248,18 @@ function WatchCard({
           발의 {importance?.sponsoredBillCount ?? 0}
         </span>
       </div>
-    </Link>
+    </a>
   );
 }
 
-function RecommendationSection({
+function DemoRecommendationSection({
   members,
   importanceById,
-  action,
+  onAdd,
 }: {
-  members: Array<{
-    id: number;
-    name: string;
-    party: string;
-    district: string | null;
-    electionType: string | null;
-    termNumber: number | null;
-    committeeRole: string | null;
-  }>;
+  members: DemoWatchMember[];
   importanceById: Map<number, ImportanceRecord>;
-  action: (formData: FormData) => Promise<void>;
+  onAdd: (legislatorId: number, reason: string) => void;
 }) {
   return (
     <div className="mb-6 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-card)]">
@@ -395,17 +276,10 @@ function RecommendationSection({
           {members.map((member) => {
             const importance = importanceById.get(member.id);
             return (
-              <form
+              <div
                 key={member.id}
-                action={action}
                 className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2"
               >
-                <input type="hidden" name="legislatorId" value={member.id} />
-                <input
-                  type="hidden"
-                  name="reason"
-                  value={importance?.reasons.join(" · ") || "산업 중요도 자동 추천"}
-                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--color-text)]">
                     <span>{member.name}</span>
@@ -434,13 +308,19 @@ function RecommendationSection({
                   )}
                 </div>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={() =>
+                    onAdd(
+                      member.id,
+                      importance?.reasons.join(" · ") || "산업 중요도 자동 추천",
+                    )
+                  }
                   className="inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--color-primary)] px-2.5 py-1.5 text-[11px] font-semibold text-white transition-opacity hover:opacity-90"
                 >
                   <Plus className="h-3 w-3" />
                   워치리스트에 추가
                 </button>
-              </form>
+              </div>
             );
           })}
         </div>

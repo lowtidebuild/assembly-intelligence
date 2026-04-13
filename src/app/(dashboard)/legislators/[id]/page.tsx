@@ -21,6 +21,7 @@ import {
   removeLegislatorFromWatchAction,
 } from "@/lib/watch-actions";
 import { isDemoMode } from "@/lib/demo-mode";
+import { DemoWatchCardControls } from "@/components/demo-watch-controls";
 import { ExternalLink, Minus, Plus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -261,9 +262,25 @@ export default async function LegislatorDetailPage(props: {
           )}
         </InfoCard>
 
-        {profile && !isDemoMode() && (
+        {profile && (
           <InfoCard title="워치리스트">
-            {isWatched ? (
+            {isDemoMode() ? (
+              <DemoWatchCardControls
+                legislatorId={member.id}
+                defaultReason={buildDefaultReason(importance, member.name)}
+                initialEntries={
+                  isWatched
+                    ? [
+                        {
+                          legislatorId: member.id,
+                          reason: buildDefaultReason(importance, member.name),
+                          addedAt: new Date().toISOString(),
+                        },
+                      ]
+                    : []
+                }
+              />
+            ) : isWatched ? (
               <form action={removeLegislatorFromWatchAction}>
                 <input type="hidden" name="legislatorId" value={member.id} />
                 <button
