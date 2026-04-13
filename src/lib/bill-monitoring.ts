@@ -1,8 +1,9 @@
-import { desc, ilike, or, sql } from "drizzle-orm";
+import { desc, eq, ilike, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { bill, industryBillWatch, industryProfile } from "@/db/schema";
 import { callMcpToolOrThrow, hasMcpKey } from "@/lib/mcp-client";
+import { fetchBillBodyFragment } from "@/lib/bill-scraper";
 import { getGeminiBillScorer } from "@/lib/gemini-client";
 import { getStubBillScorer } from "@/lib/gemini-stub";
 import { stageFromSimsa, type BillScorer } from "@/services/sync";
@@ -311,6 +312,28 @@ export async function trackBillForActiveProfile(
     throw new Error(`assembly_bill(${input.billId}) detail 이 비어 있습니다.`);
   }
 
+  const [existingBill] = await db
+    .select({
+      proposalReason: bill.proposalReason,
+      mainContent: bill.mainContent,
+    })
+    .from(bill)
+    .where(eq(bill.billId, input.billId))
+    .limit(1);
+
+  let proposalReason =
+    detail.제안이유 ?? existingBill?.proposalReason ?? null;
+  let mainContent =
+    detail.주요내용 ?? existingBill?.mainContent ?? null;
+
+  if (!proposalReason && !mainContent) {
+    const body = await fetchBillBodyFragment(input.billId);
+    if (body) {
+      proposalReason = body.proposalReason;
+      mainContent = body.mainContent;
+    }
+  }
+
   const scorer = getBillScorer();
   const billName = detail.의안명 || input.billName;
   const committee = detail.심사경과?.소관위원회 ?? input.committee;
@@ -323,8 +346,8 @@ export async function trackBillForActiveProfile(
       committee,
       proposerName,
       proposerParty: proposerPartyFromDetail(detail),
-      proposalReason: detail.제안이유,
-      mainContent: detail.주요내용,
+      proposalReason,
+      mainContent,
       industryName: profile.name,
       industryContext: profile.llmContext,
       industryKeywords: profile.keywords ?? [],
@@ -333,8 +356,8 @@ export async function trackBillForActiveProfile(
       billName,
       committee,
       proposerName,
-      proposalReason: detail.제안이유,
-      mainContent: detail.주요내용,
+      proposalReason,
+      mainContent,
     }),
   ]);
 
@@ -353,8 +376,8 @@ export async function trackBillForActiveProfile(
       proposalDate,
       relevanceScore: scoreResult.score,
       relevanceReasoning: scoreResult.reasoning,
-      proposalReason: detail.제안이유,
-      mainContent: detail.주요내용,
+      proposalReason,
+      mainContent,
       summaryText: summary,
       externalLink: detail.LINK_URL,
       lastSynced: new Date(),

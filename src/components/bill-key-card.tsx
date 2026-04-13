@@ -24,6 +24,17 @@ function formatIsoDate(value: Date | string | null | undefined): string | null {
   return date.toISOString().slice(0, 10).replaceAll("-", ".");
 }
 
+function excerptProposalReason(
+  value: string | null | undefined,
+  maxLength = 200,
+): string | null {
+  if (!value) return null;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength)}...`;
+}
+
 export function BillKeyCard({
   number,
   bill,
@@ -41,12 +52,14 @@ export function BillKeyCard({
     | "stage"
     | "relevanceScore"
     | "proposalDate"
+    | "proposalReason"
     | "summaryText"
   >;
   proposerImportance?: ImportanceRecord | null;
   proposerHref?: string | null;
 }) {
   const proposalDate = formatIsoDate(bill.proposalDate);
+  const proposalExcerpt = excerptProposalReason(bill.proposalReason);
 
   return (
     <div className="grid grid-cols-[24px_1fr_auto] gap-3 rounded-[var(--radius)] border border-l-4 border-[var(--color-border)] border-l-[var(--color-domain)] bg-[var(--color-surface)] p-[13px_15px] shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]">
@@ -57,11 +70,15 @@ export function BillKeyCard({
         <div className="mb-1 text-[14px] font-semibold leading-snug text-[var(--color-text)]">
           {bill.billName}
         </div>
-        {bill.summaryText && (
+        {proposalExcerpt ? (
+          <p className="mb-1.5 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+            {proposalExcerpt}
+          </p>
+        ) : bill.summaryText ? (
           <p className="mb-1.5 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
             {bill.summaryText}
           </p>
-        )}
+        ) : null}
         <div className="flex flex-wrap items-center gap-x-[10px] gap-y-[3px] text-[11px] text-[var(--color-text-secondary)]">
           <StageBadge stage={bill.stage} />
           {bill.committee && <span>{bill.committee}</span>}

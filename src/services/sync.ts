@@ -37,9 +37,9 @@
  *
  * See docs/mcp-api-reality.md for raw sample responses and field maps.
  *
- * ⚠️ 제안이유 / 주요내용 are NOT exposed by any MCP endpoint. They
- * are always null in the DB for now. Lane B Gemini prompts must
- * score on title + committee + proposer alone.
+ * MCP detail alone does not expose reliable 제안이유 / 주요내용, so
+ * we optionally enrich bill bodies from the billInfo.do fragment when
+ * the DB does not already have them.
  */
 
 import { and, eq, inArray, or, sql } from "drizzle-orm";
@@ -61,6 +61,7 @@ import {
 } from "@/db/schema";
 import { callMcpToolOrThrow } from "@/lib/mcp-client";
 import { errorMessage } from "@/lib/api-base";
+import { fetchBillBodyFragment } from "@/lib/bill-scraper";
 import { decodeHtmlEntities } from "@/lib/html-entities";
 import { syncNews } from "@/services/news-sync";
 
@@ -763,6 +764,20 @@ export async function runMorningSync(
     summary: string;
   };
   const scoredBills: ScoredBill[] = [];
+  const existingBodies =
+    detailTargets.length > 0
+      ? await db
+          .select({
+            billId: bill.billId,
+            proposalReason: bill.proposalReason,
+            mainContent: bill.mainContent,
+          })
+          .from(bill)
+          .where(inArray(bill.billId, detailTargets.map((item) => item.의안ID)))
+      : [];
+  const existingBodyByBillId = new Map(
+    existingBodies.map((row) => [row.billId, row]),
+  );
 
   for (const f of detailFetches) {
     if (f.status !== "fulfilled") {
@@ -771,30 +786,50 @@ export async function runMorningSync(
     }
     const { listItem, detail } = f.value;
     try {
+      const existingBody = existingBodyByBillId.get(listItem.의안ID);
+      let proposalReason =
+        detail.제안이유 ?? existingBody?.proposalReason ?? null;
+      let mainContent =
+        detail.주요내용 ?? existingBody?.mainContent ?? null;
+
+      if (!proposalReason && !mainContent) {
+        const body = await fetchBillBodyFragment(listItem.의안ID);
+        if (body) {
+          proposalReason = body.proposalReason;
+          mainContent = body.mainContent;
+        }
+      }
+
+      const enrichedDetail: McpBillDetailItem = {
+        ...detail,
+        제안이유: proposalReason,
+        주요내용: mainContent,
+      };
+
       const [scoreResult, summary] = await Promise.all([
         deps.scorer.scoreBill({
-          billName: detail.의안명 ?? listItem.의안명,
+          billName: enrichedDetail.의안명 ?? listItem.의안명,
           committee: listItem.소관위원회,
           proposerName: listItem.대표발의자 ?? "",
-          proposerParty: proposerPartyFromDetail(detail),
-          proposalReason: detail.제안이유,
-          mainContent: detail.주요내용,
+          proposerParty: proposerPartyFromDetail(enrichedDetail),
+          proposalReason,
+          mainContent,
           industryName: activeProfile.name,
           industryContext: activeProfile.llmContext,
           industryKeywords: keywords,
         }),
         deps.scorer.summarizeBill({
-          billName: detail.의안명 ?? listItem.의안명,
+          billName: enrichedDetail.의안명 ?? listItem.의안명,
           committee: listItem.소관위원회,
           proposerName: listItem.대표발의자 ?? "",
-          proposalReason: detail.제안이유,
-          mainContent: detail.주요내용,
+          proposalReason,
+          mainContent,
         }),
       ]);
 
       scoredBills.push({
         listItem,
-        detail,
+        detail: enrichedDetail,
         score: scoreResult.score,
         reasoning: scoreResult.reasoning,
         summary,

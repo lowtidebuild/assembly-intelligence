@@ -136,6 +136,31 @@ export function BillSlideOver({
             )}
           </Block>
 
+          {(bill.proposalReason || bill.mainContent) && (
+            <Block label="제안이유 및 주요내용" sublabel="의안정보시스템 원문">
+              {bill.proposalReason && (
+                <>
+                  <h4 className="mb-1 text-[11px] font-bold text-[var(--color-text-tertiary)]">
+                    제안이유
+                  </h4>
+                  <p className="mb-3 whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--color-text)]">
+                    {bill.proposalReason}
+                  </p>
+                </>
+              )}
+              {bill.mainContent && (
+                <>
+                  <h4 className="mb-1 text-[11px] font-bold text-[var(--color-text-tertiary)]">
+                    주요내용
+                  </h4>
+                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--color-text)]">
+                    {bill.mainContent}
+                  </p>
+                </>
+              )}
+            </Block>
+          )}
+
           {/* Company impact — editable field per design.md section 13 */}
           <Block label="당사 영향 사항" sublabel="GR/PA 판단">
             <CompanyImpactEditor
@@ -166,7 +191,7 @@ export function BillSlideOver({
 
 function Facts({ bill }: { bill: Bill }) {
   const rows: Array<[string, React.ReactNode]> = [
-    ["의안번호", bill.billId],
+    ["의안번호", bill.billNumber ?? bill.billId],
     ["소관위원회", bill.committee ?? "—"],
     ["현재 단계", <StageBadge key="s" stage={bill.stage} />],
     [
