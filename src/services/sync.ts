@@ -251,6 +251,28 @@ interface McpLegislationNoticeResponse {
   items?: McpLegislationNoticeItem[];
 }
 
+interface McpCommitteeMember {
+  이름: string;
+  정당: string | null;
+  선거구: string | null;
+  직위: string | null;
+  의원코드: string | null;
+}
+
+interface McpCommitteeResponse {
+  type?: string;
+  total?: number;
+  items?: Array<{
+    위원회명: string;
+    위원회구분: string | null;
+    위원장: string | null;
+    간사: string | null;
+    현원: number | null;
+    정원: number | null;
+    위원목록?: McpCommitteeMember[];
+  }>;
+}
+
 /** Normalized schedule item passed to the briefing generator. */
 export interface ScheduleItem {
   date: string;
@@ -439,6 +461,17 @@ function noticeIsRelevant(billName: string, keywords: string[]): boolean {
   return keywords.some((kw) => haystack.includes(kw.toLowerCase()));
 }
 
+const ROLE_PRIORITY: Record<string, number> = {
+  위원장: 3,
+  간사: 2,
+  위원: 1,
+};
+
+function rolePriority(role: string | null | undefined): number {
+  if (!role) return 0;
+  return ROLE_PRIORITY[role] ?? 0;
+}
+
 /* ─────────────────────────────────────────────────────────────
  * Morning sync: full pipeline
  * ────────────────────────────────────────────────────────────── */
@@ -518,6 +551,13 @@ export async function runMorningSync(
     }
   } catch (err) {
     errors.push(`legislators: ${errorMessage(err)}`);
+  }
+
+  // 3b. Refresh real-time committee leadership for watched committees.
+  try {
+    await syncCommitteeMembers(committeeCodes);
+  } catch (err) {
+    errors.push(`committee_members: ${errorMessage(err)}`);
   }
 
   // 4. Phase 1 — discover bills per watched committee (in parallel,
@@ -1038,6 +1078,71 @@ export async function syncLegislationNotices(
     });
 
   return rows.filter((row) => row.isRelevant).length;
+}
+
+/**
+ * Refresh committee leadership metadata from assembly_org. When a
+ * legislator belongs to multiple watched committees, the highest role
+ * wins: 위원장 > 간사 > 위원.
+ */
+export async function syncCommitteeMembers(
+  committeeNames: string[],
+): Promise<void> {
+  if (committeeNames.length === 0) return;
+
+  const currentLegislators = await db
+    .select({
+      memberId: legislator.memberId,
+      name: legislator.name,
+      committeeRole: legislator.committeeRole,
+    })
+    .from(legislator)
+    .where(eq(legislator.isActive, true));
+
+  const existingByMemberId = new Map(
+    currentLegislators.map((row) => [row.memberId, row]),
+  );
+  const bestRoleByMemberId = new Map<string, string>();
+
+  for (const committeeName of committeeNames) {
+    const resp = await callMcpToolOrThrow<McpCommitteeResponse>("assembly_org", {
+      type: "committee",
+      committee_name: committeeName,
+      include_members: true,
+    });
+
+    const members = resp.items?.[0]?.위원목록 ?? [];
+    for (const member of members) {
+      const memberCode = member.의원코드?.trim();
+      const newRole = member.직위?.trim();
+      if (!memberCode || !newRole) continue;
+
+      const bufferedRole =
+        bestRoleByMemberId.get(memberCode) ??
+        existingByMemberId.get(memberCode)?.committeeRole ??
+        null;
+
+      if (rolePriority(newRole) > rolePriority(bufferedRole)) {
+        bestRoleByMemberId.set(memberCode, newRole);
+      }
+    }
+  }
+
+  for (const [memberCode, nextRole] of bestRoleByMemberId) {
+    const existing = existingByMemberId.get(memberCode);
+    if (!existing || existing.committeeRole === nextRole) continue;
+
+    await db
+      .update(legislator)
+      .set({ committeeRole: nextRole })
+      .where(eq(legislator.memberId, memberCode));
+
+    if (rolePriority(nextRole) >= ROLE_PRIORITY.간사) {
+      console.log(
+        `[syncCommitteeMembers] ${existing.name} (${memberCode}): ${existing.committeeRole ?? "—"} -> ${nextRole}`,
+      );
+    }
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────

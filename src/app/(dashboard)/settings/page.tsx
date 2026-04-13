@@ -14,9 +14,10 @@ import { db } from "@/db";
 import {
   industryProfile,
   industryCommittee,
+  legislator,
   syncLog,
 } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import Link from "next/link";
 import { Settings as SettingsIcon, Database, Sparkles, Globe, Edit3 } from "lucide-react";
@@ -35,6 +36,21 @@ export default async function SettingsPage() {
         .select()
         .from(industryCommittee)
         .where(eq(industryCommittee.industryProfileId, profile.id))
+    : [];
+  const committeeLeaders = profile
+    ? await db
+        .select({
+          name: legislator.name,
+          committees: legislator.committees,
+          committeeRole: legislator.committeeRole,
+        })
+        .from(legislator)
+        .where(
+          and(
+            eq(legislator.isActive, true),
+            sql`${legislator.committeeRole} IN ('위원장', '간사')`,
+          ),
+        )
     : [];
 
   const envStatus = {
@@ -95,15 +111,39 @@ export default async function SettingsPage() {
                 </div>
               </Row>
               <Row label={`위원회 (${committees.length})`}>
-                <div className="flex flex-wrap gap-1">
-                  {committees.map((c) => (
-                    <span
-                      key={c.id}
-                      className="inline-block rounded-[var(--radius-sm)] bg-[var(--color-surface-2)] px-2 py-0.5 text-[11px] text-[var(--color-text-secondary)]"
-                    >
-                      {c.committeeCode}
-                    </span>
-                  ))}
+                <div className="flex flex-col gap-2">
+                  {committees.map((c) => {
+                    const leaders = leadersForCommittee(
+                      c.committeeCode,
+                      committeeLeaders,
+                    );
+                    return (
+                      <div
+                        key={c.id}
+                        className="rounded-[var(--radius-sm)] bg-[var(--color-surface-2)] px-3 py-2 text-[12px] text-[var(--color-text-secondary)]"
+                      >
+                        <div className="font-semibold text-[var(--color-text)]">
+                          {c.committeeCode}
+                        </div>
+                        <div className="mt-0.5">
+                          {leaders.chair.length > 0 || leaders.secretaries.length > 0 ? (
+                            <>
+                              {leaders.chair.length > 0 && (
+                                <span>위원장: {leaders.chair.join("·")}</span>
+                              )}
+                              {leaders.chair.length > 0 &&
+                                leaders.secretaries.length > 0 && <span>, </span>}
+                              {leaders.secretaries.length > 0 && (
+                                <span>간사: {leaders.secretaries.join("·")}</span>
+                              )}
+                            </>
+                          ) : (
+                            <span>위원장/간사 정보 없음</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </Row>
               <Row label="LLM 컨텍스트">
@@ -261,4 +301,24 @@ function StatusDot({
         ? "bg-[var(--color-warning)]"
         : "bg-[var(--color-error)]";
   return <span className={`h-2 w-2 rounded-full ${color}`} />;
+}
+
+function leadersForCommittee(
+  committeeCode: string,
+  leaders: Array<{
+    name: string;
+    committees: string[];
+    committeeRole: string | null;
+  }>,
+) {
+  const chair: string[] = [];
+  const secretaries: string[] = [];
+
+  for (const leader of leaders) {
+    if (!leader.committees.includes(committeeCode)) continue;
+    if (leader.committeeRole === "위원장") chair.push(leader.name);
+    if (leader.committeeRole === "간사") secretaries.push(leader.name);
+  }
+
+  return { chair, secretaries };
 }
