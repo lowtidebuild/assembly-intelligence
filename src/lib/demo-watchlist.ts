@@ -10,6 +10,10 @@ export interface DemoWatchEntry {
 
 const STORAGE_KEY = "parlawatch_demo_watchlist_v1";
 const CHANGE_EVENT = "parlawatch:demo-watchlist-change";
+const EMPTY_ENTRIES: DemoWatchEntry[] = [];
+
+let cachedStorageRaw: string | null | undefined;
+let cachedStorageEntries: DemoWatchEntry[] = EMPTY_ENTRIES;
 
 function normalizeEntries(value: unknown): DemoWatchEntry[] {
   if (!Array.isArray(value)) return [];
@@ -55,9 +59,34 @@ export function readDemoWatchEntries(): DemoWatchEntry[] {
   }
 }
 
+function readDemoWatchEntriesSnapshot(): DemoWatchEntry[] {
+  if (typeof window === "undefined") return EMPTY_ENTRIES;
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (raw === cachedStorageRaw) {
+      return cachedStorageEntries;
+    }
+
+    cachedStorageRaw = raw;
+    cachedStorageEntries = raw
+      ? normalizeEntries(JSON.parse(raw))
+      : EMPTY_ENTRIES;
+    return cachedStorageEntries;
+  } catch {
+    cachedStorageRaw = null;
+    cachedStorageEntries = EMPTY_ENTRIES;
+    return cachedStorageEntries;
+  }
+}
+
 function writeDemoWatchEntries(entries: DemoWatchEntry[]) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  const normalizedEntries = normalizeEntries(entries);
+  const raw = JSON.stringify(normalizedEntries);
+  cachedStorageRaw = raw;
+  cachedStorageEntries = normalizedEntries;
+  window.localStorage.setItem(STORAGE_KEY, raw);
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
@@ -83,7 +112,7 @@ export function useDemoWatchlist(initialEntries: DemoWatchEntry[] = []) {
   const entries = useSyncExternalStore(
     subscribe,
     () => {
-      const stored = readDemoWatchEntries();
+      const stored = readDemoWatchEntriesSnapshot();
       return stored.length > 0 ? stored : initialSnapshot;
     },
     () => initialSnapshot,
