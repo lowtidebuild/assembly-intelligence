@@ -34,6 +34,13 @@ import {
   loadBillReferenceSections,
   type BillReferenceItem,
 } from "@/lib/mcp-references";
+import {
+  computeLegislatorStanceSignals,
+  deriveBillPassageSignal,
+  type BillTranscriptEvidenceItem,
+  type LegislatorStanceSignal,
+  type PassageLikelihood,
+} from "@/lib/stance-analysis";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +97,9 @@ export default async function ImpactPage(props: {
   const references = selected
     ? await loadBillReferenceSections(selected.billName)
     : null;
+  const stanceBundle = selected
+    ? await computeLegislatorStanceSignals(selected.id)
+    : null;
   const proposerImportance = await loadProposerImportanceMap(
     [...recentBills, ...(selected ? [selected] : [])].map((entry) => ({
       name: entry.proposerName,
@@ -103,6 +113,15 @@ export default async function ImpactPage(props: {
       )
     : null;
   const voteSummary = summarizeVotes(voteRows);
+  const stanceSignals = stanceBundle?.signals.slice(0, 8) ?? [];
+  const transcriptEvidence = stanceBundle?.transcriptEvidence.slice(0, 5) ?? [];
+  const passageSignal =
+    selected && stanceBundle?.bill
+      ? deriveBillPassageSignal({
+          bill: stanceBundle.bill,
+          signals: stanceBundle.signals,
+        })
+      : null;
   const referenceGroups = references
     ? [
         { label: "연구자료", items: references.research, source: "MCP research_data" },
@@ -301,6 +320,78 @@ export default async function ImpactPage(props: {
               </Block>
             )}
 
+            {passageSignal && (
+              <Block
+                icon={<TrendingUp className="h-4 w-4" />}
+                title="통과 가능성"
+                sublabel="회의록 · 표결 · 위원회 리더십 기반 signal"
+              >
+                <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <PassageLikelihoodPill likelihood={passageSignal.likelihood} />
+                    <span className="text-[12px] text-[var(--color-text-secondary)]">
+                      confidence {passageSignal.confidence}%
+                    </span>
+                  </div>
+                  <p className="mt-3 text-[13px] leading-relaxed text-[var(--color-text)]">
+                    {passageSignal.rationale}
+                  </p>
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-[12px] sm:grid-cols-4">
+                    <SignalStat label="찬성 경향" value={passageSignal.majorStanceCounts.support} />
+                    <SignalStat label="우려 경향" value={passageSignal.majorStanceCounts.concern} />
+                    <SignalStat label="혼합" value={passageSignal.majorStanceCounts.mixed} />
+                    <SignalStat label="불명" value={passageSignal.majorStanceCounts.unclear} />
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <SignalList
+                      title="긍정 신호"
+                      tone="support"
+                      items={passageSignal.supportingSignals}
+                      emptyLabel="아직 강한 긍정 신호가 없습니다."
+                    />
+                    <SignalList
+                      title="리스크 신호"
+                      tone="risk"
+                      items={passageSignal.riskSignals}
+                      emptyLabel="뚜렷한 리스크 신호는 아직 없습니다."
+                    />
+                  </div>
+                </div>
+              </Block>
+            )}
+
+            {stanceSignals.length > 0 && (
+              <Block
+                icon={<Sparkles className="h-4 w-4" />}
+                title="주요 의원 스탠스"
+                sublabel="설명 가능한 규칙 기반 1차 signal"
+              >
+                <div className="space-y-3">
+                  {stanceSignals.map((signal) => (
+                    <LegislatorStanceRow
+                      key={signal.legislatorId}
+                      billId={selected.id}
+                      signal={signal}
+                    />
+                  ))}
+                </div>
+              </Block>
+            )}
+
+            {transcriptEvidence.length > 0 && (
+              <Block
+                icon={<FileText className="h-4 w-4" />}
+                title="근거 회의록 발언"
+                sublabel="해당 법안 안건이 오른 회의 기준"
+              >
+                <div className="space-y-3">
+                  {transcriptEvidence.map((item) => (
+                    <TranscriptEvidenceRow key={item.utteranceId} item={item} />
+                  ))}
+                </div>
+              </Block>
+            )}
+
             {/* Company impact */}
             <Block
               icon={<TrendingUp className="h-4 w-4" />}
@@ -457,6 +548,217 @@ function ReferenceRow({ item }: { item: BillReferenceItem }) {
       )}
     </li>
   );
+}
+
+function PassageLikelihoodPill({
+  likelihood,
+}: {
+  likelihood: PassageLikelihood;
+}) {
+  const config =
+    likelihood === "passed"
+      ? { label: "통과 완료", className: "bg-[#dcfce7] text-[#166534]" }
+      : likelihood === "high"
+        ? { label: "높음", className: "bg-[#dbeafe] text-[#1d4ed8]" }
+        : likelihood === "low"
+          ? { label: "낮음", className: "bg-[#fee2e2] text-[#b91c1c]" }
+          : { label: "중간", className: "bg-[#fef3c7] text-[#b45309]" };
+
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-[10px] px-[8px] py-[3px] text-[11px] font-bold",
+        config.className,
+      )}
+    >
+      {config.label}
+    </span>
+  );
+}
+
+function SignalStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-tertiary)]">
+        {label}
+      </div>
+      <div className="mt-1 text-[18px] font-bold text-[var(--color-text)]">{value}</div>
+    </div>
+  );
+}
+
+function SignalList({
+  title,
+  tone,
+  items,
+  emptyLabel,
+}: {
+  title: string;
+  tone: "support" | "risk";
+  items: string[];
+  emptyLabel: string;
+}) {
+  return (
+    <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">
+      <div
+        className={cn(
+          "mb-2 text-[11px] font-bold uppercase tracking-wide",
+          tone === "support" ? "text-[#166534]" : "text-[#b91c1c]",
+        )}
+      >
+        {title}
+      </div>
+      {items.length === 0 ? (
+        <p className="text-[12px] text-[var(--color-text-tertiary)]">{emptyLabel}</p>
+      ) : (
+        <ul className="space-y-2">
+          {items.map((item) => (
+            <li key={item} className="text-[12px] leading-relaxed text-[var(--color-text)]">
+              {item}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function LegislatorStanceRow({
+  billId,
+  signal,
+}: {
+  billId: number;
+  signal: LegislatorStanceSignal;
+}) {
+  const toneClass =
+    signal.stance === "support"
+      ? "bg-[#dcfce7] text-[#166534]"
+      : signal.stance === "concern"
+        ? "bg-[#fee2e2] text-[#b91c1c]"
+        : signal.stance === "mixed"
+          ? "bg-[#fef3c7] text-[#b45309]"
+          : "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)]";
+
+  const label =
+    signal.stance === "support"
+      ? "찬성 경향"
+      : signal.stance === "concern"
+        ? "우려 경향"
+        : signal.stance === "mixed"
+          ? "혼합"
+          : "불명";
+
+  return (
+    <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-3">
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/impact?bill=${billId}&legislator=${signal.legislatorId}`}
+              scroll={false}
+              className="text-[14px] font-semibold text-[var(--color-primary)] hover:underline"
+            >
+              {signal.name}
+            </Link>
+            <span className="text-[12px] text-[var(--color-text-secondary)]">
+              {signal.party}
+            </span>
+            {signal.committeeRole && (
+              <span className="text-[11px] text-[var(--color-text-tertiary)]">
+                · {signal.committeeRole}
+              </span>
+            )}
+          </div>
+          <div className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
+            confidence {signal.confidence}% · score {signal.score > 0 ? `+${signal.score}` : signal.score}
+          </div>
+        </div>
+        <span className={cn("inline-flex rounded-[999px] px-2 py-1 text-[10px] font-bold", toneClass)}>
+          {label}
+        </span>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+        {signal.isLeadSponsor && (
+          <span className="rounded-[999px] bg-[var(--color-surface)] px-2 py-0.5 font-semibold text-[var(--color-primary)]">
+            대표발의
+          </span>
+        )}
+        {signal.voteResult && (
+          <span className="rounded-[999px] bg-[var(--color-surface)] px-2 py-0.5 font-semibold text-[var(--color-text-secondary)]">
+            표결 {translateVoteResult(signal.voteResult)}
+          </span>
+        )}
+        {signal.transcriptHitCount > 0 && (
+          <span className="rounded-[999px] bg-[var(--color-surface)] px-2 py-0.5 font-semibold text-[var(--color-text-secondary)]">
+            회의록 hit {signal.transcriptHitCount}건
+          </span>
+        )}
+      </div>
+      {signal.reasons.length > 0 && (
+        <p className="mt-2 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+          {signal.reasons.join(" · ")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TranscriptEvidenceRow({ item }: { item: BillTranscriptEvidenceItem }) {
+  const toneLabel =
+    item.tone === "support"
+      ? "찬성/지원"
+      : item.tone === "concern"
+        ? "우려/재검토"
+        : item.tone === "mixed"
+          ? "혼합"
+          : "중립";
+
+  return (
+    <Link
+      href={`/transcripts/${item.minutesId}#utterance-${item.utteranceId}`}
+      className="block rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-3 transition-colors hover:bg-[var(--color-surface)]"
+    >
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]">
+        {item.committee && (
+          <span className="font-semibold text-[var(--color-primary)]">{item.committee}</span>
+        )}
+        {item.meetingDate && <span>{item.meetingDate}</span>}
+        {item.sessionLabel && <span>· {item.sessionLabel}</span>}
+        {item.place && <span>· {item.place}</span>}
+      </div>
+      <div className="mt-1 text-[13px] font-medium text-[var(--color-text)]">
+        {item.meetingName}
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-secondary)]">
+        <span>{item.speakerName}</span>
+        {item.speakerRole && <span>· {item.speakerRole}</span>}
+        <span>· {toneLabel}</span>
+      </div>
+      {item.matchedKeywords.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {item.matchedKeywords.map((keyword) => (
+            <span
+              key={`${item.utteranceId}-${keyword}`}
+              className="rounded-[999px] bg-[var(--color-primary-light)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]"
+            >
+              {keyword}
+            </span>
+          ))}
+        </div>
+      )}
+      <p className="mt-2 line-clamp-4 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+        {item.snippet ?? item.content}
+      </p>
+    </Link>
+  );
+}
+
+function translateVoteResult(result: LegislatorStanceSignal["voteResult"]) {
+  if (result === "yes") return "찬성";
+  if (result === "no") return "반대";
+  if (result === "abstain") return "기권";
+  if (result === "absent") return "불참";
+  return "기타";
 }
 
 function Block({

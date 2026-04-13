@@ -26,6 +26,8 @@ import { isDemoMode } from "@/lib/demo-mode";
 import { DemoWatchCardControls } from "@/components/demo-watch-controls";
 import { flattenErrorText } from "@/lib/db-compat";
 import { buildTranscriptSnippet } from "@/lib/transcript-parser";
+import { summarizeLegislatorIssueSignals } from "@/lib/stance-analysis";
+import { cn } from "@/lib/utils";
 import { loadTranscriptHitsForLegislator } from "@/services/transcript-sync";
 import { ExternalLink, Minus, Plus } from "lucide-react";
 
@@ -119,6 +121,10 @@ export default async function LegislatorDetailPage(props: {
   const officeSummary = [member.officeAddress, member.officePhone].filter(Boolean).join(" · ");
   const staffSummary = formatStaff(member.staffRaw, member.secretaryRaw);
   const birthSummary = [member.birthDate, member.birthCalendar].filter(Boolean).join(" ");
+  const issueSummary = summarizeLegislatorIssueSignals({
+    transcriptHits,
+    recentVotes,
+  });
 
   return (
     <>
@@ -372,6 +378,39 @@ export default async function LegislatorDetailPage(props: {
           )}
         </InfoCard>
 
+        <InfoCard title="최근 회의록·표결 기반 스탠스 신호">
+          <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <IssueStancePill stance={issueSummary.stance} />
+              <span className="text-[12px] text-[var(--color-text-secondary)]">
+                confidence {issueSummary.confidence}%
+              </span>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3 text-[12px] sm:grid-cols-4">
+              <IssueStat label="회의록 hit" value={issueSummary.transcriptHitCount} />
+              <IssueStat label="긍정 발언" value={issueSummary.supportiveMentions} />
+              <IssueStat label="우려 발언" value={issueSummary.concernMentions} />
+              <IssueStat label="혼합 발언" value={issueSummary.mixedMentions} />
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <SignalBucket
+                title="긍정 신호"
+                items={issueSummary.supportingSignals}
+                tone="support"
+                emptyLabel="아직 뚜렷한 긍정 신호가 없습니다."
+              />
+              <SignalBucket
+                title="리스크 신호"
+                items={issueSummary.riskSignals}
+                tone="risk"
+                emptyLabel="아직 뚜렷한 리스크 신호가 없습니다."
+              />
+            </div>
+          </div>
+        </InfoCard>
+
         {profile && (
           <InfoCard title="워치리스트">
             {isDemoMode() ? (
@@ -525,6 +564,74 @@ function buildDefaultReason(
     return importance.reasons.join(" · ");
   }
   return `${name} 수동 추가`;
+}
+
+function IssueStancePill({
+  stance,
+}: {
+  stance: "support" | "concern" | "mixed" | "unclear";
+}) {
+  const config =
+    stance === "support"
+      ? { label: "긍정 경향", className: "bg-[#dcfce7] text-[#166534]" }
+      : stance === "concern"
+        ? { label: "우려 경향", className: "bg-[#fee2e2] text-[#b91c1c]" }
+        : stance === "mixed"
+          ? { label: "혼합", className: "bg-[#fef3c7] text-[#b45309]" }
+          : { label: "불명", className: "bg-[var(--color-surface)] text-[var(--color-text-secondary)]" };
+
+  return (
+    <span className={`inline-flex rounded-[10px] px-[8px] py-[3px] text-[11px] font-bold ${config.className}`}>
+      {config.label}
+    </span>
+  );
+}
+
+function IssueStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-tertiary)]">
+        {label}
+      </div>
+      <div className="mt-1 text-[18px] font-bold text-[var(--color-text)]">{value}</div>
+    </div>
+  );
+}
+
+function SignalBucket({
+  title,
+  items,
+  tone,
+  emptyLabel,
+}: {
+  title: string;
+  items: string[];
+  tone: "support" | "risk";
+  emptyLabel: string;
+}) {
+  return (
+    <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">
+      <div
+        className={cn(
+          "mb-2 text-[11px] font-bold uppercase tracking-wide",
+          tone === "support" ? "text-[#166534]" : "text-[#b91c1c]",
+        )}
+      >
+        {title}
+      </div>
+      {items.length === 0 ? (
+        <p className="text-[12px] text-[var(--color-text-tertiary)]">{emptyLabel}</p>
+      ) : (
+        <ul className="space-y-2">
+          {items.map((item) => (
+            <li key={item} className="text-[12px] leading-relaxed text-[var(--color-text)]">
+              {item}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function isMissingTranscriptSchemaError(err: unknown) {
