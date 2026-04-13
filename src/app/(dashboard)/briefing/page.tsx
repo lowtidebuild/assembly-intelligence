@@ -39,6 +39,7 @@ import {
 } from "@/lib/legislator-importance";
 import { loadRecentNews } from "@/services/news-sync";
 import { cn } from "@/lib/utils";
+import { isDemoMode } from "@/lib/demo-mode";
 import { FileText, RefreshCw, Newspaper, ExternalLink } from "lucide-react";
 
 export const dynamic = "force-dynamic"; // always fresh DB reads
@@ -122,6 +123,18 @@ export default async function BriefingPage(props: {
     console.error("[briefing] degraded render fallback", err);
   }
 
+  const renderedBriefing =
+    briefing ??
+    (isDemoMode()
+      ? buildDemoFallbackBriefing({
+          date: today,
+          industryName: profile.name,
+          topBills,
+          recentBills,
+          relevantNotices,
+        })
+      : null);
+
   return (
     <>
       <PageHeader
@@ -141,8 +154,8 @@ export default async function BriefingPage(props: {
         industryName={profile.name}
         stats={[
           { label: "핵심", value: topBills.length },
-          { label: "일정", value: briefing?.scheduleCount ?? 0 },
-          { label: "신규", value: briefing?.newBillCount ?? 0 },
+          { label: "일정", value: renderedBriefing?.scheduleCount ?? 0 },
+          { label: "신규", value: renderedBriefing?.newBillCount ?? 0 },
           { label: "전체", value: recentBills.length },
         ]}
       />
@@ -205,8 +218,8 @@ export default async function BriefingPage(props: {
         {/* RIGHT COLUMN */}
         <aside className="flex flex-col gap-4">
           <SideSection title="Gemini 브리핑" icon={<FileText className="h-4 w-4" />}>
-            {briefing ? (
-              <GeminiBriefingHtml html={briefing.contentHtml} />
+            {renderedBriefing ? (
+              <GeminiBriefingHtml html={renderedBriefing.contentHtml} />
             ) : (
               <p className="text-[12px] text-[var(--color-text-tertiary)]">
                 아직 브리핑이 생성되지 않았습니다.
@@ -256,6 +269,11 @@ type BriefingSnapshot = {
   newBillIds: number[];
   generatedAt: Date;
 };
+
+type BriefingRenderData = Pick<
+  BriefingSnapshot,
+  "contentHtml" | "keyItemCount" | "scheduleCount" | "newBillCount"
+>;
 
 async function loadLatestBriefingCompat(): Promise<BriefingSnapshot | null> {
   try {
@@ -692,6 +710,145 @@ function formatMonthDay(value: Date | string | null | undefined): string | null 
   const date = normalizeDate(value);
   if (!date) return null;
   return date.toISOString().slice(5, 10);
+}
+
+function formatKoreanDisplayDate(value: Date | string | null | undefined): string | null {
+  const date = normalizeDate(value);
+  if (!date) return null;
+  return `${date.getUTCFullYear()}년 ${date.getUTCMonth() + 1}월 ${date.getUTCDate()}일`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function buildDemoFallbackBriefing({
+  date,
+  industryName,
+  topBills,
+  recentBills,
+  relevantNotices,
+}: {
+  date: string;
+  industryName: string;
+  topBills: Bill[];
+  recentBills: Bill[];
+  relevantNotices: LegislationNotice[];
+}): BriefingRenderData | null {
+  if (topBills.length === 0 && recentBills.length === 0 && relevantNotices.length === 0) {
+    return null;
+  }
+
+  const displayDate = formatKoreanDisplayDate(date) ?? date;
+  const headlineLines = [
+    topBills.length > 0
+      ? `${industryName} 산업 관련 핵심 법안 ${topBills.length}건이 현재 우선 모니터링 대상으로 올라와 있습니다.`
+      : null,
+    topBills[0]
+      ? `'${escapeHtml(topBills[0].billName)}'이(가) 오늘 브리핑의 최우선 체크 포인트입니다.`
+      : null,
+    recentBills.length > 0
+      ? `최근 발의 ${recentBills.length}건이 추가로 잡혀 있어 상임위 흐름과 발의자 동향을 함께 봐야 합니다.`
+      : relevantNotices.length > 0
+        ? `입법예고 ${relevantNotices.length}건이 열려 있어 외부 의견제출 일정까지 함께 챙겨야 합니다.`
+        : "오늘은 신규 변동보다 기존 계류 법안의 진행 상황을 추적하는 쪽이 더 중요합니다.",
+  ].filter((line): line is string => Boolean(line));
+
+  const keyBillsHtml =
+    topBills.length === 0
+      ? "<p>(오늘은 해당 없음)</p>"
+      : topBills
+          .slice(0, 3)
+          .map((item) => {
+            const proposer = `${escapeHtml(item.proposerName)}${
+              item.proposerParty ? ` (${escapeHtml(item.proposerParty)})` : ""
+            }`;
+            const summary =
+              item.summaryText?.trim() ||
+              "현재 저장된 요약이 없어 제목과 소관위 중심으로 우선 추적이 필요합니다.";
+            return `
+              <div class="bill-card">
+                <h3 class="bill-title">${escapeHtml(item.billName)}</h3>
+                <p class="bill-proposer"><strong>제안자:</strong> ${proposer}</p>
+                <p class="bill-analysis">${escapeHtml(summary)}</p>
+              </div>
+            `.trim();
+          })
+          .join("");
+
+  const scheduleItems = relevantNotices
+    .slice(0, 3)
+    .map((notice) => {
+      const label = notice.noticeEndDate
+        ? `[의견제출 ${escapeHtml(notice.noticeEndDate)}]`
+        : "[입법예고]";
+      return `<li><strong>${label}</strong> — ${escapeHtml(notice.billName)}${
+        notice.committee ? ` @ ${escapeHtml(notice.committee)}` : ""
+      }</li>`;
+    })
+    .join("");
+
+  const newBillsHtml =
+    recentBills.length === 0
+      ? "<p>(오늘은 해당 없음)</p>"
+      : `<ul>${recentBills
+          .slice(0, 5)
+          .map((item) => {
+            const proposer = `${escapeHtml(item.proposerName)}${
+              item.proposerParty ? ` (${escapeHtml(item.proposerParty)})` : ""
+            }`;
+            return `<li>${escapeHtml(item.billName)} — ${proposer}</li>`;
+          })
+          .join("")}</ul>`;
+
+  const summaryLine =
+    topBills[0]
+      ? `오늘은 핵심 법안 '${escapeHtml(topBills[0].billName)}'을 중심으로 발의자와 소관위 움직임을 함께 추적할 필요가 있습니다.`
+      : `${industryName} 산업 관련 신규 변동은 제한적이지만, 저장된 입법 데이터의 흐름을 계속 관찰하는 날입니다.`;
+
+  return {
+    contentHtml: `
+      <article class="briefing">
+        <header class="briefing-header">
+          <p class="briefing-date">${escapeHtml(displayDate)} | ${escapeHtml(industryName)} 인텔리전스</p>
+          <h1 class="briefing-title">오늘의 헤드라인</h1>
+        </header>
+
+        <section class="briefing-headlines">
+          <ul>
+            ${headlineLines.map((line) => `<li>${line}</li>`).join("")}
+          </ul>
+        </section>
+
+        <section class="briefing-key-bills">
+          <h2>핵심 법안</h2>
+          ${keyBillsHtml}
+        </section>
+
+        <section class="briefing-schedule">
+          <h2>오늘/이번주 일정</h2>
+          ${scheduleItems ? `<ul>${scheduleItems}</ul>` : "<p>(오늘은 해당 없음)</p>"}
+        </section>
+
+        <section class="briefing-new-bills">
+          <h2>신규 발의</h2>
+          ${newBillsHtml}
+        </section>
+
+        <footer class="briefing-footer">
+          <p class="briefing-summary">${summaryLine}</p>
+        </footer>
+      </article>
+    `.trim(),
+    keyItemCount: topBills.length,
+    scheduleCount: relevantNotices.length,
+    newBillCount: recentBills.length,
+  };
 }
 
 function daysLeftFromToday(dateOnly: string | null): number | null {
