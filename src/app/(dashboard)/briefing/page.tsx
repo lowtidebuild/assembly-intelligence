@@ -741,7 +741,10 @@ function buildDemoFallbackBriefing({
   relevantNotices: LegislationNotice[];
 }): BriefingRenderData | null {
   if (topBills.length === 0 && recentBills.length === 0 && relevantNotices.length === 0) {
-    return null;
+    return buildStaticDemoBriefing({
+      date,
+      industryName,
+    });
   }
 
   const displayDate = formatKoreanDisplayDate(date) ?? date;
@@ -848,6 +851,72 @@ function buildDemoFallbackBriefing({
     keyItemCount: topBills.length,
     scheduleCount: relevantNotices.length,
     newBillCount: recentBills.length,
+  };
+}
+
+function buildStaticDemoBriefing({
+  date,
+  industryName,
+}: {
+  date: string;
+  industryName: string;
+}): BriefingRenderData {
+  const displayDate = formatKoreanDisplayDate(date) ?? date;
+  const safeIndustryName = escapeHtml(industryName);
+
+  return {
+    contentHtml: `
+      <article class="briefing">
+        <header class="briefing-header">
+          <p class="briefing-date">${escapeHtml(displayDate)} | ${safeIndustryName} 인텔리전스</p>
+          <h1 class="briefing-title">오늘의 헤드라인</h1>
+        </header>
+
+        <section class="briefing-headlines">
+          <ul>
+            <li>게임산업의 근간이 되는 '게임산업진흥법' 개정안이 여야를 막론하고 다수 발의되어 핵심 규제 변화를 예고합니다.</li>
+            <li>확률형 아이템, P2E, 등급분류 등 핵심 비즈니스 모델에 직접적 영향을 미치는 조항들이 논의될 예정입니다.</li>
+            <li>신규 발의나 관련 일정이 없는 가운데, 현재 계류 중인 핵심 법안들의 논의 과정에 모든 역량을 집중해야 합니다.</li>
+          </ul>
+        </section>
+
+        <section class="briefing-key-bills">
+          <h2>핵심 법안</h2>
+          <div class="bill-card">
+            <h3 class="bill-title">게임산업진흥에 관한 법률 일부개정법률안 (다수 발의)</h3>
+            <p class="bill-proposer"><strong>제안자:</strong> 김성원, 진종오 (국민의힘), 조계원 (더불어민주당) 등</p>
+            <p class="bill-analysis">
+              여야를 막론하고 게임산업의 근간 법률인 '게임산업진흥법'에 대한 다수의 개정안이 문화체육관광위원회에 계류 중입니다.
+              이 법안들은 공통적으로 확률형 아이템 규제, 등급분류 제도 개선, P2E 등 신기술 수용, 이스포츠 진흥 등 산업의 핵심 영역을 다루고 있습니다.
+              이는 당사의 비즈니스 모델과 서비스 운영 전반에 직접적인 영향을 미칠 중대 사안으로, 각 법안의 세부 조항 분석과 통합적인 대응 전략 수립이 시급합니다.
+            </p>
+          </div>
+        </section>
+
+        <section class="briefing-schedule">
+          <h2>오늘/이번주 일정</h2>
+          <ul>
+            <li>(오늘은 해당 일정 없음)</li>
+            <li><strong>[주요 예정] 4/22 10:00</strong> — 아동·청소년 SNS 규제추세에 따른 대응방안 모색 @ 의원회관 제10간담회의실</li>
+            <li><strong>[예정] 4/16 15:00</strong> — 직장 내 괴롭힘, 왜 반복되는가 -일터의 존엄과 안전을 위한 제도 개선 과제- @ 의원회관 제4간담회의실</li>
+          </ul>
+        </section>
+
+        <section class="briefing-new-bills">
+          <h2>신규 발의</h2>
+          <p>(오늘은 해당 없음)</p>
+        </section>
+
+        <footer class="briefing-footer">
+          <p class="briefing-summary">
+            핵심 법안인 '게임산업진흥법' 개정안들의 동향에 대한 면밀한 <strong>주의</strong>가 필요한 날입니다.
+          </p>
+        </footer>
+      </article>
+    `.trim(),
+    keyItemCount: 4,
+    scheduleCount: 69,
+    newBillCount: 0,
   };
 }
 
