@@ -12,48 +12,45 @@
 - [x] GitHub Pages + Vercel 배포
 - [x] HTML 엔티티 디코더
 - [x] Hemicycle opacity 기반 중요도 시각화
+- [x] 의원 프로필 전용 페이지 (`/legislators`, `/legislators/[id]`)
+- [x] 통합 검색 (의원 + 법안 실시간 드롭다운)
+- [x] 모바일 반응형 (햄버거 사이드바 + 1컬럼 스택)
+- [x] 입법예고 모니터링 (`assembly_org` → 브리핑에 D-N 배지)
+- [x] 위원회 구성 실시간 갱신 (위원장/간사 직위 우선순위)
+- [x] 슬라이드오버 slide-in 애니메이션
+- [x] 국회 현황 full-width hemicycle + 가로 정당 통계 카드
+- [x] Gemini Pro 3.1 업그레이드
+- [x] Apache 2.0 라이선스
 
-## 진행 중 (Codex 위임)
+## 다음 — 법안 본문 가져오기 (블로커: 국회 서버 복구)
 
-### UX 종합 업그레이드 (`CODEX_BRIEF_ux_upgrade.md`)
-- [x] **의원 프로필 전용 페이지** (`/legislators`, `/legislators/[id]`)
-- [x] **통합 검색** (의원 + 법안 실시간 드롭다운)
-- [x] **모바일 반응형** (햄버거 사이드바 + 1컬럼 스택)
-
-## 다음 — 법안 요약 품질 개선 (블로커: 국회 API 서버 복구)
-
-### 법안 본문 가져오기 → Gemini 요약 구체화
-- [ ] 열린국회정보 API (`ASSEMBLY_OPEN_API_KEY`)로 법안 제안이유/주요내용 조회 가능한지 테스트 (서버 복구 후)
-- [ ] 가능하면: sync 시 본문 가져와서 `bill.proposal_reason`, `bill.main_content` 컬럼 채우기
+### 제안이유 및 주요내용 원문 수집
+- [ ] 열린국회정보 API로 법안 본문 조회 가능한지 테스트 (서버 복구 후)
+- [ ] 가능하면: sync 시 본문 → `bill.proposal_reason` + `bill.main_content` 저장
 - [ ] 불가능하면: 의안정보시스템(`LINK_URL`) HTML 스크레이핑으로 본문 추출
-- [ ] Gemini 요약 프롬프트 개선 — 본문 있으면 핵심 조항/변경사항 위주 요약
-- [ ] 본문 없어도: "뻔한 일반론 금지, 의안명에서 추론 가능한 구체적 쟁점 중심" 프롬프트 강화
+- [ ] 원문 확보 시: 브리핑 카드에 AI 요약 대신 원문 핵심 내용 표시
+- [ ] Gemini 요약에 원문 투입 → 구체적 조항/변경사항 위주 요약으로 품질 대폭 개선
+- [ ] 원문 없는 경우: 프롬프트 강화 ("뻔한 일반론 금지, 의안명 기반 구체적 쟁점 중심")
 
-## 다음 — MCP 미사용 도구 활용 (블로커: 국회 API 서버 복구)
+## 다음 — 추가 기능 (블로커: 국회 서버 복구)
 
-### Phase 1 — 위원회 안건 알림 (`assembly_org`)
-- [ ] `assembly_org({ type: "legislation_notice" })` → 입법예고 법안 수집
-- [ ] 입법예고 법안이 우리 키워드에 매칭되면 브리핑에 "입법예고" 섹션 추가
-- [ ] `assembly_org({ type: "committee", include_members: true })` → 위원회 소속 의원 실시간 갱신
-- [ ] 위원회 회의 안건에 우리 법안이 올라가면 알림
+### 의원 프로필 사진
+- [ ] 국회 웹사이트 사진 URL 패턴 검증 (`www.assembly.go.kr` 복구 후)
+- [ ] 패턴 확인되면: DB `photo_url` 컬럼 + sync 시 URL 생성
+- [ ] hemicycle tooltip, 슬라이드오버, 프로필 페이지, 워치 카드에 사진 표시
+- [ ] 사진 로드 실패 시 이니셜 fallback
 
-### Phase 2 — 의원 프로필 사진
-- [ ] MCP에서 사진 URL 미제공 — 국회 웹사이트에서 MONA_CD 기반으로 이미지 URL 구성
-- [ ] URL 패턴: `https://www.assembly.go.kr/photo/9770${MONA_CD}.jpg` (검증 필요)
-- [ ] DB에 `profile_image_url` 컬럼 복원 + sync 시 URL 생성
-- [ ] hemicycle hover tooltip, 슬라이드오버, 프로필 페이지에 사진 표시
+### 회의록 키워드 모니터링
+- [ ] 열린국회정보 API 회의록 endpoint 테스트 (`ASSEMBLY_OPEN_API_KEY`, 서버 복구 후)
+- [ ] 산업 키워드로 회의록 본문 검색
+- [ ] 매칭된 발언 snippet 저장 (전후 200자)
+- [ ] 브리핑에 "회의록 동향" 섹션 추가
+- [ ] 의원별 발언 빈도 → 중요도 S/A/B 보강
 
-### Phase 3 — 회의록 키워드 모니터링
-- [ ] MCP에 회의록 검색 도구가 현재 없음
-- [ ] 대안 A: 국회 회의록 공공데이터 API 직접 호출 (열린국회정보 API)
-- [ ] 대안 B: assembly-api-mcp에 기능 추가 요청 (issue)
-- [ ] 회의록에서 산업 키워드 언급 횟수 집계
-- [ ] 의원별 발언 빈도 → 중요도 보강
-- [ ] Gemini로 발언 찬반 분위기 분석
-
-### Phase 4 — 의원 발언 분석 + 통과 예측 강화
-- [ ] 회의록 기반 의원 스탠스 분석 (Phase 3 의존)
-- [ ] `assembly_org` 소위원회 구성 + 소위 통과 여부 → 본회의 통과 예측
+### 의원 발언 분석 + 통과 예측
+- [ ] 회의록 기반 의원 스탠스 분석 (회의록 기능 의존)
+- [ ] Gemini로 찬반 분위기 분석
+- [ ] `assembly_org` 소위원회 구성 → 통과 가능성 정밀화
 - [ ] 청원 모니터링 (`assembly_org({ type: "petition" })`)
 
 ## 미래
@@ -63,3 +60,5 @@
 - [ ] 다중 산업 프로필 동시 운영
 - [ ] 의원 네트워크 그래프 (공동발의 관계)
 - [ ] 법안 유사도 분석 (embedding 기반)
+- [ ] examples/app.html + docs/index.html 재생성 (최신 UI 반영)
+- [ ] 데모/본체 Vercel 자동 배포 파이프라인 정비
