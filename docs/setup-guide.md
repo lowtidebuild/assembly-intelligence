@@ -151,6 +151,8 @@ postgresql://neondb_owner:xxxxxxxx@ep-xxx-xxx.ap-southeast-1.aws.neon.tech/neond
 2. 또는 로컬에서 `pnpm db:migrate` 실행
 
 > 잘 모르겠으면 관리자에게 "DB 마이그레이션 실행해달라"고 요청하세요.
+>
+> 중요: 이미 운영 중인 앱을 다시 배포할 때도, 새 컬럼이 추가된 릴리스라면 **코드 배포 전에 DB 마이그레이션을 먼저 적용**해야 합니다. 자세한 순서는 [docs/demo-deploy-runbook.md](./demo-deploy-runbook.md)를 참고하세요.
 
 ---
 

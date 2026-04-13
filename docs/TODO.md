@@ -21,6 +21,8 @@
 - [x] 국회 현황 full-width hemicycle + 가로 정당 통계 카드
 - [x] Gemini Pro 3.1 업그레이드
 - [x] Apache 2.0 라이선스
+- [x] 품질 개선 리메디에이션 (브리핑 snapshot 정합성, evening sync 안정화, 검색 접근성/정렬, 회귀 테스트)
+- [x] 데모 배포 런북 추가 (`docs/demo-deploy-runbook.md`)
 
 ## 다음 — 법안 본문 가져오기 (블로커: 국회 서버 복구)
 
@@ -55,6 +57,9 @@
 
 ## 미래
 
+- [ ] CI에 `tsc` + `lint` + `test` + `build`를 배포 전 필수 체크로 고정
+- [ ] 데모/본체 배포 전 스키마 preflight 자동화 (`information_schema` 체크 스크립트)
+- [ ] `/briefing` / `/api/health` 배포 후 스모크 체크 자동화
 - [ ] Slack/Teams 알림 연동
 - [ ] 다크 모드 UI 완성 (토큰은 이미 정의됨)
 - [ ] 다중 산업 프로필 동시 운영
