@@ -81,6 +81,11 @@ export default async function AssemblyPage() {
 
   const totalActive = members.length;
   const sortedParties = [...partyStats].sort((a, b) => b.count - a.count);
+  const watchedCommitteeNames = committees.map((c) => c.committeeCode);
+  const leadershipCards = buildLeadershipCards(
+    members,
+    watchedCommitteeNames,
+  );
 
   return (
     <>
@@ -129,7 +134,107 @@ export default async function AssemblyPage() {
             );
           })}
         </div>
+
+        {leadershipCards.length > 0 && (
+          <div className="mt-6 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-card)]">
+            <div className="mb-3">
+              <h3 className="text-[13px] font-bold text-[var(--color-text)]">
+                관심 위원회 리더십
+              </h3>
+              <p className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
+                위원장/간사 중심 요약
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {leadershipCards.map((card) => (
+                <div
+                  key={card.committee}
+                  className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-3"
+                >
+                  <div className="mb-2 text-[12px] font-bold text-[var(--color-text)]">
+                    {card.committee}
+                  </div>
+                  <div className="space-y-1 text-[11px] text-[var(--color-text-secondary)]">
+                    {card.leaders.map((leader) => (
+                      <div key={`${card.committee}-${leader.name}-${leader.role}`}>
+                        <span className="font-semibold text-[var(--color-primary)]">
+                          {leader.role}
+                        </span>
+                        <span className="ml-1 text-[var(--color-text)]">
+                          {leader.name}
+                        </span>
+                        <span className="ml-1 text-[var(--color-text-tertiary)]">
+                          ({leader.party})
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
+}
+
+type AssemblyMemberRow = {
+  id: number;
+  memberId: string;
+  name: string;
+  nameHanja: string | null;
+  party: string;
+  district: string | null;
+  electionType: string | null;
+  termNumber: number | null;
+  committeeRole: string | null;
+  committees: string[];
+  photoUrl: string | null;
+};
+
+function buildLeadershipCards(
+  members: AssemblyMemberRow[],
+  watchedCommitteeNames: string[],
+) {
+  const targetCommittees =
+    watchedCommitteeNames.length > 0
+      ? watchedCommitteeNames
+      : Array.from(
+          new Set(
+            members
+              .flatMap((member) => member.committees)
+              .filter(Boolean),
+          ),
+        ).slice(0, 4);
+
+  return targetCommittees
+    .map((committee) => {
+      const leaders = members
+        .filter(
+          (member) =>
+            member.committees.includes(committee) &&
+            member.committeeRole &&
+            member.committeeRole !== "위원",
+        )
+        .sort((left, right) => rolePriority(right.committeeRole) - rolePriority(left.committeeRole))
+        .map((member) => ({
+          name: member.name,
+          party: member.party,
+          role: member.committeeRole ?? "위원",
+        }));
+
+      return {
+        committee,
+        leaders,
+      };
+    })
+    .filter((entry) => entry.leaders.length > 0);
+}
+
+function rolePriority(role: string | null | undefined) {
+  if (role === "위원장") return 3;
+  if (role === "간사") return 2;
+  if (role === "위원") return 1;
+  return 0;
 }

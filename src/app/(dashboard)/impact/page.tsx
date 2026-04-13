@@ -30,6 +30,10 @@ import {
   loadProposerImportanceMap,
   makeProposerKey,
 } from "@/lib/legislator-importance";
+import {
+  loadBillReferenceSections,
+  type BillReferenceItem,
+} from "@/lib/mcp-references";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +87,9 @@ export default async function ImpactPage(props: {
         .where(eq(vote.billId, selected.id))
         .orderBy(desc(vote.voteDate), legislator.name)
     : [];
+  const references = selected
+    ? await loadBillReferenceSections(selected.billName)
+    : null;
   const proposerImportance = await loadProposerImportanceMap(
     [...recentBills, ...(selected ? [selected] : [])].map((entry) => ({
       name: entry.proposerName,
@@ -96,6 +103,13 @@ export default async function ImpactPage(props: {
       )
     : null;
   const voteSummary = summarizeVotes(voteRows);
+  const referenceGroups = references
+    ? [
+        { label: "연구자료", items: references.research, source: "MCP research_data" },
+        { label: "NABO", items: references.nabo, source: "get_nabo" },
+        { label: "참여입법", items: references.lawmaking, source: "assembly_org(type=lawmaking)" },
+      ].filter((group) => group.items.length > 0)
+    : [];
 
   return (
     <>
@@ -312,6 +326,37 @@ export default async function ImpactPage(props: {
                 initialGeneratedAt={selected.deepAnalysisGeneratedAt}
               />
             </Block>
+
+            {referenceGroups.length > 0 && (
+              <Block
+                icon={<FileText className="h-4 w-4" />}
+                title="참고 자료"
+                sublabel={references ? `키워드: ${references.keyword}` : undefined}
+              >
+                <div className="space-y-3">
+                  {referenceGroups.map((group) => (
+                    <div
+                      key={group.label}
+                      className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-3"
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--color-text)]">
+                          {group.label}
+                        </span>
+                        <span className="text-[10px] text-[var(--color-text-tertiary)]">
+                          · {group.source}
+                        </span>
+                      </div>
+                      <ul className="space-y-2">
+                        {group.items.map((item, index) => (
+                          <ReferenceRow key={`${group.label}-${index}`} item={item} />
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </Block>
+            )}
           </div>
         )}
       </div>
@@ -378,6 +423,40 @@ function summarizeVotes(rows: VoteRow[]) {
       { label: "불참", names: buckets.absent },
     ],
   };
+}
+
+function ReferenceRow({ item }: { item: BillReferenceItem }) {
+  const content = (
+    <>
+      <div className="text-[12px] font-medium leading-snug text-[var(--color-text)]">
+        {item.title}
+      </div>
+      {item.subtitle && (
+        <div className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
+          {item.subtitle}
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <li>
+      {item.url ? (
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block rounded-[var(--radius-sm)] bg-[var(--color-surface)] px-3 py-2 transition-colors hover:bg-[var(--color-bg)]"
+        >
+          {content}
+        </a>
+      ) : (
+        <div className="rounded-[var(--radius-sm)] bg-[var(--color-surface)] px-3 py-2">
+          {content}
+        </div>
+      )}
+    </li>
+  );
 }
 
 function Block({
