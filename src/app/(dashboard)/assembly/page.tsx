@@ -19,7 +19,7 @@ import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
 import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import { computeImportance } from "@/lib/legislator-importance";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export default async function AssemblyPage(props: {
   searchParams: Promise<{ legislator?: string }>;

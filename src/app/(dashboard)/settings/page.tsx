@@ -32,7 +32,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export default async function SettingsPage() {
   const mcpRuntime = getMcpRuntimeConfig();

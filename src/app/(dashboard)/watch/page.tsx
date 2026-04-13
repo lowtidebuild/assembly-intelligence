@@ -37,7 +37,7 @@ import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
 import { isDemoMode } from "@/lib/demo-mode";
 import { Plus, Sparkles, Users } from "lucide-react";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export default async function WatchPage(props: {
   searchParams: Promise<{ legislator?: string }>;

@@ -1,0 +1,14 @@
+name: Keep Neon Alive
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping keep-alive endpoint
+        run: curl -fsS https://assembly-intelligence.vercel.app/api/cron/keep-alive

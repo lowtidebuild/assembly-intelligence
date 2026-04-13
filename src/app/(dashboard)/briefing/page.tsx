@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 import { isDemoMode } from "@/lib/demo-mode";
 import { FileText, RefreshCw, Newspaper, ExternalLink } from "lucide-react";
 
-export const dynamic = "force-dynamic"; // always fresh DB reads
+export const revalidate = 60;
 
 const rawSql = neon(process.env.DATABASE_URL!);
 
