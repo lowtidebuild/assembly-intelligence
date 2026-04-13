@@ -41,9 +41,11 @@ import {
   makeProposerKey,
 } from "@/lib/legislator-importance";
 import { loadRecentNews } from "@/services/news-sync";
+import { loadRecentTranscriptHits } from "@/services/transcript-sync";
 import { cn } from "@/lib/utils";
 import { isDemoMode } from "@/lib/demo-mode";
-import { FileText, RefreshCw, Newspaper, ExternalLink } from "lucide-react";
+import { flattenErrorText } from "@/lib/db-compat";
+import { FileText, RefreshCw, Newspaper, ExternalLink, MessagesSquare } from "lucide-react";
 
 export const revalidate = 60;
 
@@ -73,6 +75,7 @@ export default async function BriefingPage() {
   let relevantNotices: LegislationNotice[] = [];
   let relevantPetitions: PetitionItem[] = [];
   let relevantPress: PressRelease[] = [];
+  let transcriptHits: Awaited<ReturnType<typeof loadRecentTranscriptHitsCompat>> = [];
   let newsItems: Awaited<ReturnType<typeof loadRecentNewsCompat>> = [];
   let importanceById = new Map<number, ImportanceRecord>();
   let topBills: Bill[] = [];
@@ -86,12 +89,13 @@ export default async function BriefingPage() {
   >();
 
   try {
-    [briefing, relevantNotices, relevantPetitions, relevantPress, newsItems, importanceById] =
+    [briefing, relevantNotices, relevantPetitions, relevantPress, transcriptHits, newsItems, importanceById] =
       await Promise.all([
       loadLatestBriefingCompat(),
       loadRelevantNoticesCompat(),
       loadRelevantPetitionsCompat(),
       loadRelevantPressReleasesCompat(),
+      loadRecentTranscriptHitsCompat(),
       loadRecentNewsCompat(8),
       loadBriefingImportanceCompat({
         profileId: profile.id,
@@ -285,6 +289,23 @@ export default async function BriefingPage() {
               </ul>
             </SideSection>
           )}
+
+          {transcriptHits.length > 0 && (
+            <SideSection
+              title="회의록 동향"
+              icon={<MessagesSquare className="h-4 w-4" />}
+              sublabel="최근 키워드 언급"
+            >
+              <ul className="flex flex-col">
+                {transcriptHits.map((item) => (
+                  <TranscriptHitRow
+                    key={`${item.minutesId}-${item.speakerName}-${item.snippet ?? "none"}`}
+                    item={item}
+                  />
+                ))}
+              </ul>
+            </SideSection>
+          )}
         </aside>
       </div>
     </>
@@ -452,6 +473,17 @@ async function loadRelevantPressReleasesCompat(): Promise<PressRelease[]> {
   }
 }
 
+async function loadRecentTranscriptHitsCompat() {
+  try {
+    return await loadRecentTranscriptHits(6);
+  } catch (err) {
+    if (!isMissingTranscriptError(err)) {
+      throw err;
+    }
+    return [];
+  }
+}
+
 async function loadBriefingImportanceCompat(input: {
   profileId: number;
   committeeCodes: string[];
@@ -513,6 +545,18 @@ function isMissingPressReleaseError(err: unknown): boolean {
     message.includes("press_release") &&
     (message.includes("relation") ||
       message.includes("column") ||
+      message.includes("does not exist"))
+  );
+}
+
+function isMissingTranscriptError(err: unknown): boolean {
+  const message = flattenErrorText(err);
+  return (
+    (message.includes("committee_transcript") ||
+      message.includes("committee_transcript_utterance")) &&
+    (message.includes("relation") ||
+      message.includes("column") ||
+      message.includes("42P01") ||
       message.includes("does not exist"))
   );
 }
@@ -683,6 +727,53 @@ function PressReleaseRow({
       ) : (
         <div>{body}</div>
       )}
+    </li>
+  );
+}
+
+function TranscriptHitRow({
+  item,
+}: {
+  item: Awaited<ReturnType<typeof loadRecentTranscriptHitsCompat>>[number];
+}) {
+  const meetingDate = formatIsoDate(item.meetingDate ? new Date(item.meetingDate) : null);
+  const keywords = item.matchedKeywords.join(", ");
+
+  return (
+    <li className="border-b border-[var(--color-border)] py-[10px] last:border-b-0 last:pb-0 first:pt-0">
+      <a
+        href={`/transcripts/${item.minutesId}`}
+        className="group block rounded-[var(--radius-sm)] transition-colors hover:bg-[var(--color-surface-2)]"
+      >
+        <div className="mb-1 flex items-start gap-2 text-[12px] font-medium leading-snug text-[var(--color-text)] group-hover:text-[var(--color-primary)]">
+          <span className="line-clamp-2 flex-1">{item.meetingName}</span>
+          <ExternalLink className="mt-[2px] h-3 w-3 shrink-0 text-[var(--color-text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100" />
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--color-text-tertiary)]">
+          {item.committee && (
+            <span className="font-semibold text-[var(--color-primary)]">
+              {item.committee}
+            </span>
+          )}
+          {item.committee && meetingDate && <span>·</span>}
+          {meetingDate && <span>{meetingDate}</span>}
+          {(item.committee || meetingDate) && <span>·</span>}
+          <span>
+            {item.speakerName}
+            {item.speakerRole ? ` ${item.speakerRole}` : ""}
+          </span>
+        </div>
+        {keywords && (
+          <div className="mt-2 text-[10px] font-semibold text-[var(--color-primary)]">
+            키워드: {keywords}
+          </div>
+        )}
+        {item.snippet && (
+          <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+            {item.snippet}
+          </p>
+        )}
+      </a>
     </li>
   );
 }

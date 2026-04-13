@@ -70,6 +70,7 @@ import { fetchBillBodyFragment } from "@/lib/bill-scraper";
 import { decodeHtmlEntities } from "@/lib/html-entities";
 import { resolveLegislatorPhotoUrl } from "@/lib/legislator-photo";
 import { syncNews } from "@/services/news-sync";
+import { syncCommitteeTranscripts } from "@/services/transcript-sync";
 
 /* ─────────────────────────────────────────────────────────────
  * Bill stage enum literal — matches `bill_stage` postgres enum.
@@ -1208,6 +1209,16 @@ export async function runMorningSync(
     await syncPressReleases(keywords);
   } catch (err) {
     errors.push(`press: ${errorMessage(err)}`);
+  }
+
+  try {
+    const transcriptResult = await syncCommitteeTranscripts(
+      keywords,
+      committeeCodes,
+    );
+    errors.push(...transcriptResult.errors.map((entry) => `transcripts: ${entry}`));
+  } catch (err) {
+    errors.push(`transcripts: ${errorMessage(err)}`);
   }
 
   // 11. Write sync log

@@ -24,6 +24,8 @@ import {
 } from "@/lib/watch-actions";
 import { isDemoMode } from "@/lib/demo-mode";
 import { DemoWatchCardControls } from "@/components/demo-watch-controls";
+import { flattenErrorText } from "@/lib/db-compat";
+import { loadTranscriptHitsForLegislator } from "@/services/transcript-sync";
 import { ExternalLink, Minus, Plus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -61,7 +63,7 @@ export default async function LegislatorDetailPage(props: {
       })
     : null;
 
-  const [watchRow, sponsoredBills, recentVotes] = await Promise.all([
+  const [watchRow, sponsoredBills, recentVotes, transcriptHits] = await Promise.all([
     profile
       ? db
           .select({ legislatorId: industryLegislatorWatch.legislatorId })
@@ -104,6 +106,12 @@ export default async function LegislatorDetailPage(props: {
       .where(eq(vote.legislatorId, member.id))
       .orderBy(desc(vote.voteDate))
       .limit(8),
+    loadTranscriptHitsForLegislator(member.name, 5).catch((err) => {
+      if (!isMissingTranscriptSchemaError(err)) {
+        throw err;
+      }
+      return [];
+    }),
   ]);
 
   const isWatched = watchRow.length > 0;
@@ -288,6 +296,52 @@ export default async function LegislatorDetailPage(props: {
           )}
         </InfoCard>
 
+        <InfoCard
+          title="산업 키워드 관련 회의록 발언"
+          sublabel={`${transcriptHits.length}건`}
+        >
+          {transcriptHits.length === 0 ? (
+            <EmptyNote>최근 저장된 관련 회의록 발언이 없습니다.</EmptyNote>
+          ) : (
+            <div className="space-y-2">
+              {transcriptHits.map((entry) => (
+                <Link
+                  key={`${entry.minutesId}-${entry.snippet ?? "none"}`}
+                  href={`/transcripts/${entry.minutesId}`}
+                  className="block rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-3 transition-colors hover:bg-[var(--color-surface)]"
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]">
+                    <span className="font-semibold text-[var(--color-primary)]">
+                      {entry.committee ?? "위원회 미상"}
+                    </span>
+                    {entry.meetingDate && (
+                      <span>{entry.meetingDate}</span>
+                    )}
+                    {entry.speakerRole && <span>· {entry.speakerRole}</span>}
+                  </div>
+                  {entry.matchedKeywords.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {entry.matchedKeywords.map((keyword) => (
+                        <span
+                          key={`${entry.minutesId}-${keyword}`}
+                          className="rounded-[999px] bg-[var(--color-primary-light)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]"
+                        >
+                          {keyword}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {entry.snippet && (
+                    <p className="mt-2 line-clamp-3 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+                      {entry.snippet}
+                    </p>
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
+        </InfoCard>
+
         <InfoCard title="산업 중요도 분석">
           {importance?.level ? (
             <div className="space-y-2">
@@ -463,4 +517,17 @@ function buildDefaultReason(
     return importance.reasons.join(" · ");
   }
   return `${name} 수동 추가`;
+}
+
+function isMissingTranscriptSchemaError(err: unknown) {
+  const message = flattenErrorText(err);
+  return (
+    (message.includes("committee_transcript") ||
+      message.includes("committee_transcript_utterance")) &&
+    (message.includes("relation") ||
+      message.includes("column") ||
+      message.includes("42P01") ||
+      message.includes("Failed query") ||
+      message.includes("does not exist"))
+  );
 }

@@ -516,6 +516,91 @@ export const pressRelease = pgTable(
   (t) => [index("idx_press_release_relevant").on(t.isRelevant, t.publishedAt)],
 );
 
+/**
+ * CommitteeTranscript — full committee/plenary minutes metadata sourced
+ * from the Assembly record viewer HTML. One row per `minutes_id`.
+ *
+ * `agendaItems` keeps a compact bill-linked agenda summary so the detail
+ * page can show which agenda items were discussed without reparsing raw
+ * HTML at render time.
+ */
+export const committeeTranscript = pgTable(
+  "committee_transcript",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    minutesId: text("minutes_id").notNull().unique(),
+    source: text("source").notNull().default("record_xml"),
+    committee: text("committee"),
+    meetingName: text("meeting_name").notNull(),
+    meetingDate: date("meeting_date"),
+    sessionLabel: text("session_label"),
+    place: text("place"),
+    agendaItems: jsonb("agenda_items")
+      .$type<
+        Array<{
+          sortOrder: number;
+          title: string;
+          billId: string | null;
+          billNumber: string | null;
+        }>
+      >()
+      .notNull()
+      .default([]),
+    sourceUrl: text("source_url"),
+    pdfUrl: text("pdf_url"),
+    videoUrl: text("video_url"),
+    fullText: text("full_text"),
+    utteranceCount: integer("utterance_count").notNull().default(0),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_committee_transcript_meeting_date").on(t.meetingDate),
+    index("idx_committee_transcript_committee_date").on(t.committee, t.meetingDate),
+  ],
+);
+
+/**
+ * CommitteeTranscriptUtterance — ordered speaker utterances extracted from
+ * the Assembly record viewer HTML. We persist the full content so the app
+ * can render a complete transcript view while also flagging keyword hits.
+ */
+export const committeeTranscriptUtterance = pgTable(
+  "committee_transcript_utterance",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    transcriptId: bigint("transcript_id", { mode: "number" })
+      .notNull()
+      .references(() => committeeTranscript.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull(),
+    speakerName: text("speaker_name").notNull(),
+    speakerRole: text("speaker_role"),
+    speakerArea: text("speaker_area"),
+    speakerProfileUrl: text("speaker_profile_url"),
+    speakerPhotoUrl: text("speaker_photo_url"),
+    content: text("content").notNull(),
+    matchedKeywords: jsonb("matched_keywords")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    hasKeywordMatch: boolean("has_keyword_match").notNull().default(false),
+    snippet: text("snippet"),
+  },
+  (t) => [
+    uniqueIndex("uq_committee_transcript_utterance").on(t.transcriptId, t.sortOrder),
+    index("idx_committee_transcript_utterance_transcript").on(t.transcriptId, t.sortOrder),
+    index("idx_committee_transcript_utterance_match").on(
+      t.hasKeywordMatch,
+      t.transcriptId,
+    ),
+  ],
+);
+
 /* ─────────────────────────────────────────────────────────────
  * App state
  * ────────────────────────────────────────────────────────────── */
@@ -704,6 +789,23 @@ export const newsArticleRelations = relations(newsArticle, ({ one }) => ({
   bill: one(bill, { fields: [newsArticle.billId], references: [bill.id] }),
 }));
 
+export const committeeTranscriptRelations = relations(
+  committeeTranscript,
+  ({ many }) => ({
+    utterances: many(committeeTranscriptUtterance),
+  }),
+);
+
+export const committeeTranscriptUtteranceRelations = relations(
+  committeeTranscriptUtterance,
+  ({ one }) => ({
+    transcript: one(committeeTranscript, {
+      fields: [committeeTranscriptUtterance.transcriptId],
+      references: [committeeTranscript.id],
+    }),
+  }),
+);
+
 export const alertRelations = relations(alert, ({ one }) => ({
   bill: one(bill, { fields: [alert.billId], references: [bill.id] }),
 }));
@@ -741,6 +843,12 @@ export type PetitionItem = typeof petitionItem.$inferSelect;
 export type NewPetitionItem = typeof petitionItem.$inferInsert;
 export type PressRelease = typeof pressRelease.$inferSelect;
 export type NewPressRelease = typeof pressRelease.$inferInsert;
+export type CommitteeTranscript = typeof committeeTranscript.$inferSelect;
+export type NewCommitteeTranscript = typeof committeeTranscript.$inferInsert;
+export type CommitteeTranscriptUtterance =
+  typeof committeeTranscriptUtterance.$inferSelect;
+export type NewCommitteeTranscriptUtterance =
+  typeof committeeTranscriptUtterance.$inferInsert;
 export type Alert = typeof alert.$inferSelect;
 export type DailyBriefing = typeof dailyBriefing.$inferSelect;
 export type RelevanceOverride = typeof relevanceOverride.$inferSelect;

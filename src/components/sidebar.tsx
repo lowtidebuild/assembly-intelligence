@@ -22,8 +22,8 @@ import {
   UserSearch,
   TrendingUp,
   Landmark,
+  MessagesSquare,
   Settings,
-  MessageSquare,
   LogOut,
   X,
 } from "lucide-react";
@@ -82,6 +82,12 @@ function buildItems(counts: SidebarCounts): NavItem[] {
       label: "의원 프로필",
       icon: UserSearch,
       badge: 295,
+    },
+    {
+      section: "tracking",
+      href: "/transcripts",
+      label: "회의록",
+      icon: MessagesSquare,
     },
     {
       section: "tracking",
@@ -266,6 +272,6 @@ export function SidebarIcon({
 }: {
   name: "feedback";
 }) {
-  if (name === "feedback") return <MessageSquare className="h-[18px] w-[18px]" />;
+  if (name === "feedback") return <MessagesSquare className="h-[18px] w-[18px]" />;
   return null;
 }

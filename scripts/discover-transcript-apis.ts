@@ -1,4 +1,5 @@
 import { config } from "dotenv";
+import { buildRecordMinutesViewUrl, extractMinutesIdFromUrl } from "../src/lib/transcript-source";
 
 config({ path: ".env.local" });
 
@@ -28,6 +29,13 @@ async function main() {
       const result = await api.callMcpTool("assembly_session", args);
       console.log(`\n=== assembly_session: ${JSON.stringify(args)} ===`);
       console.log(JSON.stringify(result, null, 2).slice(0, 4000));
+
+      const firstMinutesUrl = (result as { items?: Array<{ 회의록URL?: string | null }> })
+        ?.items?.[0]?.회의록URL;
+      const minutesId = extractMinutesIdFromUrl(firstMinutesUrl);
+      if (minutesId) {
+        console.log(`derived record viewer url: ${buildRecordMinutesViewUrl(minutesId)}`);
+      }
     } catch (error) {
       console.error(`assembly_session meeting probe failed`, args, error);
     }
