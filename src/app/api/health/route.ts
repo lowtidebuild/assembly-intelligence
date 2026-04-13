@@ -13,7 +13,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { pingMcp } from "@/lib/mcp-client";
+import { getMcpRuntimeConfig, pingMcp } from "@/lib/mcp-client";
 
 interface HealthCheck {
   ok: boolean;
@@ -46,6 +46,7 @@ async function checkMcp(): Promise<HealthCheck> {
 
 export async function GET() {
   const [dbResult, mcpResult] = await Promise.all([checkDb(), checkMcp()]);
+  const mcpRuntime = getMcpRuntimeConfig();
 
   const allOk = dbResult.ok && mcpResult.ok;
   return NextResponse.json(
@@ -54,7 +55,12 @@ export async function GET() {
       timestamp: new Date().toISOString(),
       services: {
         database: dbResult,
-        mcp: mcpResult,
+        mcp: {
+          ...mcpResult,
+          profile: mcpRuntime.defaultProfile,
+          baseUrl: mcpRuntime.baseUrl,
+          host: new URL(mcpRuntime.baseUrl).host,
+        },
       },
     },
     { status: allOk ? 200 : 503 },

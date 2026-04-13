@@ -19,12 +19,24 @@ import {
 } from "@/db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
+import { McpCapabilityPanel } from "@/components/mcp-capability-panel";
 import Link from "next/link";
-import { Settings as SettingsIcon, Database, Sparkles, Globe, Edit3 } from "lucide-react";
+import { getMcpRuntimeConfig } from "@/lib/mcp-client";
+import {
+  Settings as SettingsIcon,
+  Database,
+  Sparkles,
+  Globe,
+  Edit3,
+  Radar,
+  ExternalLink,
+} from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
+  const mcpRuntime = getMcpRuntimeConfig();
+  const hasMcpKey = Boolean(process.env.ASSEMBLY_API_MCP_KEY);
   const [profileRows, recentSyncs] = await Promise.all([
     db.select().from(industryProfile).limit(1),
     db.select().from(syncLog).orderBy(desc(syncLog.startedAt)).limit(5),
@@ -55,13 +67,14 @@ export default async function SettingsPage() {
 
   const envStatus = {
     db: Boolean(process.env.DATABASE_URL),
-    mcp: Boolean(process.env.ASSEMBLY_API_MCP_KEY),
+    mcp: hasMcpKey,
     gemini: Boolean(process.env.GEMINI_API_KEY),
     naver: Boolean(
       process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET,
     ),
     cronSecret: Boolean(process.env.CRON_SECRET),
   };
+  const sampleKeyword = profile?.keywords[0] ?? profile?.name ?? "예산";
 
   return (
     <>
@@ -174,10 +187,46 @@ export default async function SettingsPage() {
             <EnvRow label="NAVER_CLIENT_*" ok={envStatus.naver} />
             <EnvRow label="CRON_SECRET" ok={envStatus.cronSecret} />
           </ul>
+          <dl className="mt-4 grid grid-cols-[110px_1fr] gap-y-2 text-[12px]">
+            <Row label="MCP 프로필">
+              <span className="font-mono text-[11px] text-[var(--color-text-secondary)]">
+                {mcpRuntime.defaultProfile}
+              </span>
+            </Row>
+            <Row label="MCP 서버">
+              <span className="font-mono text-[11px] text-[var(--color-text-secondary)]">
+                {mcpRuntime.baseUrl}
+              </span>
+            </Row>
+          </dl>
           <p className="mt-3 text-[11px] text-[var(--color-text-tertiary)]">
             CRON_SECRET은 프로덕션(Vercel) 환경에서만 필요합니다. 로컬
             개발에서는 자동 우회됩니다.
           </p>
+        </Card>
+
+        <Card
+          icon={<Radar className="h-4 w-4" />}
+          title="최신 MCP 기능"
+          action={
+            <a
+              href={`/api/mcp/capabilities?keyword=${encodeURIComponent(sampleKeyword)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-primary)]"
+            >
+              <ExternalLink className="h-3 w-3" />
+              capability JSON
+            </a>
+          }
+        >
+          {hasMcpKey ? (
+            <McpCapabilityPanel sampleKeyword={sampleKeyword} />
+          ) : (
+            <p className="text-[12px] text-[var(--color-text-tertiary)]">
+              MCP 키가 없어서 최신 capability probe를 건너뛰었습니다.
+            </p>
+          )}
         </Card>
 
         {/* Recent syncs */}

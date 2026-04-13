@@ -125,7 +125,7 @@ postgresql://neondb_owner:xxxxxxxx@ep-xxx-xxx.ap-southeast-1.aws.neon.tech/neond
 1. [vercel.com/new](https://vercel.com/new)에 접속
 2. 방금 Fork한 저장소 선택
 3. **Framework Preset**: Next.js (자동 감지됨)
-4. **Environment Variables** 섹션에 아래 8개 입력:
+4. **Environment Variables** 섹션에 아래 8개 필수값을 입력:
 
 | Key | Value (어디서 가져오나) |
 |---|---|
@@ -140,6 +140,15 @@ postgresql://neondb_owner:xxxxxxxx@ep-xxx-xxx.ap-southeast-1.aws.neon.tech/neond
 
 5. **"Deploy"** 클릭
 6. 2-3분 후 배포 완료!
+
+선택값:
+
+| Key | 용도 |
+|---|---|
+| `MCP_PROFILE` | 기본값은 `full` 권장. 최신 MCP 도구(`research_data`, `get_nabo`)까지 노출 |
+| `ASSEMBLY_API_MCP_BASE_URL` | 공개 upstream 대신 직접 띄운 `assembly-api-mcp` 서버를 붙이고 싶을 때 사용 |
+
+> `lawmaking` / `NABO`는 이 앱이 아니라 **대상 MCP 서버** 쪽에 `LAWMKING_OC`, `NABO_API_KEY`가 준비되어 있어야 활성화됩니다.
 
 배포 후 `https://your-project.vercel.app` 주소가 생깁니다.
 

@@ -21,7 +21,7 @@
 [ParlaWatch](https://github.com/lowtidebuild/parlawatch)는 국정감사 등 국회 유튜브 방송을 모니터링하는 도구였습니다.
 **ParlaWatch+** 는 그 철학을 확장한 **산업별 종합 국회 모니터링 시스템**입니다.
 
-[@hollobit](https://www.threads.com/@hollobit) 님이 만든 [assembly-api-mcp](https://github.com/hollobit/assembly-api-mcp) 를 보고 아이디어가 떠올라 바로 기획 + 개발했습니다. 국회 공공데이터를 MCP(Model Context Protocol)로 깔끔하게 노출해주는 이 서버 덕분에, 법안 수집부터 의원 프로필까지 모든 데이터를 실시간으로 가져올 수 있게 되었습니다.
+[@hollobit](https://www.threads.com/@hollobit) 님이 만든 [assembly-api-mcp](https://github.com/hollobit/assembly-api-mcp) 를 보고 아이디어가 떠올라 바로 기획 + 개발했습니다. 국회 공공데이터를 MCP(Model Context Protocol)로 깔끔하게 노출해주는 이 서버 덕분에, 법안 수집부터 의원 프로필까지 모든 데이터를 실시간으로 가져올 수 있게 되었습니다. 현재 앱은 upstream 최신 `full` 프로필 기준으로 동작하며, `research_data`, `assembly_org(type=lawmaking)`, `get_nabo` 준비 상태도 `/settings`에서 확인할 수 있습니다.
 
 **한 줄 요약**: 매일 아침 출근하면, 우리 산업에 영향 주는 법안이 뭐가 올라왔는지, AI가 정리해서 알려주는 대시보드.
 
@@ -146,7 +146,7 @@ MCP에서 법안 수집 → Gemini Flash 평가 → 브리핑 생성 → 뉴스 
 | **Frontend** | Next.js 15 App Router, React 19, Tailwind CSS v4, TypeScript 5 |
 | **Database** | PostgreSQL (Neon, HTTP driver), Drizzle ORM |
 | **AI** | Gemini 2.5 Flash (scoring), Gemini 3.1 Pro (briefing, 심층 분석) |
-| **Data Source** | [assembly-api-mcp](https://github.com/hollobit/assembly-api-mcp) (MCP Streamable HTTP) |
+| **Data Source** | [assembly-api-mcp](https://github.com/hollobit/assembly-api-mcp) (MCP Streamable HTTP, `full` profile configurable) |
 | **News** | Naver News Search API |
 | **Hosting** | Vercel (App + Cron), Neon (DB), GitHub Pages (정적 데모) |
 | **Auth** | HMAC-signed cookie (Edge middleware, 7일 세션) |
@@ -167,11 +167,15 @@ MCP에서 법안 수집 → Gemini Flash 평가 → 브리핑 생성 → 뉴스 
 DATABASE_URL=postgresql://...          # Neon (pooled)
 DATABASE_URL_UNPOOLED=postgresql://...  # Neon (direct)
 ASSEMBLY_API_MCP_KEY=...               # assembly-api-mcp API key
+ASSEMBLY_API_MCP_BASE_URL=...          # optional, self-hosted MCP URL
+MCP_PROFILE=full                       # optional, full recommended
 GEMINI_API_KEY=...                     # Google AI Studio
 NAVER_CLIENT_ID=...                    # Naver Developers
 NAVER_CLIENT_SECRET=...                # Naver Developers
 APP_PASSWORD=...                       # 로그인 비밀번호 (아무 문자열)
 ```
+
+`ASSEMBLY_API_MCP_BASE_URL`를 비우면 공개 upstream (`assembly-api-mcp.fly.dev`)를 사용합니다. `lawmaking` / `NABO` 같은 optional 소스는 **앱 env가 아니라 대상 MCP 서버 쪽 설정**(`LAWMKING_OC`, `NABO_API_KEY`)이 준비되어 있어야 활성화됩니다.
 
 ### 2. 설치 + DB 마이그레이션
 
@@ -253,7 +257,7 @@ src/
 
 - **MCP cold start**: assembly-api-mcp 서버 cold start 60-90초. Vercel cron이 정기적으로 warm 유지.
 - **법안 본문 미노출**: MCP가 제안이유/주요내용을 제공하지 않음. 의안명 + 소관위 + 제안자로만 평가.
-- **모바일 미대응**: 현재 데스크톱 1440px 기준 디자인. 모바일 반응형은 개발 예정.
+- **Optional source readiness varies by MCP server**: 공개 upstream 서버는 `full` 프로필 도구 목록은 제공하지만, `lawmaking` / `NABO`는 대상 MCP 서버에 별도 자격증명이 없는 경우 비활성화될 수 있습니다. 앱은 이를 `/settings`와 `/api/mcp/capabilities`에서 그대로 보여줍니다.
 
 ---
 

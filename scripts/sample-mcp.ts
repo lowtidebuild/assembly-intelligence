@@ -3,7 +3,7 @@
  * response shapes for tools we haven't probed yet.
  *
  * Run with:  pnpm tsx scripts/sample-mcp.ts [tool]
- *   tool = bill | bill-detail | session | org | member | all
+ *   tool = bill | bill-detail | session | org | member | lawmaking | nabo | all
  *
  * Writes pretty-printed JSON dumps to docs/mcp-samples/<tool>.json
  * so we can diff against docs/mcp-api-reality.md assumptions.
@@ -147,6 +147,28 @@ async function sampleSessionVote(billId: string) {
   preview("session vote", result);
 }
 
+async function sampleOrgLawmaking() {
+  console.log("\nassembly_org (lawmaking legislation)...");
+  const result = await callMcpTool("assembly_org", {
+    type: "lawmaking",
+    category: "legislation",
+    page_size: 5,
+  });
+  save("10-org-lawmaking", result);
+  preview("org lawmaking", result);
+}
+
+async function sampleNaboReport() {
+  console.log("\nget_nabo (report)...");
+  const result = await callMcpTool("get_nabo", {
+    type: "report",
+    keyword: "예산",
+    page_size: 5,
+  });
+  save("11-nabo-report", result);
+  preview("nabo report", result);
+}
+
 // ── Main ────────────────────────────────────────────────
 async function main() {
   const arg = process.argv[2] ?? "all";
@@ -172,8 +194,10 @@ async function main() {
     if (arg === "session" || arg === "all") await sampleSessionSchedule();
     if (arg === "org" || arg === "all") await sampleOrgCommittee();
     if (arg === "org-notice" || arg === "all") await sampleOrgLegNotice();
+    if (arg === "lawmaking" || arg === "all") await sampleOrgLawmaking();
     if (arg === "member" || arg === "all") await sampleMemberByCommittee();
     if (arg === "party-stats" || arg === "all") await sampleMemberPartyStats();
+    if (arg === "nabo" || arg === "all") await sampleNaboReport();
     if ((arg === "vote" || arg === "all") && firstBillId) {
       await sampleSessionVote(firstBillId);
     }

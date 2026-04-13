@@ -1,13 +1,40 @@
 # MCP API Reality Check — assembly-api-mcp
 
 Captured: 2026-04-10 via live server inspection.
-**Updated:** 2026-04-10 (part 2) with real sample responses from
+**Updated:** 2026-04-13 with upstream `v0.7.0` README/CHANGELOG 확인 + 실제
+`profile=full` MCP tool listing 재검증.
+이전 샘플 응답 업데이트는 2026-04-10 (part 2) 기준이며,
 `scripts/sample-mcp.ts` and `scripts/query-bill-detail-v2.ts`.
 Raw JSON dumps are saved under `docs/mcp-samples/` for diff reference.
 
 Server: `https://assembly-api-mcp.fly.dev` (github: hollobit/assembly-api-mcp)
 Transport: **Streamable HTTP** (NOT SSE — this was a wrong assumption in
 design.md v1; verified via server setup page at the base URL).
+
+## 2026-04-13 delta
+
+Upstream README / CHANGELOG 기준 최신 버전은 **`v0.7.0` (2026-04-12)** 입니다.
+
+- `full` 프로필 도구 수: **11개**
+- 실제 `profile=full` MCP `listTools()` 확인 결과:
+  - `assembly_member`
+  - `assembly_bill`
+  - `assembly_session`
+  - `assembly_org`
+  - `discover_apis`
+  - `query_assembly`
+  - `bill_detail`
+  - `committee_detail`
+  - `petition_detail`
+  - `research_data`
+  - `get_nabo`
+- `assembly_org(type="lawmaking")` 는 공개 upstream 인스턴스에서 현재
+  `{"error":"LAWMKING_OC가 설정되지 않았습니다..."}` 로 응답
+- `get_nabo(...)` 는 공개 upstream 인스턴스에서 현재
+  `{"error":"NABO_API_KEY가 설정되지 않았습니다..."}` 로 응답
+
+즉, **최신 도구 surface 자체는 배포돼 있지만**, optional data source는
+대상 MCP 서버 환경변수 준비 여부에 따라 활성화/비활성화됩니다.
 
 ## Why this document exists
 

@@ -32,7 +32,7 @@
  *
  * ── Auth ──────────────────────────────────────────────────
  * The key is embedded in the URL as a query param:
- *   https://assembly-api-mcp.fly.dev/mcp?key=XXX&profile=lite
+ *   https://assembly-api-mcp.fly.dev/mcp?key=XXX&profile=full
  * Server-side only. The key must never reach the browser.
  */
 
@@ -41,8 +41,14 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import pLimit from "p-limit";
 import { withRetry, NonRetryableError, errorMessage } from "./api-base";
 
-const MCP_BASE_URL = "https://assembly-api-mcp.fly.dev/mcp";
-const MCP_PROFILE = "lite"; // "lite" vs "full" — lite is enough for MVP
+const DEFAULT_MCP_BASE_URL = "https://assembly-api-mcp.fly.dev/mcp";
+
+export type McpProfile = "lite" | "full";
+
+export interface McpRuntimeConfig {
+  baseUrl: string;
+  defaultProfile: McpProfile;
+}
 
 /** Fully serialized — parallelism triggers upstream session errors. */
 const limit = pLimit(1);
@@ -51,16 +57,36 @@ const limit = pLimit(1);
  * URL construction
  * ────────────────────────────────────────────────────────────── */
 
-function getMcpUrl(): URL {
+function normalizeProfile(value: string | undefined): McpProfile {
+  return value === "lite" ? "lite" : "full";
+}
+
+export function getMcpRuntimeConfig(): McpRuntimeConfig {
+  return {
+    baseUrl:
+      process.env.ASSEMBLY_API_MCP_BASE_URL?.trim() || DEFAULT_MCP_BASE_URL,
+    defaultProfile: normalizeProfile(
+      process.env.MCP_PROFILE ?? process.env.ASSEMBLY_API_MCP_PROFILE,
+    ),
+  };
+}
+
+function buildClientCacheKey(profile: McpProfile): string {
+  const runtime = getMcpRuntimeConfig();
+  return `${runtime.baseUrl}|${profile}`;
+}
+
+function getMcpUrl(profile: McpProfile): URL {
   const key = process.env.ASSEMBLY_API_MCP_KEY;
   if (!key) {
     throw new NonRetryableError(
       "ASSEMBLY_API_MCP_KEY is not set in .env.local",
     );
   }
-  const url = new URL(MCP_BASE_URL);
+  const { baseUrl } = getMcpRuntimeConfig();
+  const url = new URL(baseUrl);
   url.searchParams.set("key", key);
-  url.searchParams.set("profile", MCP_PROFILE);
+  url.searchParams.set("profile", profile);
   return url;
 }
 
@@ -68,30 +94,35 @@ function getMcpUrl(): URL {
  * Shared client (lazy, reopens on failure)
  * ────────────────────────────────────────────────────────────── */
 
-let sharedClient: Client | null = null;
+const sharedClients = new Map<string, Client>();
 
 /** Create a fresh Client+Transport and connect. */
-async function openClient(): Promise<Client> {
+async function openClient(profile: McpProfile): Promise<Client> {
   const client = new Client(
     { name: "assembly-intelligence", version: "0.1.0" },
     { capabilities: {} },
   );
-  const transport = new StreamableHTTPClientTransport(getMcpUrl());
+  const transport = new StreamableHTTPClientTransport(getMcpUrl(profile));
   await client.connect(transport);
   return client;
 }
 
 /** Get (or create) the shared client. */
-async function getClient(): Promise<Client> {
-  if (sharedClient) return sharedClient;
-  sharedClient = await openClient();
-  return sharedClient;
+async function getClient(profile: McpProfile): Promise<Client> {
+  const cacheKey = buildClientCacheKey(profile);
+  const existing = sharedClients.get(cacheKey);
+  if (existing) return existing;
+
+  const client = await openClient(profile);
+  sharedClients.set(cacheKey, client);
+  return client;
 }
 
 /** Force-close the shared client and clear it (used after a hard error). */
-async function resetClient(): Promise<void> {
-  const prev = sharedClient;
-  sharedClient = null;
+async function resetClient(profile: McpProfile): Promise<void> {
+  const cacheKey = buildClientCacheKey(profile);
+  const prev = sharedClients.get(cacheKey) ?? null;
+  sharedClients.delete(cacheKey);
   if (prev) {
     await prev.close().catch(() => {});
   }
@@ -109,15 +140,16 @@ async function resetClient(): Promise<void> {
  * sites dumb and the retry behavior consistent.
  */
 async function runWithSharedClient<T>(
+  profile: McpProfile,
   fn: (client: Client) => Promise<T>,
 ): Promise<T> {
   try {
-    const client = await getClient();
+    const client = await getClient(profile);
     return await fn(client);
   } catch (firstErr) {
-    await resetClient();
+    await resetClient(profile);
     try {
-      const client = await getClient();
+      const client = await getClient(profile);
       return await fn(client);
     } catch {
       // Surface the ORIGINAL error — the retry failure is usually
@@ -147,11 +179,15 @@ async function runWithSharedClient<T>(
 export async function callMcpTool<T = unknown>(
   toolName: string,
   args?: Record<string, unknown>,
+  options?: {
+    profile?: McpProfile;
+  },
 ): Promise<T | null> {
+  const profile = options?.profile ?? getMcpRuntimeConfig().defaultProfile;
   return limit(() =>
     withRetry(
       async () => {
-        return runWithSharedClient(async (client) => {
+        return runWithSharedClient(profile, async (client) => {
           const result = await client.callTool({
             name: toolName,
             arguments: args ?? {},
@@ -189,8 +225,11 @@ export async function callMcpTool<T = unknown>(
 export async function callMcpToolOrThrow<T>(
   toolName: string,
   args?: Record<string, unknown>,
+  options?: {
+    profile?: McpProfile;
+  },
 ): Promise<T> {
-  const result = await callMcpTool<T>(toolName, args);
+  const result = await callMcpTool<T>(toolName, args, options);
   if (result === null) {
     throw new Error(`MCP tool "${toolName}" returned no text content`);
   }
@@ -201,13 +240,14 @@ export async function callMcpToolOrThrow<T>(
  * List all available tools on the MCP server. Useful for debugging
  * and for a future "developer tools" settings panel.
  */
-export async function listMcpTools(): Promise<
-  Array<{ name: string; description?: string }>
-> {
+export async function listMcpTools(options?: {
+  profile?: McpProfile;
+}): Promise<Array<{ name: string; description?: string }>> {
+  const profile = options?.profile ?? getMcpRuntimeConfig().defaultProfile;
   return limit(() =>
     withRetry(
       () =>
-        runWithSharedClient(async (client) => {
+        runWithSharedClient(profile, async (client) => {
           const result = await client.listTools();
           return result.tools.map((t) => ({
             name: t.name,
@@ -224,12 +264,15 @@ export async function listMcpTools(): Promise<
  * listing tools. Used by /api/health and setup wizard to verify
  * the key works before proceeding.
  */
-export async function pingMcp(): Promise<{
+export async function pingMcp(options?: {
+  profile?: McpProfile;
+}): Promise<{
   ok: boolean;
   error?: string;
 }> {
+  const profile = options?.profile ?? getMcpRuntimeConfig().defaultProfile;
   try {
-    await runWithSharedClient(async (client) => {
+    await runWithSharedClient(profile, async (client) => {
       await client.listTools();
     });
     return { ok: true };
@@ -244,5 +287,11 @@ export async function pingMcp(): Promise<{
  * drops the connection).
  */
 export async function closeMcp(): Promise<void> {
-  await resetClient();
+  const entries = [...sharedClients.entries()];
+  sharedClients.clear();
+  await Promise.all(
+    entries.map(([, client]) =>
+      client.close().catch(() => {}),
+    ),
+  );
 }
