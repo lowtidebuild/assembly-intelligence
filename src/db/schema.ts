@@ -468,6 +468,54 @@ export const legislationNotice = pgTable(
   (t) => [index("idx_legislation_notice_relevant").on(t.isRelevant, t.noticeEndDate)],
 );
 
+/**
+ * PetitionItem — petition feed from `assembly_org({ type: "petition" })`.
+ * Stored independently from bills because petitions are an early-signal
+ * layer and may never become formal legislation.
+ */
+export const petitionItem = pgTable(
+  "petition_item",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    petitionId: text("petition_id").notNull().unique(),
+    title: text("title").notNull(),
+    committee: text("committee"),
+    status: text("status"),
+    proposerName: text("proposer_name"),
+    isRelevant: boolean("is_relevant").notNull().default(false),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_petition_item_relevant").on(t.isRelevant, t.fetchedAt)],
+);
+
+/**
+ * PressRelease — official Assembly press feed via
+ * `assembly_org({ type: "press" })`.
+ */
+export const pressRelease = pgTable(
+  "press_release",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    externalId: text("external_id").notNull().unique(),
+    title: text("title").notNull(),
+    committee: text("committee"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    url: text("url"),
+    summary: text("summary"),
+    isRelevant: boolean("is_relevant").notNull().default(false),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_press_release_relevant").on(t.isRelevant, t.publishedAt)],
+);
+
 /* ─────────────────────────────────────────────────────────────
  * App state
  * ────────────────────────────────────────────────────────────── */
@@ -689,6 +737,10 @@ export type Vote = typeof vote.$inferSelect;
 export type NewsArticle = typeof newsArticle.$inferSelect;
 export type LegislationNotice = typeof legislationNotice.$inferSelect;
 export type NewLegislationNotice = typeof legislationNotice.$inferInsert;
+export type PetitionItem = typeof petitionItem.$inferSelect;
+export type NewPetitionItem = typeof petitionItem.$inferInsert;
+export type PressRelease = typeof pressRelease.$inferSelect;
+export type NewPressRelease = typeof pressRelease.$inferInsert;
 export type Alert = typeof alert.$inferSelect;
 export type DailyBriefing = typeof dailyBriefing.$inferSelect;
 export type RelevanceOverride = typeof relevanceOverride.$inferSelect;

@@ -52,12 +52,16 @@ import {
   industryBillWatch,
   legislationNotice,
   legislator,
+  petitionItem,
+  pressRelease,
   syncLog,
   alert,
   vote,
   type NewBill,
   type NewLegislationNotice,
   type NewLegislator,
+  type NewPetitionItem,
+  type NewPressRelease,
   type Bill,
 } from "@/db/schema";
 import { callMcpToolOrThrow } from "@/lib/mcp-client";
@@ -282,6 +286,36 @@ interface McpLegislationNoticeResponse {
   items?: McpLegislationNoticeItem[];
 }
 
+interface McpPetitionItem {
+  청원번호: string;
+  청원명: string;
+  청원인: string | null;
+  소개의원: string | null;
+  제출일: string | null;
+  소관위: string | null;
+  처리상태?: string | null;
+  링크?: string | null;
+}
+
+interface McpPetitionResponse {
+  type?: string;
+  total?: number;
+  items?: McpPetitionItem[];
+}
+
+interface McpPressItem {
+  제목: string;
+  등록일: string | null;
+  내용미리보기?: string | null;
+  링크?: string | null;
+}
+
+interface McpPressResponse {
+  type?: string;
+  total?: number;
+  items?: McpPressItem[];
+}
+
 interface McpCommitteeMember {
   이름: string;
   정당: string | null;
@@ -412,6 +446,18 @@ function normalizeDateOnly(s: string | null | undefined): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
 }
 
+function parseFlexibleTimestamp(
+  value: string | null | undefined,
+): Date | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const dateOnly = parseKstDate(trimmed);
+  if (dateOnly) return dateOnly;
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function dateToListDate(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   if (typeof value === "string") {
@@ -532,6 +578,20 @@ export function noticeIsRelevant(
   if (keywords.length === 0) return false;
   const haystack = billName.toLowerCase();
   return keywords.some((kw) => haystack.includes(kw.toLowerCase()));
+}
+
+export function textIsRelevant(
+  text: string | null | undefined,
+  keywords: string[],
+): boolean {
+  if (!text || keywords.length === 0) return false;
+  const haystack = text.toLowerCase();
+  return keywords.some((kw) => haystack.includes(kw.toLowerCase()));
+}
+
+function buildPressExternalId(item: McpPressItem): string {
+  if (item.링크?.trim()) return item.링크.trim();
+  return [item.등록일?.trim() ?? "undated", item.제목.trim()].join("|");
 }
 
 const ROLE_PRIORITY: Record<string, number> = {
@@ -1138,6 +1198,18 @@ export async function runMorningSync(
     errors.push(`legislation_notices: ${errorMessage(err)}`);
   }
 
+  try {
+    await syncPetitions(keywords);
+  } catch (err) {
+    errors.push(`petitions: ${errorMessage(err)}`);
+  }
+
+  try {
+    await syncPressReleases(keywords);
+  } catch (err) {
+    errors.push(`press: ${errorMessage(err)}`);
+  }
+
   // 11. Write sync log
   const status: MorningSyncResult["status"] =
     errors.length === 0 ? "success" : billsScored > 0 ? "partial" : "failed";
@@ -1504,6 +1576,92 @@ export async function syncLegislationNotices(
         proposerType: sql`excluded.proposer_type`,
         committee: sql`excluded.committee`,
         noticeEndDate: sql`excluded.notice_end_date`,
+        isRelevant: sql`excluded.is_relevant`,
+        fetchedAt: sql`NOW()`,
+      },
+    });
+
+  return rows.filter((row) => row.isRelevant).length;
+}
+
+export async function syncPetitions(
+  keywords: string[],
+): Promise<number> {
+  const resp = await callMcpToolOrThrow<McpPetitionResponse>("assembly_org", {
+    type: "petition",
+    petition_status: "all",
+    age: 22,
+    page_size: 50,
+  });
+
+  const rows: NewPetitionItem[] = (resp.items ?? [])
+    .filter((item) => item.청원번호 && item.청원명)
+    .map((item) => ({
+      petitionId: item.청원번호,
+      title: item.청원명,
+      committee: item.소관위,
+      status: item.처리상태 ?? null,
+      proposerName: item.청원인 ?? item.소개의원 ?? null,
+      isRelevant: textIsRelevant(item.청원명, keywords),
+    }));
+
+  if (rows.length === 0) return 0;
+
+  await db
+    .insert(petitionItem)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: petitionItem.petitionId,
+      set: {
+        title: sql`excluded.title`,
+        committee: sql`excluded.committee`,
+        status: sql`excluded.status`,
+        proposerName: sql`excluded.proposer_name`,
+        isRelevant: sql`excluded.is_relevant`,
+        fetchedAt: sql`NOW()`,
+      },
+    });
+
+  return rows.filter((row) => row.isRelevant).length;
+}
+
+export async function syncPressReleases(
+  keywords: string[],
+): Promise<number> {
+  const resp = await callMcpToolOrThrow<McpPressResponse>("assembly_org", {
+    type: "press",
+    age: 22,
+    page_size: 30,
+  });
+
+  const rows: NewPressRelease[] = (resp.items ?? [])
+    .filter((item) => item.제목)
+    .map((item) => ({
+      externalId: buildPressExternalId(item),
+      title: item.제목,
+      committee: null,
+      publishedAt: parseFlexibleTimestamp(item.등록일),
+      url: item.링크?.trim() || null,
+      summary: item.내용미리보기 ?? null,
+      isRelevant: textIsRelevant(
+        [item.제목, item.내용미리보기].filter(Boolean).join(" "),
+        keywords,
+      ),
+    }));
+
+  if (rows.length === 0) return 0;
+
+  await db
+    .insert(pressRelease)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: pressRelease.externalId,
+      set: {
+        title: sql`excluded.title`,
+        committee: sql`excluded.committee`,
+        publishedAt: sql`excluded.published_at`,
+        url: sql`excluded.url`,
+        summary: sql`excluded.summary`,
         isRelevant: sql`excluded.is_relevant`,
         fetchedAt: sql`NOW()`,
       },

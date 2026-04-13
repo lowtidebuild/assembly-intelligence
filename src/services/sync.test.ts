@@ -4,6 +4,7 @@ import {
   noticeIsRelevant,
   parseVoteResult,
   stageFromSimsa,
+  textIsRelevant,
 } from "@/services/sync";
 
 function makeSimsa(
@@ -57,6 +58,20 @@ describe("noticeIsRelevant", () => {
   it("returns false when keyword list is empty or unmatched", () => {
     expect(noticeIsRelevant("게임산업진흥법", [])).toBe(false);
     expect(noticeIsRelevant("방송통신발전법", ["게임"])).toBe(false);
+  });
+});
+
+describe("textIsRelevant", () => {
+  it("matches petition or press text by keyword", () => {
+    expect(textIsRelevant("전자상거래 소비자보호 관련 청원", ["전자상거래"])).toBe(
+      true,
+    );
+    expect(textIsRelevant("게임업계 관련 공식 보도자료", ["게임"])).toBe(true);
+  });
+
+  it("returns false for empty text or unmatched keywords", () => {
+    expect(textIsRelevant(null, ["게임"])).toBe(false);
+    expect(textIsRelevant("보도자료", ["전자상거래"])).toBe(false);
   });
 });
 

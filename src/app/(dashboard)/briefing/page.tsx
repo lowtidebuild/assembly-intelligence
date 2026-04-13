@@ -21,8 +21,12 @@ import {
   industryCommittee,
   industryProfile,
   legislationNotice,
+  petitionItem,
+  pressRelease,
   type Bill,
   type LegislationNotice,
+  type PetitionItem,
+  type PressRelease,
 } from "@/db/schema";
 import { neon } from "@neondatabase/serverless";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
@@ -67,6 +71,8 @@ export default async function BriefingPage() {
 
   let briefing: BriefingSnapshot | null = null;
   let relevantNotices: LegislationNotice[] = [];
+  let relevantPetitions: PetitionItem[] = [];
+  let relevantPress: PressRelease[] = [];
   let newsItems: Awaited<ReturnType<typeof loadRecentNewsCompat>> = [];
   let importanceById = new Map<number, ImportanceRecord>();
   let topBills: Bill[] = [];
@@ -80,9 +86,12 @@ export default async function BriefingPage() {
   >();
 
   try {
-    [briefing, relevantNotices, newsItems, importanceById] = await Promise.all([
+    [briefing, relevantNotices, relevantPetitions, relevantPress, newsItems, importanceById] =
+      await Promise.all([
       loadLatestBriefingCompat(),
       loadRelevantNoticesCompat(),
+      loadRelevantPetitionsCompat(),
+      loadRelevantPressReleasesCompat(),
       loadRecentNewsCompat(8),
       loadBriefingImportanceCompat({
         profileId: profile.id,
@@ -256,6 +265,26 @@ export default async function BriefingPage() {
               </ul>
             )}
           </SideSection>
+
+          {relevantPetitions.length > 0 && (
+            <SideSection title="청원 동향" sublabel="assembly_org(type=petition)">
+              <ul className="flex flex-col">
+                {relevantPetitions.map((item) => (
+                  <PetitionRow key={item.id} item={item} />
+                ))}
+              </ul>
+            </SideSection>
+          )}
+
+          {relevantPress.length > 0 && (
+            <SideSection title="공식 보도자료" sublabel="assembly_org(type=press)">
+              <ul className="flex flex-col">
+                {relevantPress.map((item) => (
+                  <PressReleaseRow key={item.id} item={item} />
+                ))}
+              </ul>
+            </SideSection>
+          )}
         </aside>
       </div>
     </>
@@ -391,6 +420,38 @@ async function loadRelevantNoticesCompat(): Promise<LegislationNotice[]> {
   }
 }
 
+async function loadRelevantPetitionsCompat(): Promise<PetitionItem[]> {
+  try {
+    return await db
+      .select()
+      .from(petitionItem)
+      .where(eq(petitionItem.isRelevant, true))
+      .orderBy(desc(petitionItem.fetchedAt))
+      .limit(6);
+  } catch (err) {
+    if (!isMissingPetitionItemError(err)) {
+      throw err;
+    }
+    return [];
+  }
+}
+
+async function loadRelevantPressReleasesCompat(): Promise<PressRelease[]> {
+  try {
+    return await db
+      .select()
+      .from(pressRelease)
+      .where(eq(pressRelease.isRelevant, true))
+      .orderBy(desc(pressRelease.publishedAt), desc(pressRelease.fetchedAt))
+      .limit(6);
+  } catch (err) {
+    if (!isMissingPressReleaseError(err)) {
+      throw err;
+    }
+    return [];
+  }
+}
+
 async function loadBriefingImportanceCompat(input: {
   profileId: number;
   committeeCodes: string[];
@@ -430,6 +491,26 @@ function isMissingNewsArticleError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   return (
     message.includes("news_article") &&
+    (message.includes("relation") ||
+      message.includes("column") ||
+      message.includes("does not exist"))
+  );
+}
+
+function isMissingPetitionItemError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("petition_item") &&
+    (message.includes("relation") ||
+      message.includes("column") ||
+      message.includes("does not exist"))
+  );
+}
+
+function isMissingPressReleaseError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("press_release") &&
     (message.includes("relation") ||
       message.includes("column") ||
       message.includes("does not exist"))
@@ -532,6 +613,76 @@ function NewsRow({
           {publishedDate && <span>{publishedDate}</span>}
         </div>
       </a>
+    </li>
+  );
+}
+
+function PetitionRow({
+  item,
+}: {
+  item: PetitionItem;
+}) {
+  return (
+    <li className="border-b border-[var(--color-border)] py-[10px] last:border-b-0 last:pb-0 first:pt-0">
+      <div className="mb-1 text-[12px] font-medium leading-snug text-[var(--color-text)]">
+        {item.title}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--color-text-tertiary)]">
+        {item.committee && <span className="font-semibold text-[var(--color-primary)]">{item.committee}</span>}
+        {item.committee && item.proposerName && <span>·</span>}
+        {item.proposerName && <span>{item.proposerName}</span>}
+        {item.status && (
+          <>
+            {(item.committee || item.proposerName) && <span>·</span>}
+            <span>{item.status}</span>
+          </>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function PressReleaseRow({
+  item,
+}: {
+  item: PressRelease;
+}) {
+  const publishedDate = formatIsoDate(item.publishedAt);
+  const body = (
+    <>
+      <div className="mb-1 flex items-start gap-1.5 text-[12px] font-medium leading-snug text-[var(--color-text)]">
+        <span className="line-clamp-2 flex-1">{item.title}</span>
+        {item.url && (
+          <ExternalLink className="mt-[2px] h-3 w-3 shrink-0 text-[var(--color-text-tertiary)]" />
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--color-text-tertiary)]">
+        <span className="font-semibold text-[var(--color-primary)]">국회 공식</span>
+        {publishedDate && <span>·</span>}
+        {publishedDate && <span>{publishedDate}</span>}
+      </div>
+      {item.summary && (
+        <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+          {item.summary}
+        </p>
+      )}
+    </>
+  );
+
+  return (
+    <li className="border-b border-[var(--color-border)] py-[10px] last:border-b-0 last:pb-0 first:pt-0">
+      {item.url ? (
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group block"
+        >
+          {body}
+        </a>
+      ) : (
+        <div>{body}</div>
+      )}
     </li>
   );
 }
