@@ -71,8 +71,22 @@ export default async function BriefingPage(props: {
     .from(industryCommittee)
     .where(eq(industryCommittee.industryProfileId, profile.id));
 
-  const [briefing, relevantNotices, newsItems, importanceById] =
-    await Promise.all([
+  let briefing: BriefingSnapshot | null = null;
+  let relevantNotices: LegislationNotice[] = [];
+  let newsItems: Awaited<ReturnType<typeof loadRecentNewsCompat>> = [];
+  let importanceById = new Map<number, ImportanceRecord>();
+  let topBills: Bill[] = [];
+  let recentBills: Bill[] = [];
+  let proposerImportance = new Map<
+    string,
+    {
+      legislatorId: number;
+      importance: ImportanceRecord;
+    }
+  >();
+
+  try {
+    [briefing, relevantNotices, newsItems, importanceById] = await Promise.all([
       loadLatestBriefingCompat(),
       loadRelevantNoticesCompat(),
       loadRecentNewsCompat(8),
@@ -82,27 +96,31 @@ export default async function BriefingPage(props: {
       }),
     ]);
 
-  const [topBills, recentBills] = briefing
-    ? await Promise.all([
-        loadBriefingBillSnapshot({
-          ids: briefing.keyBillIds,
-          expectedCount: briefing.keyItemCount,
-          fallbackLoader: loadCurrentTopBills,
-        }),
-        loadBriefingBillSnapshot({
-          ids: briefing.newBillIds,
-          expectedCount: briefing.newBillCount,
-          fallbackLoader: loadCurrentNewBills,
-        }),
-      ])
-    : await Promise.all([loadCurrentTopBills(), loadCurrentNewBills()]);
-  const proposerImportance = await loadProposerImportanceMap(
-    topBills.map((entry) => ({
-      name: entry.proposerName,
-      party: entry.proposerParty,
-    })),
-    importanceById,
-  );
+    [topBills, recentBills] = briefing
+      ? await Promise.all([
+          loadBriefingBillSnapshot({
+            ids: briefing.keyBillIds,
+            expectedCount: briefing.keyItemCount,
+            fallbackLoader: loadCurrentTopBills,
+          }),
+          loadBriefingBillSnapshot({
+            ids: briefing.newBillIds,
+            expectedCount: briefing.newBillCount,
+            fallbackLoader: loadCurrentNewBills,
+          }),
+        ])
+      : await Promise.all([loadCurrentTopBills(), loadCurrentNewBills()]);
+
+    proposerImportance = await loadProposerImportanceMap(
+      topBills.map((entry) => ({
+        name: entry.proposerName,
+        party: entry.proposerParty,
+      })),
+      importanceById,
+    );
+  } catch (err) {
+    console.error("[briefing] degraded render fallback", err);
+  }
 
   return (
     <>
