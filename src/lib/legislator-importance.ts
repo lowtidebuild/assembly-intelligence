@@ -1,4 +1,5 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { unstable_cache } from "next/cache";
 import { db } from "@/db";
 import { bill, industryLegislatorWatch, legislator } from "@/db/schema";
 import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
@@ -18,6 +19,11 @@ export interface ImportanceContext {
 }
 
 export interface ProposerImportanceEntry {
+  legislatorId: number;
+  importance: ImportanceRecord;
+}
+
+interface CachedImportanceEntry {
   legislatorId: number;
   importance: ImportanceRecord;
 }
@@ -142,6 +148,57 @@ export async function computeImportance(
   }
 
   return result;
+}
+
+function normalizeCommitteeCodes(committeeCodes: string[]): string[] {
+  return [...new Set(committeeCodes)].sort((left, right) =>
+    left.localeCompare(right, "ko"),
+  );
+}
+
+function serializeImportanceMap(
+  importanceById: Map<number, ImportanceRecord>,
+): CachedImportanceEntry[] {
+  return Array.from(importanceById.entries()).map(
+    ([legislatorId, importance]) => ({
+      legislatorId,
+      importance,
+    }),
+  );
+}
+
+function deserializeImportanceEntries(
+  entries: CachedImportanceEntry[],
+): Map<number, ImportanceRecord> {
+  return new Map(
+    entries.map((entry) => [entry.legislatorId, entry.importance] as const),
+  );
+}
+
+export function importanceTag(profileId: number): string {
+  return `importance:${profileId}`;
+}
+
+export async function loadCachedImportance(
+  ctx: ImportanceContext,
+): Promise<Map<number, ImportanceRecord>> {
+  const committeeCodes = normalizeCommitteeCodes(ctx.committeeCodes);
+  const load = unstable_cache(
+    async () =>
+      serializeImportanceMap(
+        await computeImportance({
+          profileId: ctx.profileId,
+          committeeCodes,
+        }),
+      ),
+    ["importance", String(ctx.profileId), committeeCodes.join("|")],
+    {
+      revalidate: 120,
+      tags: [importanceTag(ctx.profileId)],
+    },
+  );
+
+  return deserializeImportanceEntries(await load());
 }
 
 export async function loadImportanceForLegislator(

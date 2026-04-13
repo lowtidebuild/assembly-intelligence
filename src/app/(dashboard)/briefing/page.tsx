@@ -32,8 +32,8 @@ import { BillKeyCard } from "@/components/bill-key-card";
 import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import { todayKst, weekdayKo } from "@/lib/dashboard-data";
 import {
-  computeImportance,
   type ImportanceRecord,
+  loadCachedImportance,
   loadProposerImportanceMap,
   makeProposerKey,
 } from "@/lib/legislator-importance";
@@ -411,7 +411,7 @@ async function loadBriefingImportanceCompat(input: {
   committeeCodes: string[];
 }): Promise<Map<number, ImportanceRecord>> {
   try {
-    return await computeImportance(input);
+    return await loadCachedImportance(input);
   } catch (err) {
     if (!isMissingLegislatorImportanceSchemaError(err)) {
       throw err;

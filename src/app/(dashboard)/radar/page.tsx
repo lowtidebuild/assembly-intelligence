@@ -38,7 +38,7 @@ import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slid
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
-  computeImportance,
+  loadCachedImportance,
   loadProposerImportanceMap,
   makeProposerKey,
   type ImportanceRecord,
@@ -107,7 +107,7 @@ export default async function RadarPage(props: {
         .where(eq(industryCommittee.industryProfileId, profile.id))
     : [];
   const importanceById = profile
-    ? await computeImportance({
+    ? await loadCachedImportance({
         profileId: profile.id,
         committeeCodes: industryCommittees.map((c) => c.committeeCode),
       })

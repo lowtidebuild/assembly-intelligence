@@ -26,7 +26,7 @@ import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slid
 import { Sparkles, TrendingUp, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  computeImportance,
+  loadCachedImportance,
   loadProposerImportanceMap,
   makeProposerKey,
 } from "@/lib/legislator-importance";
@@ -50,7 +50,7 @@ export default async function ImpactPage(props: {
         .where(eq(industryCommittee.industryProfileId, profile.id))
     : [];
   const importanceById = profile
-    ? await computeImportance({
+    ? await loadCachedImportance({
         profileId: profile.id,
         committeeCodes: committees.map((c) => c.committeeCode),
       })

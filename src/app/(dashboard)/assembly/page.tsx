@@ -17,7 +17,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
 import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
-import { computeImportance } from "@/lib/legislator-importance";
+import { loadCachedImportance } from "@/lib/legislator-importance";
 
 export const revalidate = 300;
 
@@ -36,7 +36,7 @@ export default async function AssemblyPage(props: {
         .where(eq(industryCommittee.industryProfileId, profile.id))
     : [];
   const importanceById = profile
-    ? await computeImportance({
+    ? await loadCachedImportance({
         profileId: profile.id,
         committeeCodes: committees.map((c) => c.committeeCode),
       })

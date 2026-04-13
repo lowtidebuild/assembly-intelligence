@@ -22,7 +22,7 @@ import {
   industryProfile,
 } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { DemoWatchPage } from "@/components/demo-watch-page";
@@ -30,7 +30,8 @@ import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
 import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import {
-  computeImportance,
+  importanceTag,
+  loadCachedImportance,
   type ImportanceRecord,
 } from "@/lib/legislator-importance";
 import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
@@ -54,7 +55,7 @@ export default async function WatchPage(props: {
         .where(eq(industryCommittee.industryProfileId, profile.id))
     : [];
   const importanceById = profile
-    ? await computeImportance({
+    ? await loadCachedImportance({
         profileId: profile.id,
         committeeCodes: committees.map((c) => c.committeeCode),
       })
@@ -189,6 +190,7 @@ export default async function WatchPage(props: {
         ],
       });
 
+    revalidateTag(importanceTag(profile.id));
     revalidatePath("/watch");
     revalidatePath("/assembly");
     revalidatePath("/briefing");

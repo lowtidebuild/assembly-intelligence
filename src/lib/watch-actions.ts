@@ -1,10 +1,11 @@
 "use server";
 
 import { and, eq } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { db } from "@/db";
 import { industryLegislatorWatch, industryProfile } from "@/db/schema";
 import { isDemoMode } from "@/lib/demo-mode";
+import { importanceTag } from "@/lib/legislator-importance";
 
 const PAGES_TO_REVALIDATE = [
   "/briefing",
@@ -18,6 +19,10 @@ function revalidateAll() {
   for (const path of PAGES_TO_REVALIDATE) {
     revalidatePath(path);
   }
+}
+
+function revalidateImportance(profileId: number) {
+  revalidateTag(importanceTag(profileId));
 }
 
 async function loadActiveProfileId(): Promise<number | null> {
@@ -68,6 +73,7 @@ export async function addLegislatorToWatchAction(formData: FormData) {
       ],
     });
 
+  revalidateImportance(profileId);
   revalidateAll();
 }
 
@@ -92,5 +98,6 @@ export async function removeLegislatorFromWatchAction(formData: FormData) {
       ),
     );
 
+  revalidateImportance(profileId);
   revalidateAll();
 }

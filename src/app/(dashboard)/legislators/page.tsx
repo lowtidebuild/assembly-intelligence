@@ -5,7 +5,7 @@ import { industryCommittee, industryProfile, legislator } from "@/db/schema";
 import { PageHeader } from "@/components/page-header";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
 import {
-  computeImportance,
+  loadCachedImportance,
   type ImportanceRecord,
 } from "@/lib/legislator-importance";
 import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
@@ -84,7 +84,7 @@ export default async function LegislatorsPage(props: {
       .from(legislator)
       .where(eq(legislator.isActive, true)),
     profile
-      ? computeImportance({
+      ? loadCachedImportance({
           profileId: profile.id,
           committeeCodes: industryCommittees.map((c) => c.committeeCode),
         })
