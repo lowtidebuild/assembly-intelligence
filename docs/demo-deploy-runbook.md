@@ -64,16 +64,19 @@ ParlaWatch+에는 사실상 두 종류의 데모가 있습니다.
 코드 병합 전 또는 배포 직전, 로컬에서 아래를 모두 통과시킵니다.
 
 ```bash
-pnpm exec tsc --noEmit
-pnpm lint
-pnpm test
-pnpm build
+pnpm ci:check
 ```
 
 선택:
 
 ```bash
 pnpm test:e2e
+```
+
+스키마까지 같이 확인하려면:
+
+```bash
+pnpm preflight:schema
 ```
 
 ---
@@ -164,7 +167,7 @@ pnpm dev
 새 터미널에서:
 
 ```bash
-pnpm tsx scripts/export-static.ts
+pnpm static:export
 ```
 
 생성물:
@@ -177,17 +180,18 @@ pnpm tsx scripts/export-static.ts
 ### 3-3. 단일 번들 재생성
 
 ```bash
-pnpm tsx scripts/bundle-static.ts
+pnpm static:bundle
 ```
 
 생성물:
 
 - `examples/app.html`
+- `docs/index.html`
 
 ### 3-4. 오프라인 검증
 
 ```bash
-pnpm tsx scripts/verify-bundle.ts
+pnpm static:verify
 ```
 
 성공 기준:
@@ -197,7 +201,13 @@ pnpm tsx scripts/verify-bundle.ts
 
 ### 3-5. docs/index.html 갱신
 
-배포/문서용 인덱스를 별도로 쓰고 있다면 정적 예제와 함께 최신 상태로 맞춥니다.
+`pnpm static:bundle` 실행 시 `examples/app.html`과 함께 `docs/index.html`도 같이 갱신됩니다.
+
+한 번에 끝내려면:
+
+```bash
+pnpm static:refresh
+```
 
 ---
 
@@ -218,10 +228,8 @@ pnpm tsx scripts/verify-bundle.ts
 
 ## 5. 배포 후 확인 체크리스트
 
-- [ ] `pnpm exec tsc --noEmit`
-- [ ] `pnpm lint`
-- [ ] `pnpm test`
-- [ ] `pnpm build`
+- [ ] `pnpm ci:check`
+- [ ] `pnpm preflight:schema`
 - [ ] 대상 DB에 최신 migration 적용
 - [ ] `information_schema`로 신규 컬럼 확인
 - [ ] `/api/health` 200 확인
@@ -230,7 +238,9 @@ pnpm tsx scripts/verify-bundle.ts
 - [ ] 데모 모드에서 수정 액션이 차단되는지 확인
 - [ ] UI 변경 시 `examples/*.html` 재생성
 - [ ] `examples/app.html` 재생성
-- [ ] `pnpm tsx scripts/verify-bundle.ts` 통과
+- [ ] `docs/index.html` 갱신
+- [ ] `pnpm static:verify` 통과
+- [ ] `pnpm smoke:postdeploy` 통과
 
 ---
 

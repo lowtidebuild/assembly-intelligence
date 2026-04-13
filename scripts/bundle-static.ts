@@ -23,7 +23,7 @@
  * The result is a single ~350 KB HTML file that works offline.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 interface PageSpec {
@@ -48,6 +48,7 @@ const PAGES: PageSpec[] = [
 ];
 
 const EXAMPLES_DIR = resolve("examples");
+const DOCS_DIR = resolve("docs");
 
 function extractCss(html: string): string {
   const m = html.match(/<style data-inlined="true">([\s\S]*?)<\/style>/);
@@ -275,11 +276,14 @@ ${sections.join("\n\n")}
 </html>`;
 
   const outPath = resolve(EXAMPLES_DIR, "app.html");
+  mkdirSync(DOCS_DIR, { recursive: true });
   writeFileSync(outPath, bundled, "utf-8");
+  writeFileSync(resolve(DOCS_DIR, "index.html"), bundled, "utf-8");
   const bytes = Buffer.byteLength(bundled, "utf-8");
   console.log(
     `\n✅ examples/app.html (${Math.round(bytes / 1024)} KB, ${PAGES.length} pages)`,
   );
+  console.log("   mirrored to docs/index.html");
   console.log(`   open examples/app.html to browse`);
 }
 
