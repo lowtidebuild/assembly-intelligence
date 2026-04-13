@@ -16,6 +16,14 @@ import {
 } from "@/components/legislator-importance-star";
 import type { ImportanceRecord } from "@/lib/legislator-importance";
 
+function formatIsoDate(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const date =
+    value instanceof Date ? value : new Date(typeof value === "string" ? value : "");
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10).replaceAll("-", ".");
+}
+
 export function BillKeyCard({
   number,
   bill,
@@ -38,6 +46,8 @@ export function BillKeyCard({
   proposerImportance?: ImportanceRecord | null;
   proposerHref?: string | null;
 }) {
+  const proposalDate = formatIsoDate(bill.proposalDate);
+
   return (
     <div className="grid grid-cols-[24px_1fr_auto] gap-3 rounded-[var(--radius)] border border-l-4 border-[var(--color-border)] border-l-[var(--color-domain)] bg-[var(--color-surface)] p-[13px_15px] shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]">
       <div className="pt-[2px] text-[13px] font-extrabold text-[var(--color-primary)]">
@@ -89,12 +99,10 @@ export function BillKeyCard({
               )}
             </span>
           )}
-          {bill.proposalDate && (
+          {proposalDate && (
             <>
               <span>·</span>
-              <span>
-                {bill.proposalDate.toISOString().slice(0, 10).replaceAll("-", ".")}
-              </span>
+              <span>{proposalDate}</span>
             </>
           )}
         </div>

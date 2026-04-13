@@ -484,6 +484,8 @@ function NewsRow({
     publishedAt: Date | null;
   };
 }) {
+  const publishedDate = formatIsoDate(item.publishedAt);
+
   return (
     <li className="border-b border-[var(--color-border)] py-[10px] last:border-b-0 last:pb-0 first:pt-0">
       <a
@@ -502,12 +504,8 @@ function NewsRow({
               {item.source}
             </span>
           )}
-          {item.source && item.publishedAt && <span>·</span>}
-          {item.publishedAt && (
-            <span>
-              {item.publishedAt.toISOString().slice(0, 10).replaceAll("-", ".")}
-            </span>
-          )}
+          {item.source && publishedDate && <span>·</span>}
+          {publishedDate && <span>{publishedDate}</span>}
         </div>
       </a>
     </li>
@@ -596,11 +594,13 @@ function NewBillRow({
     relevanceScore: number | null;
   };
 }) {
+  const proposalDate = formatMonthDay(b.proposalDate);
+
   return (
     <div className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[13px]">
-      {b.proposalDate && (
+      {proposalDate && (
         <span className="shrink-0 rounded-[4px] bg-[var(--color-surface-2)] px-[7px] py-[2px] font-mono text-[11px] font-semibold text-[var(--color-text-secondary)]">
-          {b.proposalDate.toISOString().slice(5, 10)}
+          {proposalDate}
         </span>
       )}
       <span className="min-w-0 flex-1 truncate font-medium text-[var(--color-text)]">
@@ -672,6 +672,26 @@ function PartyBadge({
       {label}
     </span>
   );
+}
+
+function normalizeDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  const date =
+    value instanceof Date ? value : new Date(typeof value === "string" ? value : "");
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function formatIsoDate(value: Date | string | null | undefined): string | null {
+  const date = normalizeDate(value);
+  if (!date) return null;
+  return date.toISOString().slice(0, 10).replaceAll("-", ".");
+}
+
+function formatMonthDay(value: Date | string | null | undefined): string | null {
+  const date = normalizeDate(value);
+  if (!date) return null;
+  return date.toISOString().slice(5, 10);
 }
 
 function daysLeftFromToday(dateOnly: string | null): number | null {
