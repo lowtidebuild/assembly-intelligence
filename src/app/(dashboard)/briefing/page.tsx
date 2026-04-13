@@ -19,8 +19,10 @@ import {
   dailyBriefing,
   industryCommittee,
   industryProfile,
+  legislationNotice,
+  type LegislationNotice,
 } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { ContextStrip } from "@/components/context-strip";
 import { BillKeyCard } from "@/components/bill-key-card";
@@ -32,6 +34,7 @@ import {
   makeProposerKey,
 } from "@/lib/legislator-importance";
 import { loadRecentNews } from "@/services/news-sync";
+import { cn } from "@/lib/utils";
 import { FileText, RefreshCw, Newspaper, ExternalLink } from "lucide-react";
 
 export const dynamic = "force-dynamic"; // always fresh DB reads
@@ -62,7 +65,7 @@ export default async function BriefingPage(props: {
     .from(industryCommittee)
     .where(eq(industryCommittee.industryProfileId, profile.id));
 
-  const [latestBriefing, topBills, recentBills, newsItems, importanceById] =
+  const [latestBriefing, topBills, relevantNotices, recentBills, newsItems, importanceById] =
     await Promise.all([
       db
         .select()
@@ -74,6 +77,17 @@ export default async function BriefingPage(props: {
         .from(bill)
         .orderBy(desc(bill.relevanceScore), desc(bill.proposalDate))
         .limit(4),
+      db
+        .select()
+        .from(legislationNotice)
+        .where(
+          and(
+            eq(legislationNotice.isRelevant, true),
+            sql`${legislationNotice.noticeEndDate} >= CURRENT_DATE`,
+          ),
+        )
+        .orderBy(asc(legislationNotice.noticeEndDate))
+        .limit(10),
       db.select().from(bill).orderBy(desc(bill.proposalDate)).limit(10),
       loadRecentNews(8),
       computeImportance({
@@ -143,6 +157,20 @@ export default async function BriefingPage(props: {
               </div>
             )}
           </Section>
+
+          {relevantNotices.length > 0 && (
+            <Section
+              title="입법예고"
+              sublabel="의견제출 마감일 기준"
+              count={relevantNotices.length}
+            >
+              <div className="flex flex-col gap-[6px]">
+                {relevantNotices.map((notice) => (
+                  <LegislationNoticeRow key={notice.id} notice={notice} />
+                ))}
+              </div>
+            </Section>
+          )}
 
           <Section title="신규 발의" count={recentBills.length}>
             {recentBills.length === 0 ? (
@@ -344,6 +372,36 @@ function NewBillRow({
   );
 }
 
+function LegislationNoticeRow({
+  notice,
+}: {
+  notice: LegislationNotice;
+}) {
+  const daysLeft = daysLeftFromToday(notice.noticeEndDate);
+  const isUrgent = daysLeft !== null && daysLeft <= 3;
+
+  return (
+    <div className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[13px]">
+      <span
+        className={cn(
+          "shrink-0 rounded-[4px] px-[7px] py-[2px] font-mono text-[11px] font-semibold",
+          isUrgent
+            ? "bg-[var(--color-error)] text-white"
+            : "bg-[var(--color-warning)] text-[#78350f]",
+        )}
+      >
+        {daysLeft !== null ? `D-${daysLeft}` : notice.noticeEndDate ?? "마감일 미정"}
+      </span>
+      <span className="min-w-0 flex-1 truncate font-medium text-[var(--color-text)]">
+        {notice.billName}
+      </span>
+      <span className="shrink-0 text-[11px] text-[var(--color-text-secondary)]">
+        {notice.committee ?? notice.proposerType ?? "위원회 미정"}
+      </span>
+    </div>
+  );
+}
+
 function PartyBadge({
   party,
   className,
@@ -370,6 +428,18 @@ function PartyBadge({
       {label}
     </span>
   );
+}
+
+function daysLeftFromToday(dateOnly: string | null): number | null {
+  if (!dateOnly) return null;
+  const now = new Date();
+  const kstToday = new Date(now.getTime() + 9 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const targetMs = Date.parse(`${dateOnly}T00:00:00Z`);
+  const todayMs = Date.parse(`${kstToday}T00:00:00Z`);
+  if (Number.isNaN(targetMs) || Number.isNaN(todayMs)) return null;
+  return Math.max(0, Math.round((targetMs - todayMs) / 86400000));
 }
 
 /**

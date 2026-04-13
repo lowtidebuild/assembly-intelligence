@@ -407,6 +407,34 @@ export const newsArticle = pgTable(
   ],
 );
 
+/**
+ * LegislationNotice — pre-filing public notice items fetched from
+ * `assembly_org({ type: "legislation_notice" })`.
+ *
+ * These are not formal bills yet, but they are early warning signals
+ * for the industry profile. We store only the small metadata slice
+ * exposed by the MCP endpoint and mark rows as relevant via title-only
+ * keyword matching during morning sync.
+ */
+export const legislationNotice = pgTable(
+  "legislation_notice",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    billNumber: text("bill_number").notNull().unique(),
+    billName: text("bill_name").notNull(),
+    proposerType: text("proposer_type"),
+    committee: text("committee"),
+    noticeEndDate: date("notice_end_date"),
+    isRelevant: boolean("is_relevant").notNull().default(false),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_legislation_notice_relevant").on(t.isRelevant, t.noticeEndDate)],
+);
+
 /* ─────────────────────────────────────────────────────────────
  * App state
  * ────────────────────────────────────────────────────────────── */
@@ -605,6 +633,8 @@ export type NewBill = typeof bill.$inferInsert;
 export type BillTimeline = typeof billTimeline.$inferSelect;
 export type Vote = typeof vote.$inferSelect;
 export type NewsArticle = typeof newsArticle.$inferSelect;
+export type LegislationNotice = typeof legislationNotice.$inferSelect;
+export type NewLegislationNotice = typeof legislationNotice.$inferInsert;
 export type Alert = typeof alert.$inferSelect;
 export type DailyBriefing = typeof dailyBriefing.$inferSelect;
 export type RelevanceOverride = typeof relevanceOverride.$inferSelect;

@@ -49,10 +49,12 @@ import {
   billTimeline,
   industryProfile,
   industryCommittee,
+  legislationNotice,
   legislator,
   syncLog,
   alert,
   type NewBill,
+  type NewLegislationNotice,
   type NewLegislator,
   type Bill,
 } from "@/db/schema";
@@ -235,6 +237,20 @@ interface McpScheduleResponse {
   items?: McpScheduleRow[];
 }
 
+interface McpLegislationNoticeItem {
+  의안번호: string;
+  법률안명: string;
+  제안자구분: string | null;
+  소관위: string | null;
+  게시종료일: string | null;
+}
+
+interface McpLegislationNoticeResponse {
+  type?: string;
+  total?: number;
+  items?: McpLegislationNoticeItem[];
+}
+
 /** Normalized schedule item passed to the briefing generator. */
 export interface ScheduleItem {
   date: string;
@@ -414,6 +430,12 @@ function keywordMatches(
 ): boolean {
   if (keywords.length === 0) return true; // no filter → keep all
   const haystack = (listItem.의안명 ?? "").toLowerCase();
+  return keywords.some((kw) => haystack.includes(kw.toLowerCase()));
+}
+
+function noticeIsRelevant(billName: string, keywords: string[]): boolean {
+  if (keywords.length === 0) return false;
+  const haystack = billName.toLowerCase();
   return keywords.some((kw) => haystack.includes(kw.toLowerCase()));
 }
 
@@ -673,6 +695,13 @@ export async function runMorningSync(
     // BriefingGenerator is responsible for persisting to daily_briefing
   } catch (err) {
     errors.push(`briefing: ${errorMessage(err)}`);
+  }
+
+  // 10. Legislation notice monitoring (pre-filing early signals)
+  try {
+    await syncLegislationNotices(keywords);
+  } catch (err) {
+    errors.push(`legislation_notices: ${errorMessage(err)}`);
   }
 
   // 11. Write sync log
@@ -963,6 +992,52 @@ export async function syncLegislators(): Promise<number> {
   }
 
   return inserts.length;
+}
+
+/**
+ * Fetch legislation notices from assembly_org and persist them as an
+ * early-warning feed for the briefing page.
+ */
+export async function syncLegislationNotices(
+  keywords: string[],
+): Promise<number> {
+  const resp = await callMcpToolOrThrow<McpLegislationNoticeResponse>(
+    "assembly_org",
+    {
+      type: "legislation_notice",
+      page_size: 50,
+    },
+  );
+
+  const rows: NewLegislationNotice[] = (resp.items ?? [])
+    .filter((item) => item.의안번호 && item.법률안명)
+    .map((item) => ({
+      billNumber: item.의안번호,
+      billName: item.법률안명,
+      proposerType: item.제안자구분,
+      committee: item.소관위,
+      noticeEndDate: normalizeDateOnly(item.게시종료일),
+      isRelevant: noticeIsRelevant(item.법률안명, keywords),
+    }));
+
+  if (rows.length === 0) return 0;
+
+  await db
+    .insert(legislationNotice)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: legislationNotice.billNumber,
+      set: {
+        billName: sql`excluded.bill_name`,
+        proposerType: sql`excluded.proposer_type`,
+        committee: sql`excluded.committee`,
+        noticeEndDate: sql`excluded.notice_end_date`,
+        isRelevant: sql`excluded.is_relevant`,
+        fetchedAt: sql`NOW()`,
+      },
+    });
+
+  return rows.filter((row) => row.isRelevant).length;
 }
 
 /* ─────────────────────────────────────────────────────────────
