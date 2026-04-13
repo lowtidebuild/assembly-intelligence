@@ -25,7 +25,7 @@ import {
   legislator,
 } from "@/db/schema";
 import { asc, eq } from "drizzle-orm";
-import { INDUSTRY_PRESETS } from "@/lib/industry-presets";
+import { INDUSTRY_PRESETS, getPreset } from "@/lib/industry-presets";
 import { ALL_COMMITTEES } from "@/lib/assembly-committees";
 import { SetupWizard } from "@/components/setup-wizard";
 
@@ -80,6 +80,7 @@ export default async function SetupPage() {
         icon: p.icon,
         description: p.description,
         keywords: p.keywords,
+        excludeKeywords: p.excludeKeywords,
         suggestedCommittees: p.suggestedCommittees,
         llmContext: p.llmContext,
         presetVersion: p.presetVersion,
@@ -102,6 +103,10 @@ export default async function SetupPage() {
               icon: existingProfile.icon,
               description: existingProfile.description,
               keywords: existingProfile.keywords,
+              excludeKeywords:
+                existingProfile.excludeKeywords.length > 0
+                  ? existingProfile.excludeKeywords
+                  : (getPreset(existingProfile.slug)?.excludeKeywords ?? []),
               llmContext: existingProfile.llmContext,
               presetVersion: existingProfile.presetVersion,
               committees: existingCommittees,

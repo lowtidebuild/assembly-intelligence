@@ -1,4 +1,5 @@
 import { decodeHtmlEntities } from "@/lib/html-entities";
+import { findRelevantIncludeKeywords } from "@/lib/keyword-relevance";
 
 export interface TranscriptAgendaItem {
   sortOrder: number;
@@ -32,6 +33,7 @@ export interface ParsedCommitteeTranscript {
 
 interface ParseOptions {
   keywords?: string[];
+  excludeKeywords?: string[];
   meetingName?: string | null;
   meetingDate?: string | null;
 }
@@ -89,7 +91,11 @@ export function parseRecordMinutesHtml(
   const sessionLabel = [turn, number].filter(Boolean).join(" · ") || null;
 
   const agendaItems = parseAgendaItems(bodyHtml);
-  const utterances = parseUtterances(bodyHtml, options.keywords ?? []);
+  const utterances = parseUtterances(
+    bodyHtml,
+    options.keywords ?? [],
+    options.excludeKeywords ?? [],
+  );
   const fullText = utterances.map((entry) => entry.content).filter(Boolean).join("\n\n");
 
   return {
@@ -159,6 +165,7 @@ function parseAgendaItems(bodyHtml: string): TranscriptAgendaItem[] {
 function parseUtterances(
   bodyHtml: string,
   keywords: string[],
+  excludeKeywords: string[],
 ): ParsedTranscriptUtterance[] {
   const utterances: ParsedTranscriptUtterance[] = [];
   let sortOrder = 1;
@@ -190,7 +197,11 @@ function parseUtterances(
 
     if (!content) continue;
 
-    const matchedKeywords = findMatchedKeywords(content, keywords);
+    const matchedKeywords = findRelevantIncludeKeywords(
+      content,
+      keywords,
+      excludeKeywords,
+    );
     utterances.push({
       sortOrder: sortOrder++,
       speakerName,
@@ -208,18 +219,6 @@ function parseUtterances(
   }
 
   return utterances;
-}
-
-function findMatchedKeywords(text: string, keywords: string[]): string[] {
-  const lower = text.toLowerCase();
-  return Array.from(
-    new Set(
-      keywords
-        .map((keyword) => keyword.trim())
-        .filter(Boolean)
-        .filter((keyword) => lower.includes(keyword.toLowerCase())),
-    ),
-  );
 }
 
 function captureSection(value: string, regex: RegExp): string {

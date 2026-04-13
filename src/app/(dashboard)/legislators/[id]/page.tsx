@@ -25,6 +25,7 @@ import {
 import { isDemoMode } from "@/lib/demo-mode";
 import { DemoWatchCardControls } from "@/components/demo-watch-controls";
 import { flattenErrorText } from "@/lib/db-compat";
+import { buildTranscriptSnippet } from "@/lib/transcript-parser";
 import { loadTranscriptHitsForLegislator } from "@/services/transcript-sync";
 import { ExternalLink, Minus, Plus } from "lucide-react";
 
@@ -306,17 +307,20 @@ export default async function LegislatorDetailPage(props: {
             <div className="space-y-2">
               {transcriptHits.map((entry) => (
                 <Link
-                  key={`${entry.minutesId}-${entry.snippet ?? "none"}`}
-                  href={`/transcripts/${entry.minutesId}`}
+                  key={`${entry.minutesId}-${entry.utteranceId}`}
+                  href={`/transcripts/${entry.minutesId}#utterance-${entry.utteranceId}`}
                   className="block rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-3 transition-colors hover:bg-[var(--color-surface)]"
                 >
+                  <div className="text-[12px] font-medium leading-snug text-[var(--color-text)]">
+                    {entry.meetingName}
+                  </div>
                   <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]">
                     <span className="font-semibold text-[var(--color-primary)]">
                       {entry.committee ?? "위원회 미상"}
                     </span>
-                    {entry.meetingDate && (
-                      <span>{entry.meetingDate}</span>
-                    )}
+                    {entry.meetingDate && <span>{entry.meetingDate}</span>}
+                    {entry.sessionLabel && <span>· {entry.sessionLabel}</span>}
+                    {entry.place && <span>· {entry.place}</span>}
                     {entry.speakerRole && <span>· {entry.speakerRole}</span>}
                   </div>
                   {entry.matchedKeywords.length > 0 && (
@@ -331,11 +335,15 @@ export default async function LegislatorDetailPage(props: {
                       ))}
                     </div>
                   )}
-                  {entry.snippet && (
-                    <p className="mt-2 line-clamp-3 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
-                      {entry.snippet}
+                  {(entry.content || entry.snippet) && (
+                    <p className="mt-2 line-clamp-5 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+                      {buildTranscriptSnippet(entry.content ?? "", entry.matchedKeywords, 220) ??
+                        entry.snippet}
                     </p>
                   )}
+                  <div className="mt-2 text-[11px] font-medium text-[var(--color-primary)]">
+                    해당 원문 발언 보기
+                  </div>
                 </Link>
               ))}
             </div>

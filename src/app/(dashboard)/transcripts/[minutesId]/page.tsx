@@ -30,6 +30,7 @@ export default async function TranscriptDetailPage(props: {
   }
 
   const { transcript, utterances } = payload;
+  const keywordHits = utterances.filter((entry) => entry.hasKeywordMatch);
   const uniqueSpeakerNames = Array.from(
     new Set(utterances.map((entry) => entry.speakerName).filter(Boolean)),
   );
@@ -100,6 +101,9 @@ export default async function TranscriptDetailPage(props: {
             {transcript.meetingName}
           </h2>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-[var(--color-text-secondary)]">
+            {transcript.committee && <span>{transcript.committee}</span>}
+            {transcript.committee && transcript.meetingDate && <span>·</span>}
+            {transcript.meetingDate && <span>{transcript.meetingDate}</span>}
             {transcript.sessionLabel && <span>{transcript.sessionLabel}</span>}
             {transcript.place && (
               <>
@@ -111,7 +115,7 @@ export default async function TranscriptDetailPage(props: {
             <span>발언 {transcript.utteranceCount}개</span>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
             {transcript.sourceUrl && (
               <a
                 href={transcript.sourceUrl}
@@ -146,6 +150,29 @@ export default async function TranscriptDetailPage(props: {
               </a>
             )}
           </div>
+
+          <dl className="mt-5 grid gap-y-2 text-[12px] md:grid-cols-[120px_1fr]">
+            <div className="contents">
+              <dt className="text-[var(--color-text-tertiary)]">회의명</dt>
+              <dd className="text-[var(--color-text)]">{transcript.meetingName}</dd>
+            </div>
+            <div className="contents">
+              <dt className="text-[var(--color-text-tertiary)]">위원회</dt>
+              <dd className="text-[var(--color-text)]">{transcript.committee ?? "미상"}</dd>
+            </div>
+            <div className="contents">
+              <dt className="text-[var(--color-text-tertiary)]">일시</dt>
+              <dd className="text-[var(--color-text)]">{transcript.meetingDate ?? "미상"}</dd>
+            </div>
+            <div className="contents">
+              <dt className="text-[var(--color-text-tertiary)]">차수</dt>
+              <dd className="text-[var(--color-text)]">{transcript.sessionLabel ?? "미상"}</dd>
+            </div>
+            <div className="contents">
+              <dt className="text-[var(--color-text-tertiary)]">장소</dt>
+              <dd className="text-[var(--color-text)]">{transcript.place ?? "미상"}</dd>
+            </div>
+          </dl>
         </section>
 
         {transcript.agendaItems.length > 0 && (
@@ -185,6 +212,80 @@ export default async function TranscriptDetailPage(props: {
           </section>
         )}
 
+        {keywordHits.length > 0 && (
+          <section className="rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-card)]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-[14px] font-bold text-[var(--color-text)]">
+                  키워드 언급 발언
+                </h3>
+                <p className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
+                  산업 키워드가 실제로 언급된 원문 발언만 먼저 모아봤습니다.
+                </p>
+              </div>
+              <div className="rounded-[10px] bg-[var(--color-primary-light)] px-3 py-1 text-[11px] font-semibold text-[var(--color-primary)]">
+                {keywordHits.length}건
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {keywordHits.map((utterance) => {
+                const member = legislatorMap.get(utterance.speakerName);
+                return (
+                  <article
+                    key={`hit-${utterance.id}`}
+                    className="rounded-[var(--radius)] border border-[var(--color-primary)] bg-[var(--color-primary-light)] px-4 py-4"
+                  >
+                    <div className="flex flex-wrap items-start gap-3">
+                      <LegislatorAvatar
+                        name={utterance.speakerName}
+                        photoUrl={member?.photoUrl ?? utterance.speakerPhotoUrl}
+                        size={40}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[14px] font-semibold text-[var(--color-text)]">
+                            {utterance.speakerName}
+                          </span>
+                          {utterance.speakerRole && (
+                            <span className="text-[12px] text-[var(--color-text-secondary)]">
+                              {utterance.speakerRole}
+                            </span>
+                          )}
+                          {utterance.speakerArea && (
+                            <span className="text-[11px] text-[var(--color-text-tertiary)]">
+                              {utterance.speakerArea}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {utterance.matchedKeywords.map((keyword) => (
+                            <span
+                              key={`hit-${utterance.id}-${keyword}`}
+                              className="rounded-[999px] bg-[var(--color-surface)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]"
+                            >
+                              {keyword}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <a
+                        href={`#utterance-${utterance.id}`}
+                        className="text-[11px] font-semibold text-[var(--color-primary)] hover:underline"
+                      >
+                        원문 위치로 이동
+                      </a>
+                    </div>
+                    <div className="mt-3 whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--color-text)]">
+                      {utterance.content}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         <section className="rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-card)]">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
@@ -206,11 +307,12 @@ export default async function TranscriptDetailPage(props: {
               return (
                 <article
                   key={utterance.id}
+                  id={`utterance-${utterance.id}`}
                   className={`rounded-[var(--radius)] border px-4 py-4 ${
                     utterance.hasKeywordMatch
                       ? "border-[var(--color-primary)] bg-[var(--color-primary-light)]"
                       : "border-[var(--color-border)] bg-[var(--color-surface-2)]"
-                  }`}
+                  } scroll-mt-24 target:ring-2 target:ring-[var(--color-primary)]`}
                 >
                   <div className="flex flex-wrap items-start gap-3">
                     <LegislatorAvatar

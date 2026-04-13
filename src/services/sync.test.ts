@@ -55,6 +55,14 @@ describe("noticeIsRelevant", () => {
     ).toBe(true);
   });
 
+  it("suppresses false positives when excluded phrases match", () => {
+    expect(
+      noticeIsRelevant("제로섬 게임 구조 개선에 관한 토론회", ["게임"], [
+        "제로섬 게임",
+      ]),
+    ).toBe(false);
+  });
+
   it("returns false when keyword list is empty or unmatched", () => {
     expect(noticeIsRelevant("게임산업진흥법", [])).toBe(false);
     expect(noticeIsRelevant("방송통신발전법", ["게임"])).toBe(false);
@@ -67,6 +75,14 @@ describe("textIsRelevant", () => {
       true,
     );
     expect(textIsRelevant("게임업계 관련 공식 보도자료", ["게임"])).toBe(true);
+  });
+
+  it("suppresses excluded keyword phrases", () => {
+    expect(
+      textIsRelevant("이번 보고서는 제로섬 게임 구조를 설명합니다.", ["게임"], [
+        "제로섬 게임",
+      ]),
+    ).toBe(false);
   });
 
   it("returns false for empty text or unmatched keywords", () => {

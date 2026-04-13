@@ -46,6 +46,7 @@ export interface PresetDTO {
   icon: string;
   description: string;
   keywords: string[];
+  excludeKeywords: string[];
   suggestedCommittees: string[];
   llmContext: string;
   presetVersion: string;
@@ -58,6 +59,7 @@ export interface ExistingProfileDTO {
   icon: string;
   description: string;
   keywords: string[];
+  excludeKeywords: string[];
   llmContext: string;
   presetVersion: string | null;
   committees: string[];
@@ -84,6 +86,7 @@ interface WizardState {
   icon: string;
   description: string;
   keywords: string[];
+  excludeKeywords: string[];
   llmContext: string;
   presetVersion: string | null;
   committees: string[];
@@ -98,6 +101,7 @@ function initialStateFromProfile(p: ExistingProfileDTO): WizardState {
     icon: p.icon,
     description: p.description,
     keywords: [...p.keywords],
+    excludeKeywords: [...p.excludeKeywords],
     llmContext: p.llmContext,
     presetVersion: p.presetVersion,
     committees: [...p.committees],
@@ -113,6 +117,7 @@ function initialStateFromPreset(p: PresetDTO): WizardState {
     icon: p.icon,
     description: p.description,
     keywords: [...p.keywords],
+    excludeKeywords: [...p.excludeKeywords],
     llmContext: p.llmContext,
     presetVersion: p.presetVersion,
     committees: [...p.suggestedCommittees],
@@ -128,6 +133,7 @@ function emptyCustomState(): WizardState {
     icon: "📊",
     description: "",
     keywords: [],
+    excludeKeywords: [],
     llmContext: "",
     presetVersion: null,
     committees: [],
@@ -214,6 +220,7 @@ export function SetupWizard({
             icon: state.icon || "📊",
             description: state.description.trim(),
             keywords: state.keywords,
+            excludeKeywords: state.excludeKeywords,
             llmContext: state.llmContext.trim(),
             presetVersion: state.presetVersion,
             committees: state.committees,
@@ -461,26 +468,6 @@ function Step2Keywords({
   onChange: (s: WizardState) => void;
   isEditMode: boolean;
 }) {
-  const [pendingKeyword, setPendingKeyword] = useState("");
-
-  const addKeyword = () => {
-    const kw = pendingKeyword.trim();
-    if (!kw) return;
-    if (state.keywords.includes(kw)) {
-      setPendingKeyword("");
-      return;
-    }
-    onChange({ ...state, keywords: [...state.keywords, kw] });
-    setPendingKeyword("");
-  };
-
-  const removeKeyword = (kw: string) => {
-    onChange({
-      ...state,
-      keywords: state.keywords.filter((k) => k !== kw),
-    });
-  };
-
   return (
     <div>
       <div className="mb-6">
@@ -546,50 +533,47 @@ function Step2Keywords({
         </FieldLabel>
 
         {/* Keywords */}
-        <FieldLabel label={`키워드 (${state.keywords.length}개) *`}>
-          <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {state.keywords.length === 0 && (
-                <span className="text-[11px] italic text-[var(--color-text-tertiary)]">
-                  아래 입력창에 키워드를 추가하세요
-                </span>
-              )}
-              {state.keywords.map((kw) => (
-                <button
-                  key={kw}
-                  type="button"
-                  onClick={() => removeKeyword(kw)}
-                  className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--color-primary-light)] px-2 py-1 text-[11px] font-semibold text-[var(--color-primary)] hover:bg-[#bfdbfe]"
-                >
-                  {kw}
-                  <X className="h-3 w-3" />
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={pendingKeyword}
-                onChange={(e) => setPendingKeyword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addKeyword();
-                  }
-                }}
-                placeholder="키워드 입력 후 Enter (예: 확률형 아이템)"
-                className="flex-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-[12px] focus:border-[var(--color-primary)] focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={addKeyword}
-                disabled={!pendingKeyword.trim()}
-                className="rounded-[var(--radius-sm)] bg-[var(--color-primary)] px-3 text-[12px] font-semibold text-white disabled:opacity-50"
-              >
-                추가
-              </button>
-            </div>
-          </div>
+        <FieldLabel label={`포함 키워드 (${state.keywords.length}개) *`}>
+          <KeywordChipEditor
+            items={state.keywords}
+            placeholder="포함 키워드 입력 후 Enter (예: 확률형 아이템)"
+            emptyHint="이 산업을 잡아내는 핵심 키워드를 추가하세요"
+            tone="primary"
+            onAdd={(kw) =>
+              onChange({ ...state, keywords: [...state.keywords, kw] })
+            }
+            onRemove={(kw) =>
+              onChange({
+                ...state,
+                keywords: state.keywords.filter((k) => k !== kw),
+              })
+            }
+          />
+        </FieldLabel>
+
+        <FieldLabel label={`제외 키워드 (${state.excludeKeywords.length}개)`}>
+          <KeywordChipEditor
+            items={state.excludeKeywords}
+            placeholder="제외 키워드 입력 후 Enter (예: 제로섬 게임)"
+            emptyHint="넓은 포함 키워드가 잡아내는 false positive를 막는 표현을 추가하세요"
+            tone="warning"
+            onAdd={(kw) =>
+              onChange({
+                ...state,
+                excludeKeywords: [...state.excludeKeywords, kw],
+              })
+            }
+            onRemove={(kw) =>
+              onChange({
+                ...state,
+                excludeKeywords: state.excludeKeywords.filter((k) => k !== kw),
+              })
+            }
+          />
+          <p className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
+            예: 포함 키워드가 `게임`일 때 제외 키워드로 `제로섬 게임`, `게임이론`,
+            `치킨게임`을 넣으면 회의록/입법예고 false positive를 줄일 수 있습니다.
+          </p>
         </FieldLabel>
 
         {/* LLM context */}
@@ -626,6 +610,97 @@ function FieldLabel({
       {label}
       {children}
     </label>
+  );
+}
+
+function KeywordChipEditor({
+  items,
+  placeholder,
+  emptyHint,
+  tone,
+  onAdd,
+  onRemove,
+}: {
+  items: string[];
+  placeholder: string;
+  emptyHint: string;
+  tone: "primary" | "warning";
+  onAdd: (value: string) => void;
+  onRemove: (value: string) => void;
+}) {
+  const [pendingValue, setPendingValue] = useState("");
+
+  const add = () => {
+    const value = pendingValue.trim();
+    if (!value) return;
+    if (items.includes(value)) {
+      setPendingValue("");
+      return;
+    }
+    onAdd(value);
+    setPendingValue("");
+  };
+
+  const chipClassName =
+    tone === "primary"
+      ? "bg-[var(--color-primary-light)] text-[var(--color-primary)] hover:bg-[#bfdbfe]"
+      : "bg-[#fef3c7] text-[#b45309] hover:bg-[#fde68a]";
+
+  const buttonClassName =
+    tone === "primary"
+      ? "bg-[var(--color-primary)] text-white"
+      : "bg-[#b45309] text-white";
+
+  return (
+    <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
+      <div className="mb-2 flex flex-wrap gap-1.5">
+        {items.length === 0 && (
+          <span className="text-[11px] italic text-[var(--color-text-tertiary)]">
+            {emptyHint}
+          </span>
+        )}
+        {items.map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => onRemove(item)}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-2 py-1 text-[11px] font-semibold",
+              chipClassName,
+            )}
+          >
+            {item}
+            <X className="h-3 w-3" />
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={pendingValue}
+          onChange={(e) => setPendingValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder={placeholder}
+          className="flex-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-[12px] focus:border-[var(--color-primary)] focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={add}
+          disabled={!pendingValue.trim()}
+          className={cn(
+            "rounded-[var(--radius-sm)] px-3 text-[12px] font-semibold disabled:opacity-50",
+            buttonClassName,
+          )}
+        >
+          추가
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -936,13 +1011,32 @@ function Step5Confirm({
           </dd>
 
           <dt className="text-[var(--color-text-tertiary)]">
-            키워드 ({state.keywords.length})
+            포함 키워드 ({state.keywords.length})
           </dt>
           <dd className="flex flex-wrap gap-1">
             {state.keywords.map((kw) => (
               <span
                 key={kw}
                 className="rounded-[var(--radius-sm)] bg-[var(--color-primary-light)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-primary)]"
+              >
+                {kw}
+              </span>
+            ))}
+          </dd>
+
+          <dt className="text-[var(--color-text-tertiary)]">
+            제외 키워드 ({state.excludeKeywords.length})
+          </dt>
+          <dd className="flex flex-wrap gap-1">
+            {state.excludeKeywords.length === 0 && (
+              <span className="text-[11px] italic text-[var(--color-text-tertiary)]">
+                없음
+              </span>
+            )}
+            {state.excludeKeywords.map((kw) => (
+              <span
+                key={kw}
+                className="rounded-[var(--radius-sm)] bg-[#fef3c7] px-2 py-0.5 text-[11px] font-semibold text-[#b45309]"
               >
                 {kw}
               </span>

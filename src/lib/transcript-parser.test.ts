@@ -74,6 +74,28 @@ describe("parseRecordMinutesHtml", () => {
     expect(parsed?.utterances[0].snippet).toContain("전자상거래 플랫폼 규제");
     expect(parsed?.utterances[1].speakerPhotoUrl).toBeNull();
   });
+
+  it("drops keyword hits when an excluded phrase matches the utterance", () => {
+    const parsed = parseRecordMinutesHtml(SAMPLE_HTML, {
+      keywords: ["게임"],
+      excludeKeywords: ["제로섬 게임"],
+      meetingName: "제22대 제434회 제3차 문화체육관광위원회",
+    });
+
+    expect(parsed?.utterances[0].matchedKeywords).toEqual(["게임"]);
+
+    const excluded = parseRecordMinutesHtml(
+      SAMPLE_HTML.replace("게임 결제 시스템", "제로섬 게임 구조"),
+      {
+        keywords: ["게임"],
+        excludeKeywords: ["제로섬 게임"],
+        meetingName: "제22대 제434회 제3차 문화체육관광위원회",
+      },
+    );
+
+    expect(excluded?.utterances[0].matchedKeywords).toEqual([]);
+    expect(excluded?.utterances[0].snippet).toBeNull();
+  });
 });
 
 describe("buildTranscriptSnippet", () => {

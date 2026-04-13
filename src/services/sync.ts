@@ -68,6 +68,8 @@ import { callMcpToolOrThrow } from "@/lib/mcp-client";
 import { errorMessage } from "@/lib/api-base";
 import { fetchBillBodyFragment } from "@/lib/bill-scraper";
 import { decodeHtmlEntities } from "@/lib/html-entities";
+import { getPreset } from "@/lib/industry-presets";
+import { evaluateKeywordRelevance } from "@/lib/keyword-relevance";
 import { resolveLegislatorPhotoUrl } from "@/lib/legislator-photo";
 import { syncNews } from "@/services/news-sync";
 import { syncCommitteeTranscripts } from "@/services/transcript-sync";
@@ -566,28 +568,40 @@ function ingestLegislatorRow(
 function keywordMatches(
   listItem: McpBillListItem,
   keywords: string[],
+  excludeKeywords: string[] = [],
 ): boolean {
-  if (keywords.length === 0) return true; // no filter → keep all
-  const haystack = (listItem.의안명 ?? "").toLowerCase();
-  return keywords.some((kw) => haystack.includes(kw.toLowerCase()));
+  return evaluateKeywordRelevance({
+    text: listItem.의안명,
+    includeKeywords: keywords,
+    excludeKeywords,
+    defaultWhenEmpty: true,
+  }).isRelevant;
 }
 
 export function noticeIsRelevant(
   billName: string,
   keywords: string[],
+  excludeKeywords: string[] = [],
 ): boolean {
-  if (keywords.length === 0) return false;
-  const haystack = billName.toLowerCase();
-  return keywords.some((kw) => haystack.includes(kw.toLowerCase()));
+  return evaluateKeywordRelevance({
+    text: billName,
+    includeKeywords: keywords,
+    excludeKeywords,
+    defaultWhenEmpty: false,
+  }).isRelevant;
 }
 
 export function textIsRelevant(
   text: string | null | undefined,
   keywords: string[],
+  excludeKeywords: string[] = [],
 ): boolean {
-  if (!text || keywords.length === 0) return false;
-  const haystack = text.toLowerCase();
-  return keywords.some((kw) => haystack.includes(kw.toLowerCase()));
+  return evaluateKeywordRelevance({
+    text,
+    includeKeywords: keywords,
+    excludeKeywords,
+    defaultWhenEmpty: false,
+  }).isRelevant;
 }
 
 function buildPressExternalId(item: McpPressItem): string {
@@ -896,6 +910,10 @@ export async function runMorningSync(
     .where(eq(industryCommittee.industryProfileId, activeProfile.id));
   const committeeCodes = committees.map((c) => c.committeeCode);
   const keywords = activeProfile.keywords ?? [];
+  const excludeKeywords =
+    activeProfile.excludeKeywords?.length > 0
+      ? activeProfile.excludeKeywords
+      : (getPreset(activeProfile.slug)?.excludeKeywords ?? []);
   const manualWatchRows = await db
     .select({
       billId: bill.billId,
@@ -996,7 +1014,9 @@ export async function runMorningSync(
   billsProcessed = uniqueList.length;
 
   // 5. Keyword pre-filter (title-only)
-  const filtered = uniqueList.filter((b) => keywordMatches(b, keywords));
+  const filtered = uniqueList.filter((b) =>
+    keywordMatches(b, keywords, excludeKeywords),
+  );
   const detailTargets = Array.from(
     new Map(
       [
@@ -1194,19 +1214,19 @@ export async function runMorningSync(
 
   // 10. Legislation notice monitoring (pre-filing early signals)
   try {
-    await syncLegislationNotices(keywords);
+    await syncLegislationNotices(keywords, excludeKeywords);
   } catch (err) {
     errors.push(`legislation_notices: ${errorMessage(err)}`);
   }
 
   try {
-    await syncPetitions(keywords);
+    await syncPetitions(keywords, excludeKeywords);
   } catch (err) {
     errors.push(`petitions: ${errorMessage(err)}`);
   }
 
   try {
-    await syncPressReleases(keywords);
+    await syncPressReleases(keywords, excludeKeywords);
   } catch (err) {
     errors.push(`press: ${errorMessage(err)}`);
   }
@@ -1215,6 +1235,7 @@ export async function runMorningSync(
     const transcriptResult = await syncCommitteeTranscripts(
       keywords,
       committeeCodes,
+      excludeKeywords,
     );
     errors.push(...transcriptResult.errors.map((entry) => `transcripts: ${entry}`));
   } catch (err) {
@@ -1555,6 +1576,7 @@ export async function backfillLegislatorPhotos(limitCount = 50): Promise<number>
  */
 export async function syncLegislationNotices(
   keywords: string[],
+  excludeKeywords: string[] = [],
 ): Promise<number> {
   const resp = await callMcpToolOrThrow<McpLegislationNoticeResponse>(
     "assembly_org",
@@ -1572,7 +1594,7 @@ export async function syncLegislationNotices(
       proposerType: item.제안자구분,
       committee: item.소관위,
       noticeEndDate: normalizeDateOnly(item.게시종료일),
-      isRelevant: noticeIsRelevant(item.법률안명, keywords),
+      isRelevant: noticeIsRelevant(item.법률안명, keywords, excludeKeywords),
     }));
 
   if (rows.length === 0) return 0;
@@ -1597,6 +1619,7 @@ export async function syncLegislationNotices(
 
 export async function syncPetitions(
   keywords: string[],
+  excludeKeywords: string[] = [],
 ): Promise<number> {
   const resp = await callMcpToolOrThrow<McpPetitionResponse>("assembly_org", {
     type: "petition",
@@ -1613,7 +1636,7 @@ export async function syncPetitions(
       committee: item.소관위,
       status: item.처리상태 ?? null,
       proposerName: item.청원인 ?? item.소개의원 ?? null,
-      isRelevant: textIsRelevant(item.청원명, keywords),
+      isRelevant: textIsRelevant(item.청원명, keywords, excludeKeywords),
     }));
 
   if (rows.length === 0) return 0;
@@ -1638,6 +1661,7 @@ export async function syncPetitions(
 
 export async function syncPressReleases(
   keywords: string[],
+  excludeKeywords: string[] = [],
 ): Promise<number> {
   const resp = await callMcpToolOrThrow<McpPressResponse>("assembly_org", {
     type: "press",
@@ -1657,6 +1681,7 @@ export async function syncPressReleases(
       isRelevant: textIsRelevant(
         [item.제목, item.내용미리보기].filter(Boolean).join(" "),
         keywords,
+        excludeKeywords,
       ),
     }));
 

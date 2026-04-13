@@ -21,7 +21,8 @@
  *   nameEn: string,               // English fallback
  *   icon: string,                 // emoji
  *   description: string,
- *   keywords: string[],           // 1-100 items
+ *   keywords: string[],           // include keywords, 1-100 items
+ *   excludeKeywords: string[],    // false-positive suppressors, 0-100 items
  *   llmContext: string,           // 50-5000 chars
  *   presetVersion: string | null, // null = custom
  *   committees: string[],         // canonical Korean names
@@ -52,6 +53,7 @@ const bodySchema = z.object({
   icon: z.string().max(8).default("📊"),
   description: z.string().max(500).default(""),
   keywords: z.array(z.string().min(1).max(60)).min(1).max(100),
+  excludeKeywords: z.array(z.string().min(1).max(60)).max(100).default([]),
   llmContext: z.string().min(20).max(5000),
   presetVersion: z.string().max(50).nullable().default(null),
   committees: z.array(z.string().min(1).max(60)).max(20),
@@ -110,6 +112,7 @@ export async function POST(req: NextRequest) {
         icon: input.icon,
         description: input.description,
         keywords: input.keywords,
+        excludeKeywords: input.excludeKeywords,
         llmContext: input.llmContext,
         presetVersion: input.presetVersion,
         isCustom: input.presetVersion === null,
@@ -122,6 +125,7 @@ export async function POST(req: NextRequest) {
           icon: input.icon,
           description: input.description,
           keywords: input.keywords,
+          excludeKeywords: input.excludeKeywords,
           llmContext: input.llmContext,
           presetVersion: input.presetVersion,
           isCustom: input.presetVersion === null,

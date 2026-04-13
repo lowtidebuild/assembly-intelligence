@@ -54,6 +54,7 @@ const PAGE_SIZE = 50;
 export async function syncCommitteeTranscripts(
   keywords: string[],
   committeeNames: string[],
+  excludeKeywords: string[] = [],
 ): Promise<TranscriptSyncResult> {
   if (committeeNames.length === 0) {
     return {
@@ -74,6 +75,7 @@ export async function syncCommitteeTranscripts(
       const html = await fetchRecordMinutesHtml(candidate.minutesId);
       const parsed = parseRecordMinutesHtml(html, {
         keywords,
+        excludeKeywords,
         meetingName: candidate.meetingName,
         meetingDate: candidate.meetingDate,
       });
@@ -156,13 +158,19 @@ export async function syncCommitteeTranscripts(
 export async function loadRecentTranscriptHits(limitCount = 8) {
   return db
     .select({
+      utteranceId: committeeTranscriptUtterance.id,
       transcriptId: committeeTranscript.id,
       minutesId: committeeTranscript.minutesId,
       committee: committeeTranscript.committee,
       meetingName: committeeTranscript.meetingName,
       meetingDate: committeeTranscript.meetingDate,
+      sessionLabel: committeeTranscript.sessionLabel,
+      place: committeeTranscript.place,
+      sourceUrl: committeeTranscript.sourceUrl,
       speakerName: committeeTranscriptUtterance.speakerName,
       speakerRole: committeeTranscriptUtterance.speakerRole,
+      speakerArea: committeeTranscriptUtterance.speakerArea,
+      content: committeeTranscriptUtterance.content,
       matchedKeywords: committeeTranscriptUtterance.matchedKeywords,
       snippet: committeeTranscriptUtterance.snippet,
     })
@@ -354,11 +362,15 @@ export async function loadTranscriptHitsForLegislator(
 ) {
   return db
     .select({
+      utteranceId: committeeTranscriptUtterance.id,
       minutesId: committeeTranscript.minutesId,
       committee: committeeTranscript.committee,
       meetingName: committeeTranscript.meetingName,
       meetingDate: committeeTranscript.meetingDate,
+      sessionLabel: committeeTranscript.sessionLabel,
+      place: committeeTranscript.place,
       speakerRole: committeeTranscriptUtterance.speakerRole,
+      content: committeeTranscriptUtterance.content,
       matchedKeywords: committeeTranscriptUtterance.matchedKeywords,
       snippet: committeeTranscriptUtterance.snippet,
     })

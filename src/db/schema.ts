@@ -116,6 +116,13 @@ export const industryProfile = pgTable("industry_profile", {
     .$type<string[]>()
     .notNull()
     .default([]),
+  // Negative match phrases that explicitly suppress false positives
+  // from broad include keywords. Example: include "게임" but exclude
+  // "제로섬 게임", "치킨게임", "게임이론".
+  excludeKeywords: jsonb("exclude_keywords")
+    .$type<string[]>()
+    .notNull()
+    .default([]),
   // Injected as system prompt prefix for Gemini relevance scoring.
   llmContext: text("llm_context").notNull().default(""),
   presetVersion: text("preset_version"), // null = custom

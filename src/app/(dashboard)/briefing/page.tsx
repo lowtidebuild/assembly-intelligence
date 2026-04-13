@@ -40,6 +40,7 @@ import {
   loadProposerImportanceMap,
   makeProposerKey,
 } from "@/lib/legislator-importance";
+import { buildTranscriptSnippet } from "@/lib/transcript-parser";
 import { loadRecentNews } from "@/services/news-sync";
 import { loadRecentTranscriptHits } from "@/services/transcript-sync";
 import { cn } from "@/lib/utils";
@@ -738,11 +739,15 @@ function TranscriptHitRow({
 }) {
   const meetingDate = formatIsoDate(item.meetingDate ? new Date(item.meetingDate) : null);
   const keywords = item.matchedKeywords.join(", ");
+  const detailedSnippet =
+    buildTranscriptSnippet(item.content, item.matchedKeywords, 180) ??
+    item.snippet;
+  const transcriptHref = `/transcripts/${item.minutesId}#utterance-${item.utteranceId}`;
 
   return (
     <li className="border-b border-[var(--color-border)] py-[10px] last:border-b-0 last:pb-0 first:pt-0">
       <a
-        href={`/transcripts/${item.minutesId}`}
+        href={transcriptHref}
         className="group block rounded-[var(--radius-sm)] transition-colors hover:bg-[var(--color-surface-2)]"
       >
         <div className="mb-1 flex items-start gap-2 text-[12px] font-medium leading-snug text-[var(--color-text)] group-hover:text-[var(--color-primary)]">
@@ -757,22 +762,31 @@ function TranscriptHitRow({
           )}
           {item.committee && meetingDate && <span>·</span>}
           {meetingDate && <span>{meetingDate}</span>}
-          {(item.committee || meetingDate) && <span>·</span>}
+          {(item.committee || meetingDate) && item.sessionLabel && <span>·</span>}
+          {item.sessionLabel && <span>{item.sessionLabel}</span>}
+          {(item.committee || meetingDate || item.sessionLabel) && item.place && <span>·</span>}
+          {item.place && <span>{item.place}</span>}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--color-text-tertiary)]">
           <span>
             {item.speakerName}
             {item.speakerRole ? ` ${item.speakerRole}` : ""}
           </span>
+          {item.speakerArea && <span>· {item.speakerArea}</span>}
         </div>
         {keywords && (
           <div className="mt-2 text-[10px] font-semibold text-[var(--color-primary)]">
             키워드: {keywords}
           </div>
         )}
-        {item.snippet && (
-          <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
-            {item.snippet}
+        {detailedSnippet && (
+          <p className="mt-2 line-clamp-4 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+            {detailedSnippet}
           </p>
         )}
+        <div className="mt-2 text-[10px] font-medium text-[var(--color-primary)]">
+          해당 발언 자세히 보기
+        </div>
       </a>
     </li>
   );
