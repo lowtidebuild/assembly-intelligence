@@ -42,13 +42,14 @@
  * score on title + committee + proposer alone.
  */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   bill,
   billTimeline,
   industryProfile,
   industryCommittee,
+  industryBillWatch,
   legislationNotice,
   legislator,
   syncLog,
@@ -381,6 +382,45 @@ function normalizeDateOnly(s: string | null | undefined): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
 }
 
+function dateToListDate(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+  }
+  return Number.isNaN(value.getTime()) ? null : value.toISOString().slice(0, 10);
+}
+
+function storedBillToListItem(stored: {
+  billId: string;
+  billNumber: string | null;
+  billName: string;
+  proposerName: string;
+  committee: string | null;
+  proposalDate: Date | string | null;
+  status: string | null;
+  externalLink: string | null;
+}): McpBillListItem {
+  return {
+    의안ID: stored.billId,
+    의안번호: stored.billNumber ?? "",
+    의안명: stored.billName,
+    제안자: stored.proposerName,
+    제안자구분: null,
+    대수: "22",
+    소관위원회: stored.committee,
+    제안일: dateToListDate(stored.proposalDate),
+    처리상태: stored.status,
+    처리일: null,
+    상세링크: stored.externalLink,
+    대표발의자: stored.proposerName,
+    공동발의자: null,
+  };
+}
+
 /** Join MCP staff/secretary name fragments into a single raw string. */
 function joinRawNames(
   ...parts: Array<string | null | undefined>
@@ -597,6 +637,20 @@ export async function runMorningSync(
     .where(eq(industryCommittee.industryProfileId, activeProfile.id));
   const committeeCodes = committees.map((c) => c.committeeCode);
   const keywords = activeProfile.keywords ?? [];
+  const manualWatchRows = await db
+    .select({
+      billId: bill.billId,
+      billNumber: bill.billNumber,
+      billName: bill.billName,
+      proposerName: bill.proposerName,
+      committee: bill.committee,
+      proposalDate: bill.proposalDate,
+      status: bill.status,
+      externalLink: bill.externalLink,
+    })
+    .from(industryBillWatch)
+    .innerJoin(bill, eq(industryBillWatch.billId, bill.billId))
+    .where(eq(industryBillWatch.industryProfileId, activeProfile.id));
 
   // 3. Sync legislators — but only when stale (≥ 7 days) or empty.
   //    The 22대 roster rarely changes, and the MCP upstream is slow
@@ -675,12 +729,21 @@ export async function runMorningSync(
 
   // 5. Keyword pre-filter (title-only)
   const filtered = uniqueList.filter((b) => keywordMatches(b, keywords));
+  const detailTargets = Array.from(
+    new Map(
+      [
+        ...filtered,
+        ...manualWatchRows.map((row) => storedBillToListItem(row)),
+      ].map((item) => [item.의안ID, item]),
+    ).values(),
+  );
+  billsProcessed = detailTargets.length;
 
   // 6. Phase 2 — fetch detail for matched bills (parallel via p-limit).
   //    Skip bills we already have at the same stage (not implemented yet;
   //    for now refetch every morning — 20-50 bills is fine).
   const detailFetches = await Promise.allSettled(
-    filtered.map(async (item) => {
+    detailTargets.map(async (item) => {
       const resp = await callMcpToolOrThrow<McpBillDetailResponse>(
         "assembly_bill",
         { bill_id: item.의안ID },
@@ -884,18 +947,30 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
   let alertsCreated = 0;
 
   const trackedBills = await db
+    .select({ billId: industryBillWatch.billId })
+    .from(industryBillWatch)
+    .innerJoin(industryProfile, eq(industryBillWatch.industryProfileId, industryProfile.id))
+    .limit(1000);
+
+  const manualBillIds = trackedBills.map((row) => row.billId);
+  const billsToCheck = await db
     .select()
     .from(bill)
     .where(
       and(
-        sql`${bill.relevanceScore} >= 3`,
         sql`${bill.stage} != 'stage_6'`,
+        manualBillIds.length > 0
+          ? or(
+              sql`${bill.relevanceScore} >= 3`,
+              inArray(bill.billId, manualBillIds),
+            )
+          : sql`${bill.relevanceScore} >= 3`,
       ),
     );
 
   // Parallel fetch (p-limit inside mcp-client caps at 5)
   const results = await Promise.allSettled(
-    trackedBills.map(async (tracked) => {
+    billsToCheck.map(async (tracked) => {
       const resp = await callMcpToolOrThrow<McpBillDetailResponse>(
         "assembly_bill",
         { bill_id: tracked.billId },
@@ -1237,6 +1312,7 @@ async function upsertBills(scored: ScoredBillForUpsert[]): Promise<number> {
         (listItem.공동발의자?.split(",").filter(Boolean).length ?? 0);
       return {
         billId: listItem.의안ID,
+        billNumber: listItem.의안번호,
         billName: detail.의안명 ?? listItem.의안명,
         proposerName: listItem.대표발의자 ?? listItem.제안자 ?? "",
         proposerParty,
@@ -1262,6 +1338,7 @@ async function upsertBills(scored: ScoredBillForUpsert[]): Promise<number> {
     .onConflictDoUpdate({
       target: bill.billId,
       set: {
+        billNumber: sql`coalesce(excluded.bill_number, ${bill.billNumber})`,
         billName: sql`excluded.bill_name`,
         proposerName: sql`excluded.proposer_name`,
         proposerParty: sql`excluded.proposer_party`,
@@ -1272,10 +1349,10 @@ async function upsertBills(scored: ScoredBillForUpsert[]): Promise<number> {
         proposalDate: sql`excluded.proposal_date`,
         relevanceScore: sql`excluded.relevance_score`,
         relevanceReasoning: sql`excluded.relevance_reasoning`,
-        proposalReason: sql`excluded.proposal_reason`,
-        mainContent: sql`excluded.main_content`,
+        proposalReason: sql`coalesce(excluded.proposal_reason, ${bill.proposalReason})`,
+        mainContent: sql`coalesce(excluded.main_content, ${bill.mainContent})`,
         summaryText: sql`excluded.summary_text`,
-        externalLink: sql`excluded.external_link`,
+        externalLink: sql`coalesce(excluded.external_link, ${bill.externalLink})`,
         lastSynced: sql`NOW()`,
       },
     });

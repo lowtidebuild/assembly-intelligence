@@ -22,31 +22,30 @@ interface SearchResponse {
     district: string | null;
   }>;
   bills: Array<{
-    id: number;
+    id?: number;
+    billId: string;
+    billNumber: string | null;
     billName: string;
     proposerName: string;
     committee: string | null;
     relevanceScore: number | null;
-    stage: string;
+    stage: string | null;
+    proposalDate: string | null;
+    source: "local" | "mcp";
+    tracked: boolean;
   }>;
 }
 
 type SearchItem =
   | {
       key: string;
-      href: string;
       kind: "legislator";
-      title: string;
-      meta: string;
-      badge?: ReactNode;
+      item: SearchResponse["legislators"][number];
     }
   | {
-      key: string;
-      href: string;
       kind: "bill";
-      title: string;
-      meta: string;
-      badge?: ReactNode;
+      key: string;
+      item: SearchResponse["bills"][number];
     };
 
 const EMPTY_RESULTS: SearchResponse = {
@@ -61,6 +60,8 @@ export function SearchCommand() {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [actionPendingKey, setActionPendingKey] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [results, setResults] = useState<SearchResponse>(EMPTY_RESULTS);
 
@@ -75,6 +76,7 @@ export function SearchCommand() {
 
     const controller = new AbortController();
     setLoading(true);
+    setActionError(null);
 
     const timeout = window.setTimeout(async () => {
       try {
@@ -106,7 +108,7 @@ export function SearchCommand() {
   }, [query]);
 
   useEffect(() => {
-    function handlePointerDown(event: MouseEvent) {
+    function handlePointerDown(event: globalThis.MouseEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
         setOpen(false);
         setHighlightedIndex(-1);
@@ -120,18 +122,13 @@ export function SearchCommand() {
   const items = useMemo<SearchItem[]>(() => {
     const legislatorItems = results.legislators.map((entry) => ({
       key: `legislator-${entry.id}`,
-      href: `/legislators/${entry.id}`,
       kind: "legislator" as const,
-      title: entry.name,
-      meta: `${entry.party} · ${entry.district ?? "비례대표"}`,
+      item: entry,
     }));
     const billItems = results.bills.map((entry) => ({
-      key: `bill-${entry.id}`,
-      href: `/radar?bill=${entry.id}`,
+      key: `bill-${entry.billId}`,
       kind: "bill" as const,
-      title: entry.billName,
-      meta: `${entry.proposerName}${entry.committee ? ` · ${entry.committee}` : ""}`,
-      badge: scoreBadge(entry.relevanceScore),
+      item: entry,
     }));
     return [...legislatorItems, ...billItems];
   }, [results]);
@@ -144,12 +141,75 @@ export function SearchCommand() {
     });
   }
 
+  async function monitorBill(entry: SearchResponse["bills"][number]) {
+    if (entry.id && entry.tracked) {
+      navigate(`/radar?bill=${entry.id}`);
+      return;
+    }
+
+    setActionError(null);
+    setActionPendingKey(entry.billId);
+
+    try {
+      const response = await fetch("/api/bills/watch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          billId: entry.billId,
+          billNumber: entry.billNumber,
+          billName: entry.billName,
+          proposerName: entry.proposerName,
+          committee: entry.committee,
+          proposalDate: entry.proposalDate,
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        id?: number;
+        error?: { message?: string };
+      };
+
+      if (!response.ok || typeof payload.id !== "number") {
+        throw new Error(
+          payload.error?.message ?? "법안 모니터링 추가에 실패했습니다.",
+        );
+      }
+
+      navigate(`/radar?bill=${payload.id}`);
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "법안 모니터링 추가에 실패했습니다.",
+      );
+    } finally {
+      setActionPendingKey(null);
+    }
+  }
+
+  function activateItem(item: SearchItem) {
+    if (item.kind === "legislator") {
+      navigate(`/legislators/${item.item.id}`);
+      return;
+    }
+    if (actionPendingKey === item.item.billId) {
+      return;
+    }
+    if (item.item.id && item.item.tracked) {
+      navigate(`/radar?bill=${item.item.id}`);
+      return;
+    }
+    void monitorBill(item.item);
+  }
+
   function onSubmit() {
     const trimmed = query.trim();
     if (!trimmed) return;
     const highlighted = highlightedIndex >= 0 ? items[highlightedIndex] : null;
     if (highlighted) {
-      navigate(highlighted.href);
+      activateItem(highlighted);
       return;
     }
     navigate(`/radar?q=${encodeURIComponent(trimmed)}`);
@@ -204,7 +264,7 @@ export function SearchCommand() {
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
-        placeholder="법안, 의원, 키워드 검색..."
+        placeholder="법안명, 의원명, 의안번호 검색..."
         role="combobox"
         aria-autocomplete="list"
         aria-haspopup="listbox"
@@ -225,6 +285,11 @@ export function SearchCommand() {
           aria-label="통합 검색 결과"
           className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card-hover)]"
         >
+          {actionError && (
+            <div className="border-b border-[var(--color-border)] bg-[#fef2f2] px-4 py-2 text-[11px] text-[#b91c1c]">
+              {actionError}
+            </div>
+          )}
           {loading ? (
             <div className="px-4 py-6 text-center text-[12px] text-[var(--color-text-tertiary)]">
               검색 중...
@@ -256,13 +321,23 @@ export function SearchCommand() {
                 const flatIndex = results.legislators.length + index;
                 return (
                   <SearchOption
-                    id={`${listboxId}-bill-${entry.id}`}
-                    key={`bill-${entry.id}`}
+                    id={`${listboxId}-bill-${entry.billId}`}
+                    key={`bill-${entry.billId}`}
                     active={highlightedIndex === flatIndex}
-                    onSelect={() => navigate(`/radar?bill=${entry.id}`)}
+                    onSelect={() => {
+                      if (actionPendingKey === entry.billId) return;
+                      if (entry.id && entry.tracked) {
+                        navigate(`/radar?bill=${entry.id}`);
+                        return;
+                      }
+                      void monitorBill(entry);
+                    }}
                     title={entry.billName}
-                    meta={`${entry.proposerName}${entry.committee ? ` · ${entry.committee}` : ""}`}
-                    badge={scoreBadge(entry.relevanceScore)}
+                    meta={formatBillMeta(entry)}
+                    trailing={billTrailing(entry, {
+                      pending: actionPendingKey === entry.billId,
+                      onMonitor: () => void monitorBill(entry),
+                    })}
                   />
                 );
               })}
@@ -270,6 +345,56 @@ export function SearchCommand() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function formatBillMeta(entry: SearchResponse["bills"][number]) {
+  const parts = [
+    entry.billNumber ? `의안번호 ${entry.billNumber}` : null,
+    entry.proposerName,
+    entry.committee,
+  ].filter((value): value is string => Boolean(value));
+  return parts.join(" · ");
+}
+
+function billTrailing(
+  entry: SearchResponse["bills"][number],
+  options: {
+    pending: boolean;
+    onMonitor: () => void;
+  },
+) {
+  if (entry.id && entry.tracked) {
+    return (
+      <div className="flex shrink-0 items-center gap-1">
+        <Badge classes="border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)]" label="모니터링 중" />
+        {scoreBadge(entry.relevanceScore)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      <Badge classes="bg-[#dbeafe] text-[#1d4ed8]" label="LIVE" />
+      <button
+        type="button"
+        onMouseDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          options.onMonitor();
+        }}
+        disabled={options.pending}
+        className="inline-flex items-center gap-1 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] px-[8px] py-[4px] text-[10px] font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-2)] disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {options.pending ? (
+          <LoaderCircle className="h-3 w-3 animate-spin" />
+        ) : null}
+        <span>모니터링 추가</span>
+      </button>
     </div>
   );
 }
@@ -288,42 +413,44 @@ function SearchOption({
   onSelect,
   title,
   meta,
-  badge,
+  trailing,
 }: {
   id: string;
   active: boolean;
   onSelect: () => void;
   title: string;
   meta: string;
-  badge?: ReactNode;
+  trailing?: ReactNode;
 }) {
   return (
-    <button
+    <div
       id={id}
-      type="button"
       role="option"
       aria-selected={active}
-      onMouseDown={(event) => {
-        event.preventDefault();
-        onSelect();
-      }}
       className={cn(
-        "flex w-full items-center gap-3 px-4 py-2 text-left transition-colors",
+        "flex items-center gap-3 px-4 py-2 transition-colors",
         active
           ? "bg-[var(--color-primary-light)]"
           : "hover:bg-[var(--color-surface-2)]",
       )}
     >
-      <div className="min-w-0 flex-1">
+      <button
+        type="button"
+        onMouseDown={(event) => {
+          event.preventDefault();
+          onSelect();
+        }}
+        className="min-w-0 flex-1 text-left"
+      >
         <div className="truncate text-[12px] font-medium text-[var(--color-text)]">
           {title}
         </div>
         <div className="truncate text-[11px] text-[var(--color-text-secondary)]">
           {meta}
         </div>
-      </div>
-      {badge}
-    </button>
+      </button>
+      {trailing}
+    </div>
   );
 }
 

@@ -1054,6 +1054,7 @@ function buildDemoPageFallback(): {
 function makeDemoBill(input: {
   id: number;
   billId: string;
+  billNumber?: string | null;
   billName: string;
   proposerName: string;
   proposerParty: string | null;
@@ -1066,6 +1067,7 @@ function makeDemoBill(input: {
   return {
     id: input.id,
     billId: input.billId,
+    billNumber: input.billNumber ?? null,
     billName: input.billName,
     proposerName: input.proposerName,
     proposerParty: input.proposerParty,

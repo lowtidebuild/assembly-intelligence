@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { bill, legislator } from "@/db/schema";
+import { legislator } from "@/db/schema";
+import { searchBillsForCommand } from "@/lib/bill-monitoring";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -22,14 +23,6 @@ export async function GET(request: Request) {
     WHEN lower(COALESCE(${legislator.district}, '')) LIKE lower(${prefixQuery}) THEN 4
     ELSE 5
   END`;
-  const billRank = sql<number>`CASE
-    WHEN lower(${bill.billName}) = lower(${q}) THEN 0
-    WHEN lower(${bill.billName}) LIKE lower(${prefixQuery}) THEN 1
-    WHEN lower(${bill.proposerName}) = lower(${q}) THEN 2
-    WHEN lower(${bill.proposerName}) LIKE lower(${prefixQuery}) THEN 3
-    ELSE 4
-  END`;
-
   const [legislatorsResult, billsResult] = await Promise.all([
     db
       .select({
@@ -52,28 +45,7 @@ export async function GET(request: Request) {
       )
       .orderBy(legislatorRank, asc(legislator.name))
       .limit(5),
-    db
-      .select({
-        id: bill.id,
-        billName: bill.billName,
-        proposerName: bill.proposerName,
-        committee: bill.committee,
-        relevanceScore: bill.relevanceScore,
-        stage: bill.stage,
-      })
-      .from(bill)
-      .where(
-        or(
-          ilike(bill.billName, `%${q}%`),
-          ilike(bill.proposerName, `%${q}%`),
-        ),
-      )
-      .orderBy(
-        billRank,
-        sql`${bill.relevanceScore} DESC NULLS LAST`,
-        desc(bill.proposalDate),
-      )
-      .limit(5),
+    searchBillsForCommand(q, 5),
   ]);
 
   return Response.json({
