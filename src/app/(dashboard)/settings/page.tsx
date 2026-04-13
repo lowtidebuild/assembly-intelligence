@@ -21,7 +21,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { McpCapabilityPanel } from "@/components/mcp-capability-panel";
 import Link from "next/link";
-import { getMcpRuntimeConfig } from "@/lib/mcp-client";
+import { getMcpRuntimeConfig, hasMcpKey } from "@/lib/mcp-client";
 import {
   Settings as SettingsIcon,
   Database,
@@ -36,7 +36,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const mcpRuntime = getMcpRuntimeConfig();
-  const hasMcpKey = Boolean(process.env.ASSEMBLY_API_MCP_KEY);
+  const mcpConfigured = hasMcpKey();
   const [profileRows, recentSyncs] = await Promise.all([
     db.select().from(industryProfile).limit(1),
     db.select().from(syncLog).orderBy(desc(syncLog.startedAt)).limit(5),
@@ -67,7 +67,7 @@ export default async function SettingsPage() {
 
   const envStatus = {
     db: Boolean(process.env.DATABASE_URL),
-    mcp: hasMcpKey,
+    mcp: mcpConfigured,
     gemini: Boolean(process.env.GEMINI_API_KEY),
     naver: Boolean(
       process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET,
@@ -182,7 +182,7 @@ export default async function SettingsPage() {
         <Card icon={<Database className="h-4 w-4" />} title="환경 변수">
           <ul className="grid grid-cols-2 gap-2 text-[12px]">
             <EnvRow label="DATABASE_URL" ok={envStatus.db} />
-            <EnvRow label="ASSEMBLY_API_MCP_KEY" ok={envStatus.mcp} />
+            <EnvRow label="ASSEMBLY_API_MCP_KEY (선택)" ok={envStatus.mcp} />
             <EnvRow label="GEMINI_API_KEY" ok={envStatus.gemini} />
             <EnvRow label="NAVER_CLIENT_*" ok={envStatus.naver} />
             <EnvRow label="CRON_SECRET" ok={envStatus.cronSecret} />
@@ -201,7 +201,8 @@ export default async function SettingsPage() {
           </dl>
           <p className="mt-3 text-[11px] text-[var(--color-text-tertiary)]">
             CRON_SECRET은 프로덕션(Vercel) 환경에서만 필요합니다. 로컬
-            개발에서는 자동 우회됩니다.
+            개발에서는 자동 우회됩니다. `ASSEMBLY_API_MCP_KEY`는
+            mock-data/read-only 데모 배포라면 없어도 됩니다.
           </p>
         </Card>
 
@@ -220,11 +221,12 @@ export default async function SettingsPage() {
             </a>
           }
         >
-          {hasMcpKey ? (
+          {mcpConfigured ? (
             <McpCapabilityPanel sampleKeyword={sampleKeyword} />
           ) : (
             <p className="text-[12px] text-[var(--color-text-tertiary)]">
               MCP 키가 없어서 최신 capability probe를 건너뛰었습니다.
+              mock-data/read-only 데모 배포에서는 정상입니다.
             </p>
           )}
         </Card>

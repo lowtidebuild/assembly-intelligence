@@ -61,6 +61,10 @@ function normalizeProfile(value: string | undefined): McpProfile {
   return value === "lite" ? "lite" : "full";
 }
 
+export function hasMcpKey(): boolean {
+  return Boolean(process.env.ASSEMBLY_API_MCP_KEY?.trim());
+}
+
 export function getMcpRuntimeConfig(): McpRuntimeConfig {
   return {
     baseUrl:
@@ -77,10 +81,10 @@ function buildClientCacheKey(profile: McpProfile): string {
 }
 
 function getMcpUrl(profile: McpProfile): URL {
-  const key = process.env.ASSEMBLY_API_MCP_KEY;
+  const key = process.env.ASSEMBLY_API_MCP_KEY?.trim();
   if (!key) {
     throw new NonRetryableError(
-      "ASSEMBLY_API_MCP_KEY is not set in .env.local",
+      "ASSEMBLY_API_MCP_KEY is not set",
     );
   }
   const { baseUrl } = getMcpRuntimeConfig();

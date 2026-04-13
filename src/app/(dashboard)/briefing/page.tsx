@@ -33,6 +33,7 @@ import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slid
 import { todayKst, weekdayKo } from "@/lib/dashboard-data";
 import {
   computeImportance,
+  type ImportanceRecord,
   loadProposerImportanceMap,
   makeProposerKey,
 } from "@/lib/legislator-importance";
@@ -75,7 +76,7 @@ export default async function BriefingPage(props: {
       loadLatestBriefingCompat(),
       loadRelevantNoticesCompat(),
       loadRecentNewsCompat(8),
-      computeImportance({
+      loadBriefingImportanceCompat({
         profileId: profile.id,
         committeeCodes: committees.map((c) => c.committeeCode),
       }),
@@ -248,51 +249,62 @@ async function loadLatestBriefingCompat(): Promise<BriefingSnapshot | null> {
 
     return rows[0] ?? null;
   } catch (err) {
+    if (isMissingDailyBriefingError(err)) {
+      return null;
+    }
+
     if (!isLegacyBriefingSchemaError(err)) {
       throw err;
     }
 
-    const rows = (await rawSql`
-      SELECT
-        id,
-        date,
-        content_html,
-        key_item_count,
-        schedule_count,
-        new_bill_count,
-        generated_at
-      FROM daily_briefing
-      ORDER BY date DESC
-      LIMIT 1
-    `) as Array<{
-      id: number;
-      date: string;
-      content_html: string;
-      key_item_count: number;
-      schedule_count: number;
-      new_bill_count: number;
-      generated_at: string | Date;
-    }>;
+    try {
+      const rows = (await rawSql`
+        SELECT
+          id,
+          date,
+          content_html,
+          key_item_count,
+          schedule_count,
+          new_bill_count,
+          generated_at
+        FROM daily_briefing
+        ORDER BY date DESC
+        LIMIT 1
+      `) as Array<{
+        id: number;
+        date: string;
+        content_html: string;
+        key_item_count: number;
+        schedule_count: number;
+        new_bill_count: number;
+        generated_at: string | Date;
+      }>;
 
-    const row = rows[0];
-    if (!row) {
-      return null;
+      const row = rows[0];
+      if (!row) {
+        return null;
+      }
+
+      return {
+        id: row.id,
+        date: row.date,
+        contentHtml: row.content_html,
+        keyItemCount: row.key_item_count,
+        scheduleCount: row.schedule_count,
+        newBillCount: row.new_bill_count,
+        keyBillIds: [],
+        newBillIds: [],
+        generatedAt:
+          row.generated_at instanceof Date
+            ? row.generated_at
+            : new Date(row.generated_at),
+      };
+    } catch (rawErr) {
+      if (isMissingDailyBriefingError(rawErr)) {
+        return null;
+      }
+      throw rawErr;
     }
-
-    return {
-      id: row.id,
-      date: row.date,
-      contentHtml: row.content_html,
-      keyItemCount: row.key_item_count,
-      scheduleCount: row.schedule_count,
-      newBillCount: row.new_bill_count,
-      keyBillIds: [],
-      newBillIds: [],
-      generatedAt:
-        row.generated_at instanceof Date
-          ? row.generated_at
-          : new Date(row.generated_at),
-    };
   }
 }
 
@@ -303,6 +315,16 @@ function isLegacyBriefingSchemaError(err: unknown): boolean {
     message.includes("new_bill_ids") ||
     message.includes("column") ||
     message.includes("does not exist")
+  );
+}
+
+function isMissingDailyBriefingError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("daily_briefing") &&
+    (message.includes("relation") ||
+      message.includes("does not exist") ||
+      message.includes("no such table"))
   );
 }
 
@@ -324,6 +346,20 @@ async function loadRelevantNoticesCompat(): Promise<LegislationNotice[]> {
       throw err;
     }
     return [];
+  }
+}
+
+async function loadBriefingImportanceCompat(input: {
+  profileId: number;
+  committeeCodes: string[];
+}): Promise<Map<number, ImportanceRecord>> {
+  try {
+    return await computeImportance(input);
+  } catch (err) {
+    if (!isMissingLegislatorImportanceSchemaError(err)) {
+      throw err;
+    }
+    return new Map<number, ImportanceRecord>();
   }
 }
 
@@ -355,6 +391,17 @@ function isMissingNewsArticleError(err: unknown): boolean {
     (message.includes("relation") ||
       message.includes("column") ||
       message.includes("does not exist"))
+  );
+}
+
+function isMissingLegislatorImportanceSchemaError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("industry_legislator_watch") ||
+    message.includes("committee_role") ||
+    message.includes("term_history") ||
+    message.includes("does not exist") ||
+    message.includes("relation")
   );
 }
 

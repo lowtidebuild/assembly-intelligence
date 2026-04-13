@@ -175,6 +175,11 @@ NAVER_CLIENT_SECRET=...                # Naver Developers
 APP_PASSWORD=...                       # 로그인 비밀번호 (아무 문자열)
 ```
 
+`ASSEMBLY_API_MCP_KEY`는 **mock-data/read-only 데모만 띄울 때는 필수가 아닙니다.**
+이미 채워진 DB를 읽기만 하는 공개 데모라면 없이도 앱은 떠야 합니다. 다만
+`/setup`, 수동/자동 sync, MCP capability probe 같은 **실시간 MCP 호출 기능**을
+쓸 때는 필요합니다.
+
 `ASSEMBLY_API_MCP_BASE_URL`를 비우면 공개 upstream (`assembly-api-mcp.fly.dev`)를 사용합니다. `lawmaking` / `NABO` 같은 optional 소스는 **앱 env가 아니라 대상 MCP 서버 쪽 설정**(`LAWMKING_OC`, `NABO_API_KEY`)이 준비되어 있어야 활성화됩니다.
 
 ### 2. 설치 + DB 마이그레이션

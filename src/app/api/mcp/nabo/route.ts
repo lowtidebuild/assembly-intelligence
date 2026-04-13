@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { callMcpTool } from "@/lib/mcp-client";
+import { callMcpTool, hasMcpKey } from "@/lib/mcp-client";
 import { errorMessage } from "@/lib/api-base";
 
 const querySchema = z.object({
@@ -18,6 +18,18 @@ function issueStatus(error: string): number {
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  if (!hasMcpKey()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        disabled: true,
+        error:
+          "ASSEMBLY_API_MCP_KEY가 없어 NABO probe를 건너뛰었습니다. mock-data/read-only 데모에서는 정상입니다.",
+      },
+      { status: 503 },
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const parsed = querySchema.safeParse({
     type: searchParams.get("type") ?? undefined,
@@ -71,4 +83,3 @@ export async function GET(request: Request) {
     );
   }
 }
-
