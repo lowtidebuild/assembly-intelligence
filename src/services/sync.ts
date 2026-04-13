@@ -54,6 +54,7 @@ import {
   legislator,
   syncLog,
   alert,
+  vote,
   type NewBill,
   type NewLegislationNotice,
   type NewLegislator,
@@ -238,6 +239,33 @@ interface McpScheduleResponse {
   mode?: string;
   total?: number;
   items?: McpScheduleRow[];
+}
+
+interface McpVoteByBillItem {
+  의안ID: string;
+  의안명: string | null;
+  의원명: string | null;
+  표결결과: string | null;
+}
+
+interface McpVoteByBillResponse {
+  total?: number;
+  items?: McpVoteByBillItem[];
+}
+
+interface McpVoteSummaryItem {
+  의안ID: string;
+  의안명: string | null;
+  표결일: string | null;
+  찬성: number | null;
+  반대: number | null;
+  기권: number | null;
+  결과: string | null;
+}
+
+interface McpVoteSummaryResponse {
+  total?: number;
+  items?: McpVoteSummaryItem[];
 }
 
 interface McpLegislationNoticeItem {
@@ -519,6 +547,169 @@ function rolePriority(role: string | null | undefined): number {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function hasPlenarySignal(
+  simsa: McpBillDetailSimsa | undefined,
+): boolean {
+  if (!simsa) return false;
+  return Boolean(
+    simsa.본회의_상정일 ??
+      simsa.본회의_의결일 ??
+      simsa.본회의_결과 ??
+      simsa.정부이송일 ??
+      simsa.공포일,
+  );
+}
+
+export function parseVoteResult(
+  value: string | null | undefined,
+): "yes" | "no" | "abstain" | "absent" | "unknown" {
+  if (!value) return "unknown";
+  const normalized = value.replace(/\s+/g, "").toLowerCase();
+  if (normalized.includes("찬성")) return "yes";
+  if (normalized.includes("반대")) return "no";
+  if (normalized.includes("기권")) return "abstain";
+  if (
+    normalized.includes("불참") ||
+    normalized.includes("결석") ||
+    normalized.includes("미참여")
+  ) {
+    return "absent";
+  }
+  return "unknown";
+}
+
+function makeVoteSummaryDateMap(
+  rows: McpVoteSummaryItem[] | undefined,
+): Map<string, Date> {
+  const map = new Map<string, Date>();
+  for (const row of rows ?? []) {
+    const date = parseKstDate(row.표결일);
+    if (date && row.의안ID) {
+      map.set(row.의안ID, date);
+    }
+  }
+  return map;
+}
+
+interface VoteSyncTarget {
+  billId: string;
+  simsa: McpBillDetailSimsa | undefined;
+}
+
+export async function syncVotesForBillTargets(
+  targets: VoteSyncTarget[],
+): Promise<number> {
+  const uniqueTargets = Array.from(
+    new Map(
+      targets
+        .filter((target) => hasPlenarySignal(target.simsa))
+        .map((target) => [target.billId, target]),
+    ).values(),
+  );
+  if (uniqueTargets.length === 0) return 0;
+
+  const storedBills = await db
+    .select({ id: bill.id, billId: bill.billId })
+    .from(bill)
+    .where(inArray(bill.billId, uniqueTargets.map((target) => target.billId)));
+  const billIdToNumericId = new Map(
+    storedBills.map((row) => [row.billId, row.id]),
+  );
+  if (billIdToNumericId.size === 0) return 0;
+
+  const activeLegislators = await db
+    .select({ id: legislator.id, name: legislator.name })
+    .from(legislator)
+    .where(eq(legislator.isActive, true));
+  const legislatorIdsByName = new Map<string, number[]>();
+  for (const member of activeLegislators) {
+    const existing = legislatorIdsByName.get(member.name) ?? [];
+    existing.push(member.id);
+    legislatorIdsByName.set(member.name, existing);
+  }
+
+  let voteDateByBillId = new Map<string, Date>();
+  try {
+    const summary = await callMcpToolOrThrow<McpVoteSummaryResponse>(
+      "assembly_session",
+      {
+        type: "vote",
+        age: 22,
+        page_size: 100,
+      },
+    );
+    voteDateByBillId = makeVoteSummaryDateMap(summary.items);
+  } catch (err) {
+    console.warn(
+      "[syncVotesForBillTargets] plenary summary unavailable:",
+      errorMessage(err),
+    );
+  }
+
+  let upserted = 0;
+  for (const target of uniqueTargets) {
+    const numericBillId = billIdToNumericId.get(target.billId);
+    if (!numericBillId) continue;
+
+    const fallbackDate =
+      voteDateByBillId.get(target.billId) ??
+      parseKstDate(
+        target.simsa?.본회의_의결일 ?? target.simsa?.본회의_상정일,
+      );
+    if (!fallbackDate) continue;
+
+    let response: McpVoteByBillResponse;
+    try {
+      response = await callMcpToolOrThrow<McpVoteByBillResponse>(
+        "assembly_session",
+        {
+          type: "vote",
+          bill_id: target.billId,
+          age: 22,
+          page_size: 400,
+        },
+      );
+    } catch (err) {
+      console.warn(
+        `[syncVotesForBillTargets] vote fetch failed for ${target.billId}:`,
+        errorMessage(err),
+      );
+      continue;
+    }
+
+    const rows =
+      response.items
+        ?.map((item) => {
+          const name = item.의원명?.trim();
+          if (!name) return null;
+          const matches = legislatorIdsByName.get(name) ?? [];
+          if (matches.length !== 1) return null;
+
+          return {
+            billId: numericBillId,
+            legislatorId: matches[0],
+            result: parseVoteResult(item.표결결과),
+            voteDate: fallbackDate,
+          } as const;
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null) ?? [];
+
+    if (rows.length === 0) continue;
+
+    await db.insert(vote).values(rows).onConflictDoUpdate({
+      target: [vote.billId, vote.legislatorId],
+      set: {
+        result: sql`excluded.result`,
+        voteDate: sql`excluded.vote_date`,
+      },
+    });
+
+    upserted += rows.length;
+  }
+
+  return upserted;
 }
 
 interface EveningTransitionPersistResult {
@@ -860,6 +1051,17 @@ export async function runMorningSync(
     await upsertBills(scoredBills);
   } catch (err) {
     errors.push(`upsert_bills: ${errorMessage(err)}`);
+  }
+
+  try {
+    await syncVotesForBillTargets(
+      scoredBills.map(({ listItem, detail }) => ({
+        billId: listItem.의안ID,
+        simsa: detail.심사경과,
+      })),
+    );
+  } catch (err) {
+    errors.push(`votes: ${errorMessage(err)}`);
   }
 
   // 8.5. News fetch (Naver) — uses the freshly-upserted bill scores

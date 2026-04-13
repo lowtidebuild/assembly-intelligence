@@ -6,7 +6,11 @@ import { callMcpToolOrThrow, hasMcpKey } from "@/lib/mcp-client";
 import { fetchBillBodyFragment } from "@/lib/bill-scraper";
 import { getGeminiBillScorer } from "@/lib/gemini-client";
 import { getStubBillScorer } from "@/lib/gemini-stub";
-import { stageFromSimsa, type BillScorer } from "@/services/sync";
+import {
+  stageFromSimsa,
+  syncVotesForBillTargets,
+  type BillScorer,
+} from "@/services/sync";
 
 interface McpBillListItem {
   의안ID: string;
@@ -417,6 +421,13 @@ export async function trackBillForActiveProfile(
     .onConflictDoNothing({
       target: [industryBillWatch.industryProfileId, industryBillWatch.billId],
     });
+
+  await syncVotesForBillTargets([
+    {
+      billId: input.billId,
+      simsa: detail.심사경과,
+    },
+  ]);
 
   return billRow;
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { noticeIsRelevant, stageFromSimsa } from "@/services/sync";
+import {
+  hasPlenarySignal,
+  noticeIsRelevant,
+  parseVoteResult,
+  stageFromSimsa,
+} from "@/services/sync";
 
 function makeSimsa(
   overrides: Partial<Exclude<Parameters<typeof stageFromSimsa>[0], undefined>>,
@@ -52,5 +57,29 @@ describe("noticeIsRelevant", () => {
   it("returns false when keyword list is empty or unmatched", () => {
     expect(noticeIsRelevant("게임산업진흥법", [])).toBe(false);
     expect(noticeIsRelevant("방송통신발전법", ["게임"])).toBe(false);
+  });
+});
+
+describe("parseVoteResult", () => {
+  it("maps Korean vote labels to the enum", () => {
+    expect(parseVoteResult("찬성")).toBe("yes");
+    expect(parseVoteResult("반대")).toBe("no");
+    expect(parseVoteResult("기권")).toBe("abstain");
+    expect(parseVoteResult("불참")).toBe("absent");
+  });
+
+  it("falls back to unknown for empty or unsupported values", () => {
+    expect(parseVoteResult(null)).toBe("unknown");
+    expect(parseVoteResult("보류")).toBe("unknown");
+  });
+});
+
+describe("hasPlenarySignal", () => {
+  it("detects plenary-stage bills from 본회의 metadata", () => {
+    expect(hasPlenarySignal(makeSimsa({ 본회의_상정일: "2026-04-13" }))).toBe(
+      true,
+    );
+    expect(hasPlenarySignal(makeSimsa({ 본회의_결과: "원안가결" }))).toBe(true);
+    expect(hasPlenarySignal(makeSimsa({}))).toBe(false);
   });
 });

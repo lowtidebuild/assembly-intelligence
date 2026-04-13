@@ -8,6 +8,7 @@ import {
   industryLegislatorWatch,
   industryProfile,
   legislator,
+  vote,
 } from "@/db/schema";
 import { PageHeader } from "@/components/page-header";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
@@ -60,7 +61,7 @@ export default async function LegislatorDetailPage(props: {
       })
     : null;
 
-  const [watchRow, sponsoredBills] = await Promise.all([
+  const [watchRow, sponsoredBills, recentVotes] = await Promise.all([
     profile
       ? db
           .select({ legislatorId: industryLegislatorWatch.legislatorId })
@@ -91,6 +92,18 @@ export default async function LegislatorDetailPage(props: {
         ),
       )
       .orderBy(desc(bill.proposalDate)),
+    db
+      .select({
+        voteDate: vote.voteDate,
+        result: vote.result,
+        billId: bill.id,
+        billName: bill.billName,
+      })
+      .from(vote)
+      .innerJoin(bill, eq(vote.billId, bill.id))
+      .where(eq(vote.legislatorId, member.id))
+      .orderBy(desc(vote.voteDate))
+      .limit(8),
   ]);
 
   const isWatched = watchRow.length > 0;
@@ -246,6 +259,35 @@ export default async function LegislatorDetailPage(props: {
           )}
         </InfoCard>
 
+        <InfoCard
+          title="최근 표결 이력"
+          sublabel={`${recentVotes.length}건`}
+        >
+          {recentVotes.length === 0 ? (
+            <EmptyNote>아직 저장된 표결 이력이 없습니다.</EmptyNote>
+          ) : (
+            <div className="space-y-2">
+              {recentVotes.map((entry) => (
+                <Link
+                  key={`${entry.billId}-${entry.voteDate.toISOString()}`}
+                  href={`/impact?bill=${entry.billId}`}
+                  className="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-3 transition-colors hover:bg-[var(--color-surface)]"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-medium text-[var(--color-text)]">
+                      {entry.billName}
+                    </div>
+                    <div className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
+                      {entry.voteDate.toISOString().slice(0, 10)}
+                    </div>
+                  </div>
+                  <VoteResultPill result={entry.result} />
+                </Link>
+              ))}
+            </div>
+          )}
+        </InfoCard>
+
         <InfoCard title="산업 중요도 분석">
           {importance?.level ? (
             <div className="space-y-2">
@@ -318,6 +360,39 @@ export default async function LegislatorDetailPage(props: {
         )}
       </div>
     </>
+  );
+}
+
+function VoteResultPill({
+  result,
+}: {
+  result: "yes" | "no" | "abstain" | "absent" | "unknown";
+}) {
+  const label =
+    result === "yes"
+      ? "찬성"
+      : result === "no"
+        ? "반대"
+        : result === "abstain"
+          ? "기권"
+          : result === "absent"
+            ? "불참"
+            : "기타";
+  const className =
+    result === "yes"
+      ? "bg-[#dcfce7] text-[#166534]"
+      : result === "no"
+        ? "bg-[#fee2e2] text-[#b91c1c]"
+        : result === "abstain"
+          ? "bg-[#fef3c7] text-[#b45309]"
+          : "bg-[var(--color-surface)] text-[var(--color-text-secondary)]";
+
+  return (
+    <span
+      className={`inline-flex rounded-[10px] px-[7px] py-[2px] text-[10px] font-bold ${className}`}
+    >
+      {label}
+    </span>
   );
 }
 

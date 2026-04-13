@@ -13,7 +13,7 @@
  */
 
 import { db } from "@/db";
-import { bill, industryCommittee, industryProfile } from "@/db/schema";
+import { bill, industryCommittee, industryProfile, legislator, vote } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import Link from "next/link";
@@ -70,6 +70,19 @@ export default async function ImpactPage(props: {
           .then((r) => r[0] ?? null)
       : Promise.resolve(null),
   ]);
+  const voteRows = selected
+    ? await db
+        .select({
+          result: vote.result,
+          voteDate: vote.voteDate,
+          legislatorName: legislator.name,
+          party: legislator.party,
+        })
+        .from(vote)
+        .innerJoin(legislator, eq(vote.legislatorId, legislator.id))
+        .where(eq(vote.billId, selected.id))
+        .orderBy(desc(vote.voteDate), legislator.name)
+    : [];
   const proposerImportance = await loadProposerImportanceMap(
     [...recentBills, ...(selected ? [selected] : [])].map((entry) => ({
       name: entry.proposerName,
@@ -82,6 +95,7 @@ export default async function ImpactPage(props: {
         makeProposerKey(selected.proposerName, selected.proposerParty),
       )
     : null;
+  const voteSummary = summarizeVotes(voteRows);
 
   return (
     <>
@@ -223,6 +237,56 @@ export default async function ImpactPage(props: {
               </Block>
             )}
 
+            {voteSummary && (
+              <Block
+                icon={<TrendingUp className="h-4 w-4" />}
+                title="표결 현황"
+                sublabel="assembly_session(type=vote)"
+              >
+                <div className="grid grid-cols-2 gap-3 text-[12px] sm:grid-cols-4">
+                  {voteSummary.counts.map((entry) => (
+                    <div
+                      key={entry.label}
+                      className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2"
+                    >
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-tertiary)]">
+                        {entry.label}
+                      </div>
+                      <div className="mt-1 text-[18px] font-bold text-[var(--color-text)]">
+                        {entry.value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {voteSummary.voteDate && (
+                  <p className="mt-3 text-[11px] text-[var(--color-text-tertiary)]">
+                    표결일: {voteSummary.voteDate}
+                  </p>
+                )}
+                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {voteSummary.buckets.map((bucket) => (
+                    <div
+                      key={bucket.label}
+                      className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-3"
+                    >
+                      <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[var(--color-text-secondary)]">
+                        {bucket.label}
+                      </div>
+                      {bucket.names.length > 0 ? (
+                        <p className="text-[12px] leading-relaxed text-[var(--color-text)]">
+                          {bucket.names.join(", ")}
+                        </p>
+                      ) : (
+                        <p className="text-[12px] text-[var(--color-text-tertiary)]">
+                          해당 없음
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Block>
+            )}
+
             {/* Company impact */}
             <Block
               icon={<TrendingUp className="h-4 w-4" />}
@@ -261,6 +325,59 @@ export default async function ImpactPage(props: {
       )}
     </>
   );
+}
+
+type VoteRow = {
+  result: "yes" | "no" | "abstain" | "absent" | "unknown";
+  voteDate: Date;
+  legislatorName: string;
+  party: string;
+};
+
+function summarizeVotes(rows: VoteRow[]) {
+  if (rows.length === 0) return null;
+
+  const counts = {
+    yes: 0,
+    no: 0,
+    abstain: 0,
+    absent: 0,
+    unknown: 0,
+  };
+  const buckets = {
+    yes: [] as string[],
+    no: [] as string[],
+    abstain: [] as string[],
+    absent: [] as string[],
+  };
+
+  for (const row of rows) {
+    counts[row.result] += 1;
+    if (
+      row.result !== "unknown" &&
+      buckets[row.result].length < 8
+    ) {
+      buckets[row.result].push(
+        row.party ? `${row.legislatorName} (${row.party})` : row.legislatorName,
+      );
+    }
+  }
+
+  return {
+    voteDate: rows[0]?.voteDate?.toISOString().slice(0, 10) ?? null,
+    counts: [
+      { label: "찬성", value: counts.yes },
+      { label: "반대", value: counts.no },
+      { label: "기권", value: counts.abstain },
+      { label: "불참/기타", value: counts.absent + counts.unknown },
+    ],
+    buckets: [
+      { label: "찬성", names: buckets.yes },
+      { label: "반대", names: buckets.no },
+      { label: "기권", names: buckets.abstain },
+      { label: "불참", names: buckets.absent },
+    ],
+  };
 }
 
 function Block({
