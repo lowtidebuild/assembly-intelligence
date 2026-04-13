@@ -73,18 +73,8 @@ export default async function BriefingPage(props: {
   const [briefing, relevantNotices, newsItems, importanceById] =
     await Promise.all([
       loadLatestBriefingCompat(),
-      db
-        .select()
-        .from(legislationNotice)
-        .where(
-          and(
-            eq(legislationNotice.isRelevant, true),
-            sql`${legislationNotice.noticeEndDate} >= CURRENT_DATE`,
-          ),
-        )
-        .orderBy(asc(legislationNotice.noticeEndDate))
-        .limit(10),
-      loadRecentNews(8),
+      loadRelevantNoticesCompat(),
+      loadRecentNewsCompat(8),
       computeImportance({
         profileId: profile.id,
         committeeCodes: committees.map((c) => c.committeeCode),
@@ -313,6 +303,58 @@ function isLegacyBriefingSchemaError(err: unknown): boolean {
     message.includes("new_bill_ids") ||
     message.includes("column") ||
     message.includes("does not exist")
+  );
+}
+
+async function loadRelevantNoticesCompat(): Promise<LegislationNotice[]> {
+  try {
+    return await db
+      .select()
+      .from(legislationNotice)
+      .where(
+        and(
+          eq(legislationNotice.isRelevant, true),
+          sql`${legislationNotice.noticeEndDate} >= CURRENT_DATE`,
+        ),
+      )
+      .orderBy(asc(legislationNotice.noticeEndDate))
+      .limit(10);
+  } catch (err) {
+    if (!isMissingLegislationNoticeError(err)) {
+      throw err;
+    }
+    return [];
+  }
+}
+
+async function loadRecentNewsCompat(limit: number) {
+  try {
+    return await loadRecentNews(limit);
+  } catch (err) {
+    if (!isMissingNewsArticleError(err)) {
+      throw err;
+    }
+    return [];
+  }
+}
+
+function isMissingLegislationNoticeError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("legislation_notice") &&
+    (message.includes("relation") ||
+      message.includes("column") ||
+      message.includes("does not exist"))
+  );
+}
+
+function isMissingNewsArticleError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("news_article") &&
+    (message.includes("relation") ||
+      message.includes("column") ||
+      message.includes("does not exist"))
   );
 }
 
