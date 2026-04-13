@@ -17,10 +17,6 @@ async function main() {
   const { desc } = await import("drizzle-orm");
 
   // Counts
-  const [legCount] = await db
-    .select({ c: ({ legislator: l }: { legislator: typeof legislator }) => l })
-    .from(legislator);
-  // Actually use sql count
   const { sql } = await import("drizzle-orm");
   const [lc] = await db.select({ c: sql<number>`count(*)::int` }).from(legislator);
   const [bc] = await db.select({ c: sql<number>`count(*)::int` }).from(bill);

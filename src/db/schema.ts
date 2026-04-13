@@ -482,6 +482,10 @@ export const dailyBriefing = pgTable(
     keyItemCount: integer("key_item_count").notNull().default(0),
     scheduleCount: integer("schedule_count").notNull().default(0),
     newBillCount: integer("new_bill_count").notNull().default(0),
+    // Snapshot ids so the /briefing page can render the same bill sets
+    // that were used when the HTML briefing was generated.
+    keyBillIds: jsonb("key_bill_ids").$type<number[]>().notNull().default([]),
+    newBillIds: jsonb("new_bill_ids").$type<number[]>().notNull().default([]),
     generatedAt: timestamp("generated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -7,7 +7,7 @@
  * against screenshots/<n>-*.png.
  */
 
-import { chromium, type Page } from "@playwright/test";
+import { chromium } from "@playwright/test";
 import { mkdirSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 

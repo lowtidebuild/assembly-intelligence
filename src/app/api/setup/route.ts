@@ -1,14 +1,14 @@
 /**
  * POST /api/setup
  *
- * Persists the full setup wizard state in a single transaction:
+ * Persists the full setup wizard state via sequential writes:
  *   1. Upsert IndustryProfile by slug
  *   2. Wipe + re-insert IndustryCommittee rows
  *   3. Wipe + re-insert IndustryLegislatorWatch rows
  *
  * The wipe-and-insert pattern is safe because:
  *   - Committees and watch rows don't have FK dependents
- *   - We run everything inside db.transaction()
+ *   - The whole request is idempotent for the same slug
  *   - Quantities are small (~5 committees, ~20 legislators)
  *
  * On success: returns the new profile id.

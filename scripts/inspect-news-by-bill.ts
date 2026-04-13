@@ -4,7 +4,7 @@ config({ path: ".env.local" });
 async function main() {
   const { db } = await import("../src/db");
   const { newsArticle, bill } = await import("../src/db/schema");
-  const { desc, sql, eq, isNotNull } = await import("drizzle-orm");
+  const { desc, eq, isNotNull } = await import("drizzle-orm");
 
   const rows = await db
     .select({

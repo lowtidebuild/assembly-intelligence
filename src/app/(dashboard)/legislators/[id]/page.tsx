@@ -13,7 +13,7 @@ import { PageHeader } from "@/components/page-header";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
 import {
-  computeImportance,
+  loadImportanceForLegislator,
   type ImportanceRecord,
 } from "@/lib/legislator-importance";
 import {
@@ -51,13 +51,12 @@ export default async function LegislatorDetailPage(props: {
         .from(industryCommittee)
         .where(eq(industryCommittee.industryProfileId, profile.id))
     : [];
-  const importanceById = profile
-    ? await computeImportance({
+  const importance = profile
+    ? await loadImportanceForLegislator(member.id, {
         profileId: profile.id,
         committeeCodes: industryCommittees.map((c) => c.committeeCode),
       })
-    : new Map<number, ImportanceRecord>();
-  const importance = importanceById.get(member.id) ?? null;
+    : null;
 
   const [watchRow, sponsoredBills] = await Promise.all([
     profile

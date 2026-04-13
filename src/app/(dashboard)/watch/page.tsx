@@ -10,8 +10,8 @@
  *   - name + party + district + committees
  *   - count of bills they've proposed that matched our industry filter
  *
- * The hemicycle on the right lets the user click to add/remove
- * watch entries (wired to a server action — stubbed for now).
+ * The hemicycle on the right lets the user click into the legislator
+ * profile slide-over and add/remove watch entries from there.
  */
 
 import { db } from "@/db";

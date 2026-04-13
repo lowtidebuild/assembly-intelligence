@@ -4,6 +4,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -56,6 +57,7 @@ const EMPTY_RESULTS: SearchResponse = {
 export function SearchCommand() {
   const router = useRouter();
   const rootRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -185,6 +187,10 @@ export function SearchCommand() {
   }
 
   const showDropdown = open && query.trim().length >= 2;
+  const activeItemId =
+    showDropdown && highlightedIndex >= 0 && items[highlightedIndex]
+      ? `${listboxId}-${items[highlightedIndex].key}`
+      : undefined;
 
   return (
     <div ref={rootRef} className="relative w-full md:w-[260px]">
@@ -199,6 +205,13 @@ export function SearchCommand() {
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
         placeholder="법안, 의원, 키워드 검색..."
+        role="combobox"
+        aria-autocomplete="list"
+        aria-haspopup="listbox"
+        aria-expanded={showDropdown}
+        aria-controls={showDropdown ? listboxId : undefined}
+        aria-activedescendant={activeItemId}
+        aria-busy={loading}
         className="w-full rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface-2)] py-2 pl-8 pr-8 text-[13px] text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
       />
       {loading && (
@@ -206,7 +219,12 @@ export function SearchCommand() {
       )}
 
       {showDropdown && (
-        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card-hover)]">
+        <div
+          id={listboxId}
+          role="listbox"
+          aria-label="통합 검색 결과"
+          className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card-hover)]"
+        >
           {loading ? (
             <div className="px-4 py-6 text-center text-[12px] text-[var(--color-text-tertiary)]">
               검색 중...
@@ -222,6 +240,7 @@ export function SearchCommand() {
               )}
               {results.legislators.map((entry, index) => (
                 <SearchOption
+                  id={`${listboxId}-legislator-${entry.id}`}
                   key={`legislator-${entry.id}`}
                   active={highlightedIndex === index}
                   onSelect={() => navigate(`/legislators/${entry.id}`)}
@@ -237,6 +256,7 @@ export function SearchCommand() {
                 const flatIndex = results.legislators.length + index;
                 return (
                   <SearchOption
+                    id={`${listboxId}-bill-${entry.id}`}
                     key={`bill-${entry.id}`}
                     active={highlightedIndex === flatIndex}
                     onSelect={() => navigate(`/radar?bill=${entry.id}`)}
@@ -263,12 +283,14 @@ function SectionLabel({ label }: { label: string }) {
 }
 
 function SearchOption({
+  id,
   active,
   onSelect,
   title,
   meta,
   badge,
 }: {
+  id: string;
   active: boolean;
   onSelect: () => void;
   title: string;
@@ -277,7 +299,10 @@ function SearchOption({
 }) {
   return (
     <button
+      id={id}
       type="button"
+      role="option"
+      aria-selected={active}
       onMouseDown={(event) => {
         event.preventDefault();
         onSelect();

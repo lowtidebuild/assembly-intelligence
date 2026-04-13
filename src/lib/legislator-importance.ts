@@ -37,7 +37,7 @@ function relevantCommitteesFor(
   return committees.filter((committee) => targets.has(committee));
 }
 
-function levelFor({
+export function importanceLevelFor({
   isManualWatch,
   isOnRelevantCommittee,
   sponsoredBillCount,
@@ -112,7 +112,7 @@ export async function computeImportance(
       ctx.committeeCodes,
     );
     const isOnRelevantCommittee = matchedCommittees.length > 0;
-    const level = levelFor({
+    const level = importanceLevelFor({
       isManualWatch: row.isManualWatch,
       isOnRelevantCommittee,
       sponsoredBillCount: row.sponsoredBillCount,
@@ -142,6 +142,81 @@ export async function computeImportance(
   }
 
   return result;
+}
+
+export async function loadImportanceForLegislator(
+  legislatorId: number,
+  ctx: ImportanceContext,
+): Promise<ImportanceRecord | null> {
+  const [row] = await db
+    .select({
+      id: legislator.id,
+      committees: legislator.committees,
+      committeeRole: legislator.committeeRole,
+      isManualWatch:
+        sql<boolean>`${industryLegislatorWatch.legislatorId} IS NOT NULL`,
+      sponsoredBillCount: sql<number>`count(${bill.id})::int`,
+    })
+    .from(legislator)
+    .leftJoin(
+      industryLegislatorWatch,
+      and(
+        eq(industryLegislatorWatch.legislatorId, legislator.id),
+        eq(industryLegislatorWatch.industryProfileId, ctx.profileId),
+      ),
+    )
+    .leftJoin(
+      bill,
+      and(
+        eq(bill.proposerName, legislator.name),
+        sql`(${bill.proposerParty} IS NULL OR ${bill.proposerParty} = ${legislator.party})`,
+        sql`${bill.relevanceScore} >= 3`,
+        sql`${bill.proposalDate} > NOW() - INTERVAL '180 days'`,
+      ),
+    )
+    .where(and(eq(legislator.id, legislatorId), eq(legislator.isActive, true)))
+    .groupBy(
+      legislator.id,
+      legislator.committees,
+      legislator.committeeRole,
+      industryLegislatorWatch.legislatorId,
+    )
+    .limit(1);
+
+  if (!row) return null;
+
+  const matchedCommittees = relevantCommitteesFor(
+    row.committees,
+    ctx.committeeCodes,
+  );
+  const isOnRelevantCommittee = matchedCommittees.length > 0;
+  const level = importanceLevelFor({
+    isManualWatch: row.isManualWatch,
+    isOnRelevantCommittee,
+    sponsoredBillCount: row.sponsoredBillCount,
+    committeeRole: row.committeeRole,
+  });
+
+  const reasons: string[] = [];
+  if (row.isManualWatch) reasons.push("수동 워치");
+  if (matchedCommittees.length > 0) {
+    reasons.push(`소관위 (${matchedCommittees.join(", ")})`);
+  }
+  if (row.sponsoredBillCount > 0) {
+    reasons.push(`대표발의 ${row.sponsoredBillCount}건`);
+  }
+  if (isLeadershipRole(row.committeeRole)) {
+    reasons.push(`위원회 ${row.committeeRole}`);
+  }
+
+  return {
+    level,
+    isManualWatch: row.isManualWatch,
+    isOnRelevantCommittee,
+    sponsoredBillCount: row.sponsoredBillCount,
+    committeeRole: row.committeeRole,
+    reasons,
+  };
 }
 
 export async function loadProposerImportanceMap(

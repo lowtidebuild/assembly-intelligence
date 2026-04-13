@@ -316,6 +316,8 @@ export function getGeminiBriefingGenerator(): BriefingGenerator {
           keyItemCount: input.keyBills.length,
           scheduleCount: input.scheduleItems.length,
           newBillCount: input.newBills.length,
+          keyBillIds: input.keyBills.map((bill) => bill.id),
+          newBillIds: input.newBills.map((bill) => bill.id),
         })
         .onConflictDoUpdate({
           target: dailyBriefing.date,
@@ -324,6 +326,8 @@ export function getGeminiBriefingGenerator(): BriefingGenerator {
             keyItemCount: input.keyBills.length,
             scheduleCount: input.scheduleItems.length,
             newBillCount: input.newBills.length,
+            keyBillIds: input.keyBills.map((bill) => bill.id),
+            newBillIds: input.newBills.map((bill) => bill.id),
             generatedAt: new Date(),
           },
         });

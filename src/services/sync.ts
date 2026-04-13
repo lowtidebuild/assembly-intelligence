@@ -329,7 +329,7 @@ function parseTermNumber(s: string | null | undefined): number | null {
  *
  * Falls back to stage_1 when everything is null (freshly filed).
  */
-function stageFromSimsa(simsa: McpBillDetailSimsa | undefined): BillStage {
+export function stageFromSimsa(simsa: McpBillDetailSimsa | undefined): BillStage {
   if (!simsa) return "stage_1";
   if (simsa.공포일) return "stage_6";
   if (simsa.정부이송일) return "stage_5";
@@ -455,7 +455,10 @@ function keywordMatches(
   return keywords.some((kw) => haystack.includes(kw.toLowerCase()));
 }
 
-function noticeIsRelevant(billName: string, keywords: string[]): boolean {
+export function noticeIsRelevant(
+  billName: string,
+  keywords: string[],
+): boolean {
   if (keywords.length === 0) return false;
   const haystack = billName.toLowerCase();
   return keywords.some((kw) => haystack.includes(kw.toLowerCase()));
@@ -470,6 +473,81 @@ const ROLE_PRIORITY: Record<string, number> = {
 function rolePriority(role: string | null | undefined): number {
   if (!role) return 0;
   return ROLE_PRIORITY[role] ?? 0;
+}
+
+interface EveningTransitionPersistResult {
+  updated: boolean;
+  timelineInserted: boolean;
+  alertInserted: boolean;
+}
+
+async function persistEveningStageTransition(
+  tracked: Pick<Bill, "id" | "billName" | "stage">,
+  newStage: BillStage,
+): Promise<EveningTransitionPersistResult> {
+  const description = `${tracked.stage} → ${newStage}`;
+  const message = `${tracked.billName} — ${description}`;
+  const eventDate = new Date();
+
+  const [existingTimeline] = await db
+    .select({ id: billTimeline.id })
+    .from(billTimeline)
+    .where(
+      and(
+        eq(billTimeline.billId, tracked.id),
+        eq(billTimeline.stage, newStage),
+        eq(billTimeline.description, description),
+      ),
+    )
+    .limit(1);
+
+  let timelineInserted = false;
+  if (!existingTimeline) {
+    await db.insert(billTimeline).values({
+      billId: tracked.id,
+      stage: newStage,
+      eventDate,
+      description,
+    });
+    timelineInserted = true;
+  }
+
+  const [existingAlert] = await db
+    .select({ id: alert.id })
+    .from(alert)
+    .where(
+      and(
+        eq(alert.type, "stage_change"),
+        eq(alert.billId, tracked.id),
+        eq(alert.message, message),
+      ),
+    )
+    .limit(1);
+
+  let alertInserted = false;
+  if (!existingAlert) {
+    await db.insert(alert).values({
+      type: "stage_change",
+      billId: tracked.id,
+      message,
+    });
+    alertInserted = true;
+  }
+
+  const updatedRows = await db
+    .update(bill)
+    .set({
+      stage: newStage,
+      lastSynced: new Date(),
+    })
+    .where(and(eq(bill.id, tracked.id), eq(bill.stage, tracked.stage)))
+    .returning({ id: bill.id });
+
+  return {
+    updated: updatedRows.length > 0,
+    timelineInserted,
+    alertInserted,
+  };
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -716,13 +794,14 @@ export async function runMorningSync(
       .select()
       .from(bill)
       .where(sql`${bill.relevanceScore} >= 4`)
-      .orderBy(sql`${bill.relevanceScore} DESC`)
+      .orderBy(sql`${bill.relevanceScore} DESC`, sql`${bill.proposalDate} DESC NULLS LAST`)
       .limit(4);
 
     const newBills = await db
       .select()
       .from(bill)
       .where(sql`${bill.createdAt} > NOW() - INTERVAL '24 hours'`)
+      .orderBy(sql`${bill.createdAt} DESC`, sql`${bill.proposalDate} DESC NULLS LAST`)
       .limit(10);
 
     await deps.briefingGenerator.generateBriefing({
@@ -838,32 +917,15 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
     if (newStage === tracked.stage) continue;
 
     try {
-      await db.transaction(async (tx) => {
-        await tx
-          .update(bill)
-          .set({
-            stage: newStage,
-            lastSynced: new Date(),
-          })
-          .where(eq(bill.id, tracked.id));
-
-        await tx.insert(billTimeline).values({
-          billId: tracked.id,
-          stage: newStage,
-          eventDate: new Date(),
-          description: `${tracked.stage} → ${newStage}`,
-        });
-
-        await tx.insert(alert).values({
-          type: "stage_change",
-          billId: tracked.id,
-          message: `${tracked.billName} — ${tracked.stage} → ${newStage}`,
-        });
-      });
-      stageTransitions++;
-      alertsCreated++;
+      const persisted = await persistEveningStageTransition(tracked, newStage);
+      if (persisted.updated) {
+        stageTransitions++;
+      }
+      if (persisted.alertInserted) {
+        alertsCreated++;
+      }
     } catch (err) {
-      errors.push(`evening_txn(${tracked.billId}): ${errorMessage(err)}`);
+      errors.push(`evening(${tracked.billId}): ${errorMessage(err)}`);
     }
   }
 

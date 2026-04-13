@@ -9,8 +9,9 @@
  *     right: 의원 활동 + 관련 뉴스 + Gemini 브리핑 HTML
  *
  * Server component. Pulls from DB — the morning sync already scored
- * bills and generated the briefing HTML, so this page is just a
- * layout shell around pre-computed data.
+ * bills and generated the briefing HTML. We also prefer the saved
+ * bill id snapshots from `daily_briefing` so the left-column cards
+ * stay aligned with the generated HTML/counts for that morning.
  */
 
 import { db } from "@/db";
@@ -20,9 +21,11 @@ import {
   industryCommittee,
   industryProfile,
   legislationNotice,
+  type Bill,
   type LegislationNotice,
 } from "@/db/schema";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { neon } from "@neondatabase/serverless";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { ContextStrip } from "@/components/context-strip";
 import { BillKeyCard } from "@/components/bill-key-card";
@@ -38,6 +41,8 @@ import { cn } from "@/lib/utils";
 import { FileText, RefreshCw, Newspaper, ExternalLink } from "lucide-react";
 
 export const dynamic = "force-dynamic"; // always fresh DB reads
+
+const rawSql = neon(process.env.DATABASE_URL!);
 
 export default async function BriefingPage(props: {
   searchParams: Promise<{ legislator?: string }>;
@@ -65,18 +70,9 @@ export default async function BriefingPage(props: {
     .from(industryCommittee)
     .where(eq(industryCommittee.industryProfileId, profile.id));
 
-  const [latestBriefing, topBills, relevantNotices, recentBills, newsItems, importanceById] =
+  const [briefing, relevantNotices, newsItems, importanceById] =
     await Promise.all([
-      db
-        .select()
-        .from(dailyBriefing)
-        .orderBy(desc(dailyBriefing.date))
-        .limit(1),
-      db
-        .select()
-        .from(bill)
-        .orderBy(desc(bill.relevanceScore), desc(bill.proposalDate))
-        .limit(4),
+      loadLatestBriefingCompat(),
       db
         .select()
         .from(legislationNotice)
@@ -88,7 +84,6 @@ export default async function BriefingPage(props: {
         )
         .orderBy(asc(legislationNotice.noticeEndDate))
         .limit(10),
-      db.select().from(bill).orderBy(desc(bill.proposalDate)).limit(10),
       loadRecentNews(8),
       computeImportance({
         profileId: profile.id,
@@ -96,7 +91,20 @@ export default async function BriefingPage(props: {
       }),
     ]);
 
-  const briefing = latestBriefing[0];
+  const [topBills, recentBills] = briefing
+    ? await Promise.all([
+        loadBriefingBillSnapshot({
+          ids: briefing.keyBillIds,
+          expectedCount: briefing.keyItemCount,
+          fallbackLoader: loadCurrentTopBills,
+        }),
+        loadBriefingBillSnapshot({
+          ids: briefing.newBillIds,
+          expectedCount: briefing.newBillCount,
+          fallbackLoader: loadCurrentNewBills,
+        }),
+      ])
+    : await Promise.all([loadCurrentTopBills(), loadCurrentNewBills()]);
   const proposerImportance = await loadProposerImportanceMap(
     topBills.map((entry) => ({
       name: entry.proposerName,
@@ -226,6 +234,135 @@ export default async function BriefingPage(props: {
       )}
     </>
   );
+}
+
+type BriefingSnapshot = {
+  id: number;
+  date: string;
+  contentHtml: string;
+  keyItemCount: number;
+  scheduleCount: number;
+  newBillCount: number;
+  keyBillIds: number[];
+  newBillIds: number[];
+  generatedAt: Date;
+};
+
+async function loadLatestBriefingCompat(): Promise<BriefingSnapshot | null> {
+  try {
+    const rows = await db
+      .select()
+      .from(dailyBriefing)
+      .orderBy(desc(dailyBriefing.date))
+      .limit(1);
+
+    return rows[0] ?? null;
+  } catch (err) {
+    if (!isLegacyBriefingSchemaError(err)) {
+      throw err;
+    }
+
+    const rows = (await rawSql`
+      SELECT
+        id,
+        date,
+        content_html,
+        key_item_count,
+        schedule_count,
+        new_bill_count,
+        generated_at
+      FROM daily_briefing
+      ORDER BY date DESC
+      LIMIT 1
+    `) as Array<{
+      id: number;
+      date: string;
+      content_html: string;
+      key_item_count: number;
+      schedule_count: number;
+      new_bill_count: number;
+      generated_at: string | Date;
+    }>;
+
+    const row = rows[0];
+    if (!row) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      date: row.date,
+      contentHtml: row.content_html,
+      keyItemCount: row.key_item_count,
+      scheduleCount: row.schedule_count,
+      newBillCount: row.new_bill_count,
+      keyBillIds: [],
+      newBillIds: [],
+      generatedAt:
+        row.generated_at instanceof Date
+          ? row.generated_at
+          : new Date(row.generated_at),
+    };
+  }
+}
+
+function isLegacyBriefingSchemaError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("key_bill_ids") ||
+    message.includes("new_bill_ids") ||
+    message.includes("column") ||
+    message.includes("does not exist")
+  );
+}
+
+async function loadBriefingBillSnapshot({
+  ids,
+  expectedCount,
+  fallbackLoader,
+}: {
+  ids: number[];
+  expectedCount: number;
+  fallbackLoader: () => Promise<Bill[]>;
+}): Promise<Bill[]> {
+  if (ids.length > 0) {
+    return loadBillsByIdOrder(ids);
+  }
+
+  if (expectedCount === 0) {
+    return [];
+  }
+
+  return fallbackLoader();
+}
+
+async function loadBillsByIdOrder(ids: number[]): Promise<Bill[]> {
+  if (ids.length === 0) return [];
+
+  const rows = await db.select().from(bill).where(inArray(bill.id, ids));
+  const order = new Map(ids.map((id, index) => [id, index]));
+  return rows.sort((left, right) => {
+    return (order.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+      (order.get(right.id) ?? Number.MAX_SAFE_INTEGER);
+  });
+}
+
+async function loadCurrentTopBills(): Promise<Bill[]> {
+  return db
+    .select()
+    .from(bill)
+    .where(sql`${bill.relevanceScore} >= 4`)
+    .orderBy(desc(bill.relevanceScore), desc(bill.proposalDate))
+    .limit(4);
+}
+
+async function loadCurrentNewBills(): Promise<Bill[]> {
+  return db
+    .select()
+    .from(bill)
+    .where(sql`${bill.createdAt} > NOW() - INTERVAL '24 hours'`)
+    .orderBy(desc(bill.createdAt), desc(bill.proposalDate))
+    .limit(10);
 }
 
 function NewsRow({
