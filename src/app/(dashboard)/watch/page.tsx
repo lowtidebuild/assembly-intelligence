@@ -28,6 +28,7 @@ import { PageHeader } from "@/components/page-header";
 import { DemoWatchPage } from "@/components/demo-watch-page";
 import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
+import { LegislatorAvatar } from "@/components/legislator-avatar";
 import {
   importanceTag,
   loadCachedImportance,
@@ -67,6 +68,7 @@ export default async function WatchPage() {
         committees: legislator.committees,
         termNumber: legislator.termNumber,
         committeeRole: legislator.committeeRole,
+        photoUrl: legislator.photoUrl,
       })
       .from(legislator)
       .where(eq(legislator.isActive, true))
@@ -110,6 +112,7 @@ export default async function WatchPage() {
     electionType: m.electionType,
     termNumber: m.termNumber,
     committeeRole: m.committeeRole,
+    photoUrl: m.photoUrl,
     committees: m.committees ?? [],
     importance: importanceById.get(m.id)?.level ?? null,
     importanceReasons: importanceById.get(m.id)?.reasons ?? [],
@@ -268,19 +271,17 @@ function WatchCard({
     committees: string[] | null;
     termNumber: number | null;
     committeeRole: string | null;
+    photoUrl?: string | null;
   };
   importance: ImportanceRecord | null;
   reason: string | null;
 }) {
-  const initials = member.name.slice(0, 1);
   return (
     <Link
       href={`/legislators/${member.id}`}
       className="flex gap-3 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]"
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-light)] text-[15px] font-bold text-[var(--color-primary)]">
-        {initials}
-      </div>
+      <LegislatorAvatar name={member.name} photoUrl={member.photoUrl} size={40} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-[14px] font-bold text-[var(--color-text)]">

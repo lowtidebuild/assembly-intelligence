@@ -48,6 +48,7 @@ export default async function AssemblyPage() {
         termNumber: legislator.termNumber,
         committeeRole: legislator.committeeRole,
         committees: legislator.committees,
+        photoUrl: legislator.photoUrl,
       })
       .from(legislator)
       .where(eq(legislator.isActive, true))
@@ -72,6 +73,7 @@ export default async function AssemblyPage() {
     electionType: m.electionType,
     termNumber: m.termNumber,
     committeeRole: m.committeeRole,
+    photoUrl: m.photoUrl,
     committees: m.committees ?? [],
     importance: importanceById.get(m.id)?.level ?? null,
     importanceReasons: importanceById.get(m.id)?.reasons ?? [],

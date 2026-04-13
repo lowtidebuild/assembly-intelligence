@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { PageHeader } from "@/components/page-header";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
+import { LegislatorAvatar } from "@/components/legislator-avatar";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
 import {
   loadImportanceForLegislator,
@@ -114,6 +115,11 @@ export default async function LegislatorDetailPage(props: {
           </Link>
 
           <div className="flex flex-wrap items-start gap-3">
+            <LegislatorAvatar
+              name={member.name}
+              photoUrl={member.photoUrl}
+              size={80}
+            />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-[24px] font-bold leading-tight text-[var(--color-text)]">

@@ -5,6 +5,7 @@ import { Plus, Sparkles, Users } from "lucide-react";
 import { SearchCommand } from "@/components/search-command";
 import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
+import { LegislatorAvatar } from "@/components/legislator-avatar";
 import { type ImportanceRecord } from "@/lib/legislator-importance";
 import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
 import { type DemoWatchEntry, useDemoWatchlist } from "@/lib/demo-watchlist";
@@ -20,6 +21,7 @@ interface DemoWatchMember {
   committees: string[] | null;
   termNumber: number | null;
   committeeRole: string | null;
+  photoUrl?: string | null;
 }
 
 interface DemoImportanceEntry {
@@ -181,15 +183,12 @@ function DemoWatchCard({
   importance: ImportanceRecord | null;
   reason: string | null;
 }) {
-  const initials = member.name.slice(0, 1);
   return (
     <a
       href={`/legislators/${member.id}`}
       className="flex gap-3 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]"
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-light)] text-[15px] font-bold text-[var(--color-primary)]">
-        {initials}
-      </div>
+      <LegislatorAvatar name={member.name} photoUrl={member.photoUrl} size={40} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-[14px] font-bold text-[var(--color-text)]">

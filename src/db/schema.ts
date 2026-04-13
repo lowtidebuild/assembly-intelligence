@@ -237,8 +237,9 @@ export const industryBillWatch = pgTable(
  * multiple committees simultaneously. Populated from CMITS by splitting
  * on ", ".
  *
- * **Dropped column:** `profile_image_url` — no MCP endpoint exposes
- * legislator photos. Revisit if we find an alternative source.
+ * `photoUrl` stores a browser-safe Assembly profile image URL gathered
+ * from the official member page. MCP's `member.photo` field is only a
+ * hint and may point to non-renderable `/photo/...jpg` URLs.
  */
 export const legislator = pgTable(
   "legislator",
@@ -271,6 +272,7 @@ export const legislator = pgTable(
     staffRaw: text("staff_raw"), // STAFF — comma-separated raw names
     secretaryRaw: text("secretary_raw"), // SECRETARY + SECRETARY2
     memTitle: text("mem_title"), // 주요 약력 (multi-line)
+    photoUrl: text("photo_url"),
     isActive: boolean("is_active").notNull().default(true),
     lastSynced: timestamp("last_synced", { withTimezone: true })
       .notNull()

@@ -42,7 +42,7 @@
  * the DB does not already have them.
  */
 
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   bill,
@@ -63,6 +63,7 @@ import { callMcpToolOrThrow } from "@/lib/mcp-client";
 import { errorMessage } from "@/lib/api-base";
 import { fetchBillBodyFragment } from "@/lib/bill-scraper";
 import { decodeHtmlEntities } from "@/lib/html-entities";
+import { resolveLegislatorPhotoUrl } from "@/lib/legislator-photo";
 import { syncNews } from "@/services/news-sync";
 
 /* ─────────────────────────────────────────────────────────────
@@ -516,6 +517,10 @@ function rolePriority(role: string | null | undefined): number {
   return ROLE_PRIORITY[role] ?? 0;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 interface EveningTransitionPersistResult {
   updated: boolean;
   timelineInserted: boolean;
@@ -624,6 +629,7 @@ export async function runMorningSync(
   let billsProcessed = 0;
   let billsScored = 0;
   let legislatorsUpdated = 0;
+  let legislatorsSynced = false;
 
   // 1. Active industry profile
   const [activeProfile] = await db.select().from(industryProfile).limit(1);
@@ -677,6 +683,7 @@ export async function runMorningSync(
 
     if (isStale) {
       legislatorsUpdated = await syncLegislators();
+      legislatorsSynced = true;
     } else {
       console.log(
         `[sync] legislators fresh (${stats.count} rows, last synced ${stats.mostRecent}) — skipping`,
@@ -684,6 +691,14 @@ export async function runMorningSync(
     }
   } catch (err) {
     errors.push(`legislators: ${errorMessage(err)}`);
+  }
+
+  if (!legislatorsSynced) {
+    try {
+      await backfillLegislatorPhotos();
+    } catch (err) {
+      errors.push(`legislator_photos: ${errorMessage(err)}`);
+    }
   }
 
   // 3b. Refresh real-time committee leadership for watched committees.
@@ -1203,7 +1218,50 @@ export async function syncLegislators(): Promise<number> {
       );
   }
 
+  try {
+    await backfillLegislatorPhotos();
+  } catch (err) {
+    console.warn("[syncLegislators] photo backfill failed:", errorMessage(err));
+  }
+
   return inserts.length;
+}
+
+export async function backfillLegislatorPhotos(limitCount = 50): Promise<number> {
+  const targets = await db
+    .select({
+      id: legislator.id,
+      name: legislator.name,
+      memberId: legislator.memberId,
+      photoUrl: legislator.photoUrl,
+    })
+    .from(legislator)
+    .where(and(eq(legislator.isActive, true), sql`${legislator.photoUrl} IS NULL`))
+    .orderBy(asc(legislator.seatIndex))
+    .limit(limitCount);
+
+  let updated = 0;
+  for (const row of targets) {
+    const resolved = await resolveLegislatorPhotoUrl({
+      name: row.name,
+      memberId: row.memberId,
+      preferMemberPage: true,
+    });
+    if (!resolved) {
+      await sleep(500);
+      continue;
+    }
+
+    await db
+      .update(legislator)
+      .set({ photoUrl: resolved })
+      .where(eq(legislator.id, row.id));
+
+    updated += 1;
+    await sleep(500);
+  }
+
+  return updated;
 }
 
 /**

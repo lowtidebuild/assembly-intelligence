@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { industryCommittee, industryProfile, legislator } from "@/db/schema";
 import { PageHeader } from "@/components/page-header";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
+import { LegislatorAvatar } from "@/components/legislator-avatar";
 import {
   loadCachedImportance,
   type ImportanceRecord,
@@ -68,6 +69,7 @@ export default async function LegislatorsPage(props: {
         electionType: legislator.electionType,
         committees: legislator.committees,
         committeeRole: legislator.committeeRole,
+        photoUrl: legislator.photoUrl,
       })
       .from(legislator)
       .where(and(...searchConditions))
@@ -163,6 +165,11 @@ export default async function LegislatorsPage(props: {
                             className="block text-[14px] font-semibold text-[var(--color-text)] hover:text-[var(--color-primary)]"
                           >
                             <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                              <LegislatorAvatar
+                                name={row.name}
+                                photoUrl={row.photoUrl}
+                                size={24}
+                              />
                               <span>{row.name}</span>
                               <LegislatorImportanceStar
                                 level={importance?.level ?? null}

@@ -43,6 +43,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
+import { LegislatorAvatar } from "@/components/legislator-avatar";
 import type { ImportanceLevel } from "@/lib/legislator-importance-ui";
 
 export interface HemicycleMember {
@@ -56,6 +57,7 @@ export interface HemicycleMember {
   electionType?: string | null;
   termNumber?: number | null;
   committeeRole?: string | null;
+  photoUrl?: string | null;
   importance?: ImportanceLevel;
   importanceReasons?: string[];
   /** If true, render a highlight ring around this seat. */
@@ -535,9 +537,10 @@ export function Hemicycle({
       {hovered && (
         <div className="pointer-events-none absolute left-1/2 top-2 z-10 w-[280px] -translate-x-1/2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[12px] shadow-[var(--shadow-card)]">
           <div className="flex items-center gap-2">
-            <span
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: partyColor(hovered.party) }}
+            <LegislatorAvatar
+              name={hovered.name}
+              photoUrl={hovered.photoUrl}
+              size={32}
             />
             <span className="font-semibold text-[var(--color-text)]">
               {hovered.name}
@@ -556,6 +559,7 @@ export function Hemicycle({
               reasons={hovered.importanceReasons}
             />
           </div>
+          <div className="mt-1 h-[2px] w-full rounded-full bg-[var(--color-border)]" />
           <div className="mt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
             {hovered.district ?? "비례대표"}
             {hovered.electionType && <> · {hovered.electionType}</>}
