@@ -28,7 +28,6 @@ import { PageHeader } from "@/components/page-header";
 import { DemoWatchPage } from "@/components/demo-watch-page";
 import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
-import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import {
   importanceTag,
   loadCachedImportance,
@@ -40,13 +39,7 @@ import { Plus, Sparkles, Users } from "lucide-react";
 
 export const revalidate = 60;
 
-export default async function WatchPage(props: {
-  searchParams: Promise<{ legislator?: string }>;
-}) {
-  const sp = await props.searchParams;
-  const selectedLegislatorId = sp.legislator
-    ? Number.parseInt(sp.legislator, 10)
-    : null;
+export default async function WatchPage() {
   const [profile] = await db.select().from(industryProfile).limit(1);
   const committees = profile
     ? await db
@@ -122,8 +115,6 @@ export default async function WatchPage(props: {
     importanceReasons: importanceById.get(m.id)?.reasons ?? [],
     highlighted: watchedIds.has(m.id),
   }));
-  const selectedMemberId =
-    allMembers.find((member) => member.id === selectedLegislatorId)?.memberId ?? null;
 
   if (isDemoMode()) {
     return (
@@ -144,16 +135,7 @@ export default async function WatchPage(props: {
                 ? row.addedAt.toISOString()
                 : new Date(row.addedAt).toISOString(),
           }))}
-          selectedLegislatorId={selectedLegislatorId}
         />
-
-        {selectedLegislatorId && (
-          <LegislatorProfileSlideOver
-            legislatorId={selectedLegislatorId}
-            closeHref="/watch"
-            importance={importanceById.get(selectedLegislatorId) ?? null}
-          />
-        )}
       </>
     );
   }
@@ -257,8 +239,8 @@ export default async function WatchPage(props: {
           <div className="w-full max-w-[480px]">
             <Hemicycle
               members={hemicycleMembers}
-              selectedMemberId={selectedMemberId}
-              detailHrefBase="/watch"
+              detailHrefBase="/legislators"
+              detailHrefMode="path"
               hideLegend
             />
           </div>
@@ -267,14 +249,6 @@ export default async function WatchPage(props: {
           </p>
         </aside>
       </div>
-
-      {selectedLegislatorId && (
-        <LegislatorProfileSlideOver
-          legislatorId={selectedLegislatorId}
-          closeHref="/watch"
-          importance={importanceById.get(selectedLegislatorId) ?? null}
-        />
-      )}
     </>
   );
 }
@@ -301,8 +275,7 @@ function WatchCard({
   const initials = member.name.slice(0, 1);
   return (
     <Link
-      href={`/watch?legislator=${member.id}`}
-      scroll={false}
+      href={`/legislators/${member.id}`}
       className="flex gap-3 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]"
     >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-light)] text-[15px] font-bold text-[var(--color-primary)]">

@@ -31,12 +31,10 @@ export function DemoWatchPage({
   members,
   importanceEntries,
   initialEntries,
-  selectedLegislatorId,
 }: {
   members: DemoWatchMember[];
   importanceEntries: DemoImportanceEntry[];
   initialEntries: DemoWatchEntry[];
-  selectedLegislatorId: number | null;
 }) {
   const { entries, watchedIds, addEntry } = useDemoWatchlist(initialEntries);
 
@@ -95,9 +93,6 @@ export function DemoWatchPage({
       })),
     [importanceById, members, watchedIds],
   );
-
-  const selectedMemberId =
-    members.find((member) => member.id === selectedLegislatorId)?.memberId ?? null;
 
   return (
     <>
@@ -163,8 +158,8 @@ export function DemoWatchPage({
           <div className="w-full max-w-[480px]">
             <Hemicycle
               members={hemicycleMembers}
-              selectedMemberId={selectedMemberId}
-              detailHrefBase="/watch"
+              detailHrefBase="/legislators"
+              detailHrefMode="path"
               hideLegend
             />
           </div>
@@ -189,7 +184,7 @@ function DemoWatchCard({
   const initials = member.name.slice(0, 1);
   return (
     <a
-      href={`/watch?legislator=${member.id}`}
+      href={`/legislators/${member.id}`}
       className="flex gap-3 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]"
     >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-light)] text-[15px] font-bold text-[var(--color-primary)]">

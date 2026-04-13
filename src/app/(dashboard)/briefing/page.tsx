@@ -29,7 +29,6 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { ContextStrip } from "@/components/context-strip";
 import { BillKeyCard } from "@/components/bill-key-card";
-import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import { todayKst, weekdayKo } from "@/lib/dashboard-data";
 import {
   type ImportanceRecord,
@@ -46,13 +45,7 @@ export const revalidate = 60;
 
 const rawSql = neon(process.env.DATABASE_URL!);
 
-export default async function BriefingPage(props: {
-  searchParams: Promise<{ legislator?: string }>;
-}) {
-  const sp = await props.searchParams;
-  const selectedLegislatorId = sp.legislator
-    ? Number.parseInt(sp.legislator, 10)
-    : null;
+export default async function BriefingPage() {
   const [profile] = await db.select().from(industryProfile).limit(1);
   const today = todayKst();
 
@@ -198,7 +191,7 @@ export default async function BriefingPage(props: {
                     }
                     proposerHref={
                       proposerImportance.get(makeProposerKey(b.proposerName, b.proposerParty))
-                        ? `/briefing?legislator=${proposerImportance.get(makeProposerKey(b.proposerName, b.proposerParty))?.legislatorId}`
+                        ? `/legislators/${proposerImportance.get(makeProposerKey(b.proposerName, b.proposerParty))?.legislatorId}`
                         : null
                     }
                   />
@@ -265,14 +258,6 @@ export default async function BriefingPage(props: {
           </SideSection>
         </aside>
       </div>
-
-      {selectedLegislatorId && (
-        <LegislatorProfileSlideOver
-          legislatorId={selectedLegislatorId}
-          closeHref="/briefing"
-          importance={importanceById.get(selectedLegislatorId) ?? null}
-        />
-      )}
     </>
   );
 }

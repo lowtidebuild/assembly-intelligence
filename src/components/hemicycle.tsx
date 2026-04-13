@@ -72,6 +72,7 @@ export interface HemicycleProps {
   selectedMemberId?: string | null;
   onSelect?: (member: HemicycleMember) => void;
   detailHrefBase?: string;
+  detailHrefMode?: "query" | "path";
   /** Hide legend */
   hideLegend?: boolean;
 }
@@ -381,6 +382,7 @@ export function Hemicycle({
   selectedMemberId,
   onSelect,
   detailHrefBase,
+  detailHrefMode = "query",
   hideLegend = false,
 }: HemicycleProps) {
   const router = useRouter();
@@ -461,7 +463,11 @@ export function Hemicycle({
               return;
             }
             if (detailHrefBase) {
-              router.push(`${detailHrefBase}?legislator=${member.id}`);
+              const href =
+                detailHrefMode === "path"
+                  ? `${detailHrefBase}/${member.id}`
+                  : `${detailHrefBase}?legislator=${member.id}`;
+              router.push(href);
             }
           }}
           onMouseEnter={() => setHovered(member)}

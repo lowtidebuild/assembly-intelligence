@@ -16,18 +16,11 @@ import { industryCommittee, industryProfile, legislator } from "@/db/schema";
 import { asc, eq, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
-import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import { loadCachedImportance } from "@/lib/legislator-importance";
 
 export const revalidate = 300;
 
-export default async function AssemblyPage(props: {
-  searchParams: Promise<{ legislator?: string }>;
-}) {
-  const sp = await props.searchParams;
-  const selectedLegislatorId = sp.legislator
-    ? Number.parseInt(sp.legislator, 10)
-    : null;
+export default async function AssemblyPage() {
   const [profile] = await db.select().from(industryProfile).limit(1);
   const committees = profile
     ? await db
@@ -83,8 +76,6 @@ export default async function AssemblyPage(props: {
     importance: importanceById.get(m.id)?.level ?? null,
     importanceReasons: importanceById.get(m.id)?.reasons ?? [],
   }));
-  const selectedMemberId =
-    members.find((member) => member.id === selectedLegislatorId)?.memberId ?? null;
 
   const totalActive = members.length;
   const sortedParties = [...partyStats].sort((a, b) => b.count - a.count);
@@ -109,8 +100,8 @@ export default async function AssemblyPage(props: {
           </div>
           <Hemicycle
             members={hemicycleMembers}
-            selectedMemberId={selectedMemberId}
-            detailHrefBase="/assembly"
+            detailHrefBase="/legislators"
+            detailHrefMode="path"
           />
         </div>
 
@@ -137,14 +128,6 @@ export default async function AssemblyPage(props: {
           })}
         </div>
       </div>
-
-      {selectedLegislatorId && (
-        <LegislatorProfileSlideOver
-          legislatorId={selectedLegislatorId}
-          closeHref="/assembly"
-          importance={importanceById.get(selectedLegislatorId) ?? null}
-        />
-      )}
     </>
   );
 }
