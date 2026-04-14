@@ -12,7 +12,6 @@
 
 import { db } from "@/db";
 import {
-  industryProfile,
   industryCommittee,
   legislator,
   syncLog,
@@ -22,7 +21,7 @@ import { PageHeader } from "@/components/page-header";
 import { McpCapabilityPanel } from "@/components/mcp-capability-panel";
 import Link from "next/link";
 import { getMcpRuntimeConfig, hasMcpKey } from "@/lib/mcp-client";
-import { withDbReadRetry } from "@/lib/db-compat";
+import { loadActiveIndustryProfileCompat, withDbReadRetry } from "@/lib/db-compat";
 import {
   Settings as SettingsIcon,
   Database,
@@ -40,7 +39,7 @@ export default async function SettingsPage() {
   const mcpConfigured = hasMcpKey();
   const [profileRows, recentSyncs] = await withDbReadRetry(() =>
     Promise.all([
-      db.select().from(industryProfile).limit(1),
+      loadActiveIndustryProfileCompat().then((profile) => (profile ? [profile] : [])),
       db.select().from(syncLog).orderBy(desc(syncLog.startedAt)).limit(5),
     ]),
   );

@@ -19,7 +19,6 @@ import {
   bill,
   dailyBriefing,
   industryCommittee,
-  industryProfile,
   legislationNotice,
   petitionItem,
   pressRelease,
@@ -45,7 +44,11 @@ import { loadRecentNews } from "@/services/news-sync";
 import { loadRecentTranscriptHits } from "@/services/transcript-sync";
 import { cn } from "@/lib/utils";
 import { isDemoMode } from "@/lib/demo-mode";
-import { flattenErrorText, withDbReadRetry } from "@/lib/db-compat";
+import {
+  flattenErrorText,
+  loadActiveIndustryProfileCompat,
+  withDbReadRetry,
+} from "@/lib/db-compat";
 import { FileText, RefreshCw, Newspaper, ExternalLink, MessagesSquare } from "lucide-react";
 
 export const revalidate = 60;
@@ -53,9 +56,7 @@ export const revalidate = 60;
 const rawSql = neon(process.env.DATABASE_URL!);
 
 export default async function BriefingPage() {
-  const [profile] = await withDbReadRetry(() =>
-    db.select().from(industryProfile).limit(1),
-  );
+  const profile = await withDbReadRetry(() => loadActiveIndustryProfileCompat());
   const today = todayKst();
 
   if (!profile) {

@@ -13,7 +13,7 @@
  */
 
 import { db } from "@/db";
-import { bill, industryCommittee, industryProfile, legislator, vote } from "@/db/schema";
+import { bill, industryCommittee, legislator, vote } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import Link from "next/link";
@@ -41,6 +41,7 @@ import {
   type LegislatorStanceSignal,
   type PassageLikelihood,
 } from "@/lib/stance-analysis";
+import { loadActiveIndustryProfileCompat } from "@/lib/db-compat";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +54,7 @@ export default async function ImpactPage(props: {
     ? Number.parseInt(sp.legislator, 10)
     : null;
 
-  const [profile] = await db.select().from(industryProfile).limit(1);
+  const profile = await loadActiveIndustryProfileCompat();
   const committees = profile
     ? await db
         .select({ committeeCode: industryCommittee.committeeCode })

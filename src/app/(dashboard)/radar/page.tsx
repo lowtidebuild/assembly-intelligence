@@ -24,7 +24,6 @@ import { db } from "@/db";
 import {
   bill,
   industryCommittee,
-  industryProfile,
   type Bill,
 } from "@/db/schema";
 import { and, desc, asc, eq, gte, ilike, or, sql } from "drizzle-orm";
@@ -43,6 +42,7 @@ import {
   makeProposerKey,
   type ImportanceRecord,
 } from "@/lib/legislator-importance";
+import { loadActiveIndustryProfileCompat } from "@/lib/db-compat";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +99,7 @@ export default async function RadarPage(props: {
   };
   const orderBy = sortMap[sort] ?? sortMap["-date"];
 
-  const [profile] = await db.select().from(industryProfile).limit(1);
+  const profile = await loadActiveIndustryProfileCompat();
   const industryCommittees = profile
     ? await db
         .select({ committeeCode: industryCommittee.committeeCode })

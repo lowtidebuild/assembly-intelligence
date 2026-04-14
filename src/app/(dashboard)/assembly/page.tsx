@@ -12,7 +12,7 @@
  */
 
 import { db } from "@/db";
-import { industryCommittee, industryProfile, legislator } from "@/db/schema";
+import { industryCommittee, legislator } from "@/db/schema";
 import { asc, eq, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
@@ -20,14 +20,14 @@ import {
   loadCachedImportance,
   type ImportanceRecord,
 } from "@/lib/legislator-importance";
-import { withDbReadRetry } from "@/lib/db-compat";
+import { loadActiveIndustryProfileCompat, withDbReadRetry } from "@/lib/db-compat";
 
 export const revalidate = 300;
 
 export default async function AssemblyPage() {
   const { committees, importanceById, members, partyStats } =
     await withDbReadRetry(async () => {
-      const [profile] = await db.select().from(industryProfile).limit(1);
+      const profile = await loadActiveIndustryProfileCompat();
       const committees = profile
         ? await db
             .select({ committeeCode: industryCommittee.committeeCode })

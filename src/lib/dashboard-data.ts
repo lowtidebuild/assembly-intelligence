@@ -12,7 +12,6 @@
 
 import { db } from "@/db";
 import {
-  industryProfile,
   bill,
   syncLog,
   legislator,
@@ -20,6 +19,7 @@ import {
   type IndustryProfile,
 } from "@/db/schema";
 import { desc, sql } from "drizzle-orm";
+import { loadActiveIndustryProfileCompat } from "@/lib/db-compat";
 
 export interface DashboardContext {
   profile: IndustryProfile | null;
@@ -40,7 +40,7 @@ export interface DashboardContext {
  */
 export async function getDashboardContext(): Promise<DashboardContext> {
   const [profileRows, billStats, watchStats, lastSyncRow] = await Promise.all([
-    db.select().from(industryProfile).limit(1),
+    loadActiveIndustryProfileCompat().then((profile) => (profile ? [profile] : [])),
     db
       .select({
         total: sql<number>`count(*)::int`,

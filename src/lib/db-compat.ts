@@ -1,3 +1,7 @@
+import { neon } from "@neondatabase/serverless";
+import { db } from "@/db";
+import { industryProfile, type IndustryProfile } from "@/db/schema";
+
 export function flattenErrorText(err: unknown): string {
   const seen = new Set<unknown>();
   const parts: string[] = [];
@@ -26,6 +30,104 @@ export function isRetryableDbReadError(err: unknown): boolean {
     message.includes("connection attempts are currently ongoing") ||
     message.includes('"neon:retryable":true')
   );
+}
+
+function isMissingIndustryExcludeKeywordsColumn(err: unknown): boolean {
+  return flattenErrorText(err).includes('column "exclude_keywords" does not exist');
+}
+
+function normalizeKeywordList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed)
+        ? parsed.filter((item): item is string => typeof item === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}
+
+type LegacyIndustryProfileRow = {
+  id: number | string;
+  slug: string;
+  name: string;
+  nameEn: string;
+  icon: string;
+  description: string;
+  keywords: unknown;
+  llmContext: string;
+  presetVersion: string | null;
+  isCustom: boolean;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+function toDate(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
+}
+
+function mapLegacyIndustryProfileRow(
+  row: LegacyIndustryProfileRow,
+): IndustryProfile {
+  return {
+    id: Number(row.id),
+    slug: row.slug,
+    name: row.name,
+    nameEn: row.nameEn,
+    icon: row.icon,
+    description: row.description,
+    keywords: normalizeKeywordList(row.keywords),
+    excludeKeywords: [],
+    llmContext: row.llmContext,
+    presetVersion: row.presetVersion,
+    isCustom: row.isCustom,
+    createdAt: toDate(row.createdAt),
+    updatedAt: toDate(row.updatedAt),
+  };
+}
+
+const rawSql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
+
+export async function loadActiveIndustryProfileCompat(): Promise<IndustryProfile | null> {
+  try {
+    const [profile] = await db.select().from(industryProfile).limit(1);
+    return profile ?? null;
+  } catch (err) {
+    if (!isMissingIndustryExcludeKeywordsColumn(err) || !rawSql) {
+      throw err;
+    }
+
+    const rows = (await withDbReadRetry(() =>
+      rawSql`
+        select
+          id,
+          slug,
+          name,
+          name_en as "nameEn",
+          icon,
+          description,
+          keywords,
+          llm_context as "llmContext",
+          preset_version as "presetVersion",
+          is_custom as "isCustom",
+          created_at as "createdAt",
+          updated_at as "updatedAt"
+        from industry_profile
+        limit 1
+      `,
+    )) as LegacyIndustryProfileRow[];
+
+    const row = rows[0];
+    return row ? mapLegacyIndustryProfileRow(row) : null;
+  }
 }
 
 export async function withDbReadRetry<T>(

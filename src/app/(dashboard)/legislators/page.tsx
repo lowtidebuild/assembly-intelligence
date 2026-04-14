@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { industryCommittee, industryProfile, legislator } from "@/db/schema";
+import { industryCommittee, legislator } from "@/db/schema";
 import { PageHeader } from "@/components/page-header";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
 import { LegislatorAvatar } from "@/components/legislator-avatar";
@@ -10,6 +10,7 @@ import {
   type ImportanceRecord,
 } from "@/lib/legislator-importance";
 import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
+import { loadActiveIndustryProfileCompat } from "@/lib/db-compat";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export default async function LegislatorsPage(props: {
   const importanceFilter = normalizeImportance(sp.importance);
   const sort = normalizeSort(sp.sort);
 
-  const [profile] = await db.select().from(industryProfile).limit(1);
+  const profile = await loadActiveIndustryProfileCompat();
   const industryCommittees = profile
     ? await db
         .select({ committeeCode: industryCommittee.committeeCode })

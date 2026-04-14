@@ -19,7 +19,6 @@
 
 import { db } from "@/db";
 import {
-  industryProfile,
   industryCommittee,
   industryLegislatorWatch,
   legislator,
@@ -28,12 +27,13 @@ import { asc, eq } from "drizzle-orm";
 import { INDUSTRY_PRESETS, getPreset } from "@/lib/industry-presets";
 import { ALL_COMMITTEES } from "@/lib/assembly-committees";
 import { SetupWizard } from "@/components/setup-wizard";
+import { loadActiveIndustryProfileCompat } from "@/lib/db-compat";
 
 export const dynamic = "force-dynamic";
 
 export default async function SetupPage() {
   const [profileRows, allLegislators] = await Promise.all([
-    db.select().from(industryProfile).limit(1),
+    loadActiveIndustryProfileCompat().then((profile) => (profile ? [profile] : [])),
     db
       .select({
         id: legislator.id,

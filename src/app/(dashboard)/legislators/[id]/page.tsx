@@ -6,7 +6,6 @@ import {
   bill,
   industryCommittee,
   industryLegislatorWatch,
-  industryProfile,
   legislator,
   vote,
 } from "@/db/schema";
@@ -24,7 +23,7 @@ import {
 } from "@/lib/watch-actions";
 import { isDemoMode } from "@/lib/demo-mode";
 import { DemoWatchCardControls } from "@/components/demo-watch-controls";
-import { flattenErrorText } from "@/lib/db-compat";
+import { flattenErrorText, loadActiveIndustryProfileCompat } from "@/lib/db-compat";
 import { buildTranscriptSnippet } from "@/lib/transcript-parser";
 import { summarizeLegislatorIssueSignals } from "@/lib/stance-analysis";
 import { cn } from "@/lib/utils";
@@ -52,7 +51,7 @@ export default async function LegislatorDetailPage(props: {
     notFound();
   }
 
-  const [profile] = await db.select().from(industryProfile).limit(1);
+  const profile = await loadActiveIndustryProfileCompat();
   const industryCommittees = profile
     ? await db
         .select({ committeeCode: industryCommittee.committeeCode })

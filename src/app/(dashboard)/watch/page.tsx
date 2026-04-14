@@ -19,7 +19,6 @@ import {
   industryCommittee,
   legislator,
   industryLegislatorWatch,
-  industryProfile,
 } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { revalidatePath, revalidateTag } from "next/cache";
@@ -36,7 +35,7 @@ import {
 } from "@/lib/legislator-importance";
 import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
 import { isDemoMode } from "@/lib/demo-mode";
-import { withDbReadRetry } from "@/lib/db-compat";
+import { loadActiveIndustryProfileCompat, withDbReadRetry } from "@/lib/db-compat";
 import { Plus, Sparkles, Users } from "lucide-react";
 
 export const revalidate = 60;
@@ -44,7 +43,7 @@ export const revalidate = 60;
 export default async function WatchPage() {
   const { allMembers, importanceById, profile, watchRows } =
     await withDbReadRetry(async () => {
-      const [profile] = await db.select().from(industryProfile).limit(1);
+      const profile = await loadActiveIndustryProfileCompat();
       const committees = profile
         ? await db
             .select({ committeeCode: industryCommittee.committeeCode })

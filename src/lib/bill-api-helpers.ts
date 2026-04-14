@@ -12,8 +12,9 @@
 
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { bill, industryProfile, type Bill, type IndustryProfile } from "@/db/schema";
+import { bill, type Bill, type IndustryProfile } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { loadActiveIndustryProfileCompat } from "@/lib/db-compat";
 
 export interface BillWithProfile {
   bill: Bill;
@@ -42,7 +43,7 @@ export async function loadBillAndProfile(
 }> {
   const [billRows, profileRows] = await Promise.all([
     db.select().from(bill).where(eq(bill.id, billId)).limit(1),
-    db.select().from(industryProfile).limit(1),
+    loadActiveIndustryProfileCompat().then((profile) => (profile ? [profile] : [])),
   ]);
   return {
     bill: billRows[0] ?? null,
