@@ -45,7 +45,7 @@ import { loadRecentNews } from "@/services/news-sync";
 import { loadRecentTranscriptHits } from "@/services/transcript-sync";
 import { cn } from "@/lib/utils";
 import { isDemoMode } from "@/lib/demo-mode";
-import { flattenErrorText } from "@/lib/db-compat";
+import { flattenErrorText, withDbReadRetry } from "@/lib/db-compat";
 import { FileText, RefreshCw, Newspaper, ExternalLink, MessagesSquare } from "lucide-react";
 
 export const revalidate = 60;
@@ -53,7 +53,9 @@ export const revalidate = 60;
 const rawSql = neon(process.env.DATABASE_URL!);
 
 export default async function BriefingPage() {
-  const [profile] = await db.select().from(industryProfile).limit(1);
+  const [profile] = await withDbReadRetry(() =>
+    db.select().from(industryProfile).limit(1),
+  );
   const today = todayKst();
 
   if (!profile) {
@@ -67,10 +69,12 @@ export default async function BriefingPage() {
     );
   }
 
-  const committees = await db
-    .select({ committeeCode: industryCommittee.committeeCode })
-    .from(industryCommittee)
-    .where(eq(industryCommittee.industryProfileId, profile.id));
+  const committees = await withDbReadRetry(() =>
+    db
+      .select({ committeeCode: industryCommittee.committeeCode })
+      .from(industryCommittee)
+      .where(eq(industryCommittee.industryProfileId, profile.id)),
+  );
 
   let briefing: BriefingSnapshot | null = null;
   let relevantNotices: LegislationNotice[] = [];
@@ -91,33 +95,42 @@ export default async function BriefingPage() {
 
   try {
     [briefing, relevantNotices, relevantPetitions, relevantPress, transcriptHits, newsItems, importanceById] =
-      await Promise.all([
-      loadLatestBriefingCompat(),
-      loadRelevantNoticesCompat(),
-      loadRelevantPetitionsCompat(),
-      loadRelevantPressReleasesCompat(),
-      loadRecentTranscriptHitsCompat(),
-      loadRecentNewsCompat(8),
-      loadBriefingImportanceCompat({
-        profileId: profile.id,
-        committeeCodes: committees.map((c) => c.committeeCode),
-      }),
-    ]);
+      await withDbReadRetry(() =>
+        Promise.all([
+          loadLatestBriefingCompat(),
+          loadRelevantNoticesCompat(),
+          loadRelevantPetitionsCompat(),
+          loadRelevantPressReleasesCompat(),
+          loadRecentTranscriptHitsCompat(),
+          loadRecentNewsCompat(8),
+          loadBriefingImportanceCompat({
+            profileId: profile.id,
+            committeeCodes: committees.map((c) => c.committeeCode),
+          }),
+        ]),
+      );
 
-    [topBills, recentBills] = briefing
-      ? await Promise.all([
+    if (briefing) {
+      const snapshot = briefing;
+      [topBills, recentBills] = await withDbReadRetry(() =>
+        Promise.all([
           loadBriefingBillSnapshot({
-            ids: briefing.keyBillIds,
-            expectedCount: briefing.keyItemCount,
+            ids: snapshot.keyBillIds,
+            expectedCount: snapshot.keyItemCount,
             fallbackLoader: loadCurrentTopBills,
           }),
           loadBriefingBillSnapshot({
-            ids: briefing.newBillIds,
-            expectedCount: briefing.newBillCount,
+            ids: snapshot.newBillIds,
+            expectedCount: snapshot.newBillCount,
             fallbackLoader: loadCurrentNewBills,
           }),
-        ])
-      : await Promise.all([loadCurrentTopBills(), loadCurrentNewBills()]);
+        ]),
+      );
+    } else {
+      [topBills, recentBills] = await withDbReadRetry(() =>
+        Promise.all([loadCurrentTopBills(), loadCurrentNewBills()]),
+      );
+    }
 
     proposerImportance = await loadProposerImportanceMap(
       topBills.map((entry) => ({

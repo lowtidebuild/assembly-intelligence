@@ -22,6 +22,7 @@ import { PageHeader } from "@/components/page-header";
 import { McpCapabilityPanel } from "@/components/mcp-capability-panel";
 import Link from "next/link";
 import { getMcpRuntimeConfig, hasMcpKey } from "@/lib/mcp-client";
+import { withDbReadRetry } from "@/lib/db-compat";
 import {
   Settings as SettingsIcon,
   Database,
@@ -37,32 +38,38 @@ export const revalidate = 300;
 export default async function SettingsPage() {
   const mcpRuntime = getMcpRuntimeConfig();
   const mcpConfigured = hasMcpKey();
-  const [profileRows, recentSyncs] = await Promise.all([
-    db.select().from(industryProfile).limit(1),
-    db.select().from(syncLog).orderBy(desc(syncLog.startedAt)).limit(5),
-  ]);
+  const [profileRows, recentSyncs] = await withDbReadRetry(() =>
+    Promise.all([
+      db.select().from(industryProfile).limit(1),
+      db.select().from(syncLog).orderBy(desc(syncLog.startedAt)).limit(5),
+    ]),
+  );
 
   const profile = profileRows[0];
   const committees = profile
-    ? await db
-        .select()
-        .from(industryCommittee)
-        .where(eq(industryCommittee.industryProfileId, profile.id))
+    ? await withDbReadRetry(() =>
+        db
+          .select()
+          .from(industryCommittee)
+          .where(eq(industryCommittee.industryProfileId, profile.id)),
+      )
     : [];
   const committeeLeaders = profile
-    ? await db
-        .select({
-          name: legislator.name,
-          committees: legislator.committees,
-          committeeRole: legislator.committeeRole,
-        })
-        .from(legislator)
-        .where(
-          and(
-            eq(legislator.isActive, true),
-            sql`${legislator.committeeRole} IN ('위원장', '간사')`,
+    ? await withDbReadRetry(() =>
+        db
+          .select({
+            name: legislator.name,
+            committees: legislator.committees,
+            committeeRole: legislator.committeeRole,
+          })
+          .from(legislator)
+          .where(
+            and(
+              eq(legislator.isActive, true),
+              sql`${legislator.committeeRole} IN ('위원장', '간사')`,
+            ),
           ),
-        )
+      )
     : [];
 
   const envStatus = {

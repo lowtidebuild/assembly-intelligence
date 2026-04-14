@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { ContextStrip } from "@/components/context-strip";
-import { flattenErrorText } from "@/lib/db-compat";
+import { flattenErrorText, withDbReadRetry } from "@/lib/db-compat";
 import { todayKst, weekdayKo } from "@/lib/dashboard-data";
 import { buildTranscriptSnippet } from "@/lib/transcript-parser";
 import {
@@ -20,12 +20,16 @@ export default async function TranscriptsPage() {
   let summaryMap = new Map<number, { hitCount: number; snippets: string[] }>();
 
   try {
-    [transcripts, hits, recentCount] = await Promise.all([
-      loadRecentTranscripts(20),
-      loadRecentTranscriptHits(8),
-      loadRecentTranscriptCount(14),
-    ]);
-    summaryMap = await loadTranscriptSummaryMap(transcripts.map((entry) => entry.id));
+    [transcripts, hits, recentCount] = await withDbReadRetry(() =>
+      Promise.all([
+        loadRecentTranscripts(20),
+        loadRecentTranscriptHits(8),
+        loadRecentTranscriptCount(14),
+      ]),
+    );
+    summaryMap = await withDbReadRetry(() =>
+      loadTranscriptSummaryMap(transcripts.map((entry) => entry.id)),
+    );
   } catch (err) {
     if (!isMissingTranscriptSchemaError(err)) {
       throw err;

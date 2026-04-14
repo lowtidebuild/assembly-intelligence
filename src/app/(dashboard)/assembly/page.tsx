@@ -16,52 +16,67 @@ import { industryCommittee, industryProfile, legislator } from "@/db/schema";
 import { asc, eq, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
-import { loadCachedImportance } from "@/lib/legislator-importance";
+import {
+  loadCachedImportance,
+  type ImportanceRecord,
+} from "@/lib/legislator-importance";
+import { withDbReadRetry } from "@/lib/db-compat";
 
 export const revalidate = 300;
 
 export default async function AssemblyPage() {
-  const [profile] = await db.select().from(industryProfile).limit(1);
-  const committees = profile
-    ? await db
-        .select({ committeeCode: industryCommittee.committeeCode })
-        .from(industryCommittee)
-        .where(eq(industryCommittee.industryProfileId, profile.id))
-    : [];
-  const importanceById = profile
-    ? await loadCachedImportance({
-        profileId: profile.id,
-        committeeCodes: committees.map((c) => c.committeeCode),
-      })
-    : new Map();
+  const { committees, importanceById, members, partyStats } =
+    await withDbReadRetry(async () => {
+      const [profile] = await db.select().from(industryProfile).limit(1);
+      const committees = profile
+        ? await db
+            .select({ committeeCode: industryCommittee.committeeCode })
+            .from(industryCommittee)
+            .where(eq(industryCommittee.industryProfileId, profile.id))
+        : [];
+      const importanceById = profile
+        ? await loadCachedImportance({
+            profileId: profile.id,
+            committeeCodes: committees.map((c) => c.committeeCode),
+          })
+        : new Map<number, ImportanceRecord>();
 
-  const [members, partyStats] = await Promise.all([
-    db
-      .select({
-        id: legislator.id,
-        memberId: legislator.memberId,
-        name: legislator.name,
-        nameHanja: legislator.nameHanja,
-        party: legislator.party,
-        district: legislator.district,
-        electionType: legislator.electionType,
-        termNumber: legislator.termNumber,
-        committeeRole: legislator.committeeRole,
-        committees: legislator.committees,
-        photoUrl: legislator.photoUrl,
-      })
-      .from(legislator)
-      .where(eq(legislator.isActive, true))
-      .orderBy(asc(legislator.seatIndex)),
-    db
-      .select({
-        party: legislator.party,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(legislator)
-      .where(eq(legislator.isActive, true))
-      .groupBy(legislator.party),
-  ]);
+      const [members, partyStats] = await Promise.all([
+        db
+          .select({
+            id: legislator.id,
+            memberId: legislator.memberId,
+            name: legislator.name,
+            nameHanja: legislator.nameHanja,
+            party: legislator.party,
+            district: legislator.district,
+            electionType: legislator.electionType,
+            termNumber: legislator.termNumber,
+            committeeRole: legislator.committeeRole,
+            committees: legislator.committees,
+            photoUrl: legislator.photoUrl,
+          })
+          .from(legislator)
+          .where(eq(legislator.isActive, true))
+          .orderBy(asc(legislator.seatIndex)),
+        db
+          .select({
+            party: legislator.party,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(legislator)
+          .where(eq(legislator.isActive, true))
+          .groupBy(legislator.party),
+      ]);
+
+      return {
+        profile,
+        committees,
+        importanceById,
+        members,
+        partyStats,
+      };
+    });
 
   const hemicycleMembers: HemicycleMember[] = members.map((m) => ({
     id: m.id,

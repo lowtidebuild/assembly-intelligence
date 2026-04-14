@@ -36,59 +36,71 @@ import {
 } from "@/lib/legislator-importance";
 import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
 import { isDemoMode } from "@/lib/demo-mode";
+import { withDbReadRetry } from "@/lib/db-compat";
 import { Plus, Sparkles, Users } from "lucide-react";
 
 export const revalidate = 60;
 
 export default async function WatchPage() {
-  const [profile] = await db.select().from(industryProfile).limit(1);
-  const committees = profile
-    ? await db
-        .select({ committeeCode: industryCommittee.committeeCode })
-        .from(industryCommittee)
-        .where(eq(industryCommittee.industryProfileId, profile.id))
-    : [];
-  const importanceById = profile
-    ? await loadCachedImportance({
-        profileId: profile.id,
-        committeeCodes: committees.map((c) => c.committeeCode),
-      })
-    : new Map<number, ImportanceRecord>();
-
-  const [allMembers, watchRows] = await Promise.all([
-    db
-      .select({
-        id: legislator.id,
-        memberId: legislator.memberId,
-        name: legislator.name,
-        nameHanja: legislator.nameHanja,
-        party: legislator.party,
-        district: legislator.district,
-        electionType: legislator.electionType,
-        committees: legislator.committees,
-        termNumber: legislator.termNumber,
-        committeeRole: legislator.committeeRole,
-        photoUrl: legislator.photoUrl,
-      })
-      .from(legislator)
-      .where(eq(legislator.isActive, true))
-      .orderBy(asc(legislator.seatIndex)),
-    profile
-      ? db
-          .select({
-            legislatorId: industryLegislatorWatch.legislatorId,
-            reason: industryLegislatorWatch.reason,
-            addedAt: industryLegislatorWatch.addedAt,
-            legislator: legislator,
+  const { allMembers, importanceById, profile, watchRows } =
+    await withDbReadRetry(async () => {
+      const [profile] = await db.select().from(industryProfile).limit(1);
+      const committees = profile
+        ? await db
+            .select({ committeeCode: industryCommittee.committeeCode })
+            .from(industryCommittee)
+            .where(eq(industryCommittee.industryProfileId, profile.id))
+        : [];
+      const importanceById = profile
+        ? await loadCachedImportance({
+            profileId: profile.id,
+            committeeCodes: committees.map((c) => c.committeeCode),
           })
-          .from(industryLegislatorWatch)
-          .innerJoin(
-            legislator,
-            eq(legislator.id, industryLegislatorWatch.legislatorId),
-          )
-          .where(eq(industryLegislatorWatch.industryProfileId, profile.id))
-      : Promise.resolve([]),
-  ]);
+        : new Map<number, ImportanceRecord>();
+
+      const [allMembers, watchRows] = await Promise.all([
+        db
+          .select({
+            id: legislator.id,
+            memberId: legislator.memberId,
+            name: legislator.name,
+            nameHanja: legislator.nameHanja,
+            party: legislator.party,
+            district: legislator.district,
+            electionType: legislator.electionType,
+            committees: legislator.committees,
+            termNumber: legislator.termNumber,
+            committeeRole: legislator.committeeRole,
+            photoUrl: legislator.photoUrl,
+          })
+          .from(legislator)
+          .where(eq(legislator.isActive, true))
+          .orderBy(asc(legislator.seatIndex)),
+        profile
+          ? db
+              .select({
+                legislatorId: industryLegislatorWatch.legislatorId,
+                reason: industryLegislatorWatch.reason,
+                addedAt: industryLegislatorWatch.addedAt,
+                legislator: legislator,
+              })
+              .from(industryLegislatorWatch)
+              .innerJoin(
+                legislator,
+                eq(legislator.id, industryLegislatorWatch.legislatorId),
+              )
+              .where(eq(industryLegislatorWatch.industryProfileId, profile.id))
+          : Promise.resolve([]),
+      ]);
+
+      return {
+        profile,
+        committees,
+        importanceById,
+        allMembers,
+        watchRows,
+      };
+    });
 
   const watchedIds = new Set(watchRows.map((w) => w.legislatorId));
   const recommendations = allMembers
