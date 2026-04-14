@@ -10,12 +10,18 @@
 
 import { DashboardShell } from "@/components/dashboard-shell";
 import { getDashboardContext } from "@/lib/dashboard-data";
+import { isDemoMode } from "@/lib/demo-mode";
+import { unstable_noStore as noStore } from "next/cache";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  if (isDemoMode()) {
+    noStore();
+  }
+
   const ctx = await getDashboardContext();
 
   return (
