@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-12T12:41:34.026Z",
-  "baseUrl": "http://localhost:3000",
+  "generatedAt": "2026-04-14T01:53:28.660Z",
+  "baseUrl": "http://127.0.0.1:3024",
   "viewport": {
     "width": 1440,
     "height": 900
@@ -8,107 +8,94 @@
   "snapshots": [
     {
       "name": "01-unauth-redirect",
-      "url": "http://localhost:3000/login?return_to=%2Fbriefing",
+      "url": "http://localhost:3024/login?return_to=%2Fbriefing",
       "description": "Unauthenticated /briefing bounces to /login with return_to param",
       "actions": []
     },
     {
       "name": "02-login-page",
-      "url": "http://localhost:3000/login?return_to=%2Fbriefing",
+      "url": "http://localhost:3024/login?return_to=%2Fbriefing",
       "description": "Login page with ParlaWatch+ branding",
       "actions": []
     },
     {
       "name": "03-login-error",
-      "url": "http://localhost:3000/login?error=bad_password",
+      "url": "http://127.0.0.1:3024/login?error=bad_password",
       "description": "Login page showing bad_password error",
       "actions": [
-        "fill wrong password",
-        "submit"
+        "open login page with bad_password state"
       ]
     },
     {
       "name": "04-briefing",
-      "url": "http://localhost:3000/briefing",
+      "url": "http://127.0.0.1:3024/briefing",
       "description": "Briefing page — top bills, Gemini summary, news rail",
       "actions": []
     },
     {
       "name": "05-radar-default",
-      "url": "http://localhost:3000/radar",
+      "url": "http://127.0.0.1:3024/radar",
       "description": "Radar page default view — all bills, sorted by date desc",
       "actions": []
     },
     {
       "name": "06-radar-filtered",
-      "url": "http://localhost:3000/radar?stage=stage_2",
+      "url": "http://127.0.0.1:3024/radar?stage=stage_2",
       "description": "Radar page filtered to stage_2 (상임위 심사)",
       "actions": []
     },
     {
       "name": "07-radar-slide-over",
-      "url": "http://localhost:3000/radar?bill=1",
+      "url": "http://127.0.0.1:3024/radar?bill=1",
       "description": "Bill slide-over panel with AI summary + relevance reasoning + company impact editor",
       "actions": []
     },
     {
       "name": "08-impact-empty",
-      "url": "http://localhost:3000/impact",
+      "url": "http://127.0.0.1:3024/impact",
       "description": "Impact page with no bill selected — left sidebar picker, empty center",
       "actions": []
     },
     {
       "name": "09-impact-selected",
-      "url": "http://localhost:3000/impact?bill=1",
+      "url": "http://127.0.0.1:3024/impact?bill=1",
       "description": "Impact page showing bill detail + company impact editor + deep analysis panel",
       "actions": []
     },
     {
       "name": "10-assembly",
-      "url": "http://localhost:3000/assembly",
+      "url": "http://127.0.0.1:3024/assembly",
       "description": "Assembly page — full 295-member hemicycle + party stats",
       "actions": []
     },
     {
       "name": "11-watch",
-      "url": "http://localhost:3000/watch",
+      "url": "http://127.0.0.1:3024/watch",
       "description": "Watch page — watch list (likely empty) + hemicycle picker",
       "actions": []
     },
     {
       "name": "12-settings",
-      "url": "http://localhost:3000/settings",
+      "url": "http://127.0.0.1:3024/settings",
       "description": "Settings page — profile card, env status, recent syncs",
       "actions": []
     },
     {
       "name": "13-setup-step2",
-      "url": "http://localhost:3000/setup",
+      "url": "http://127.0.0.1:3024/setup",
       "description": "Setup wizard step 2 (keywords) in edit mode with game profile",
       "actions": []
     },
     {
-      "name": "14-setup-step3-committees",
-      "url": "http://localhost:3000/setup",
-      "description": "Setup wizard step 3 — committee checkbox list",
+      "name": "18-transcripts",
+      "url": "http://127.0.0.1:3024/transcripts",
+      "description": "Transcripts page — committee meeting archive with keyword hits and direct links to original context",
       "actions": []
     },
     {
-      "name": "15-setup-step4-legislators",
-      "url": "http://localhost:3000/setup",
-      "description": "Setup wizard step 4 — hemicycle legislator picker",
-      "actions": []
-    },
-    {
-      "name": "16-setup-step5-confirm",
-      "url": "http://localhost:3000/setup",
-      "description": "Setup wizard step 5 — summary + submit button",
-      "actions": []
-    },
-    {
-      "name": "17-logged-out",
-      "url": "http://localhost:3000/login",
-      "description": "After logout — back on login page",
+      "name": "19-alerts",
+      "url": "http://127.0.0.1:3024/alerts",
+      "description": "Alerts page — in-app notification center for sync summaries and notable changes",
       "actions": []
     }
   ]

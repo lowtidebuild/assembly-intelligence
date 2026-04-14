@@ -19,8 +19,9 @@ config({ path: ".env.local" });
 import { chromium, type Page } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { AUTH_COOKIE_NAME, signToken } from "../src/lib/auth";
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
 const OUT_DIR = resolve("screenshots");
 const VIEWPORT = { width: 1440, height: 900 };
 
@@ -49,6 +50,27 @@ async function snap(
     actions,
   });
   console.log(`  📸 ${name}.png — ${description}`);
+}
+
+async function authenticate(page: Page, returnTo = "/briefing") {
+  const password = process.env.APP_PASSWORD;
+  if (!password) {
+    throw new Error("APP_PASSWORD is required for authenticated walkthroughs");
+  }
+
+  const token = await signToken(password);
+  await page.context().addCookies([
+    {
+      name: AUTH_COOKIE_NAME,
+      value: token,
+      url: BASE_URL,
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+
+  await page.goto(`${BASE_URL}${returnTo}`);
+  await page.waitForLoadState("networkidle");
 }
 
 async function main() {
@@ -80,20 +102,17 @@ async function main() {
     await snap(page, "02-login-page", "Login page with ParlaWatch+ branding");
 
     console.log("\n── 3. bad password error ──");
-    await page.fill('input[name="password"]', "wrong-password");
-    await page.click('button[type="submit"]');
-    await page.waitForURL(/error=bad_password/);
+    await page.goto(`${BASE_URL}/login?error=bad_password`);
+    await page.waitForLoadState("networkidle");
     await snap(
       page,
       "03-login-error",
       "Login page showing bad_password error",
-      ["fill wrong password", "submit"],
+      ["open login page with bad_password state"],
     );
 
     console.log("\n── 4. successful login ──");
-    await page.fill('input[name="password"]', password);
-    await page.click('button[type="submit"]');
-    await page.waitForURL(/\/briefing/);
+    await authenticate(page, "/briefing");
     await snap(
       page,
       "04-briefing",
@@ -101,9 +120,8 @@ async function main() {
     );
 
     console.log("\n── 5. radar page ──");
-    await page.click('a[href="/radar"]');
-    await page.waitForURL(/\/radar/);
-    await page.waitForSelector("table");
+    await page.goto(`${BASE_URL}/radar`);
+    await page.waitForLoadState("networkidle");
     await snap(
       page,
       "05-radar-default",
@@ -111,10 +129,7 @@ async function main() {
     );
 
     console.log("\n── 6. radar filter (stage + score) ──");
-    await page.click('a[href="/radar?stage=stage_2"]').catch(async () => {
-      // chip has params encoded, grab via text
-      await page.locator("text=상임위").first().click();
-    });
+    await page.goto(`${BASE_URL}/radar?stage=stage_2`);
     await page.waitForLoadState("networkidle");
     await snap(
       page,
@@ -153,8 +168,6 @@ async function main() {
     console.log("\n── 10. assembly page (hemicycle) ──");
     await page.goto(`${BASE_URL}/assembly`);
     await page.waitForLoadState("networkidle");
-    // Wait for SVG to render
-    await page.waitForSelector("svg circle");
     await snap(
       page,
       "10-assembly",
@@ -188,34 +201,6 @@ async function main() {
       "Setup wizard step 2 (keywords) in edit mode with game profile",
     );
 
-    console.log("\n── 14. setup wizard step 3 (committees) ──");
-    // Click 다음 button
-    await page.locator("button:has-text('다음')").click();
-    await page.waitForTimeout(500);
-    await snap(
-      page,
-      "14-setup-step3-committees",
-      "Setup wizard step 3 — committee checkbox list",
-    );
-
-    console.log("\n── 15. setup wizard step 4 (legislators) ──");
-    await page.locator("button:has-text('다음')").click();
-    await page.waitForTimeout(800);
-    await snap(
-      page,
-      "15-setup-step4-legislators",
-      "Setup wizard step 4 — hemicycle legislator picker",
-    );
-
-    console.log("\n── 16. setup wizard step 5 (confirm) ──");
-    await page.locator("button:has-text('다음')").click();
-    await page.waitForTimeout(500);
-    await snap(
-      page,
-      "16-setup-step5-confirm",
-      "Setup wizard step 5 — summary + submit button",
-    );
-
     console.log("\n── 17. logout ──");
     // Go somewhere with the sidebar visible
     await page.goto(`${BASE_URL}/briefing`);
@@ -227,6 +212,27 @@ async function main() {
       await page.waitForURL(/\/login/);
       await snap(page, "17-logged-out", "After logout — back on login page");
     }
+
+    console.log("\n── 18. login again for transcripts ──");
+    await authenticate(page, "/briefing");
+
+    console.log("\n── 19. transcripts page ──");
+    await page.goto(`${BASE_URL}/transcripts`);
+    await page.waitForLoadState("networkidle");
+    await snap(
+      page,
+      "18-transcripts",
+      "Transcripts page — committee meeting archive with keyword hits and direct links to original context",
+    );
+
+    console.log("\n── 20. alerts page ──");
+    await page.goto(`${BASE_URL}/alerts`);
+    await page.waitForLoadState("networkidle");
+    await snap(
+      page,
+      "19-alerts",
+      "Alerts page — in-app notification center for sync summaries and notable changes",
+    );
 
     // Write manifest
     const manifest = {

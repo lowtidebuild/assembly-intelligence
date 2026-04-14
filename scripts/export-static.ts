@@ -27,8 +27,9 @@ config({ path: ".env.local" });
 import { chromium, type Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { AUTH_COOKIE_NAME, signToken } from "../src/lib/auth";
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
 const OUT_DIR = resolve("examples");
 
 interface ExportTarget {
@@ -49,16 +50,39 @@ const TARGETS: ExportTarget[] = [
   { path: "/impact?bill=1", name: "impact-selected", description: "영향 분석기 — 법안 선택 + 분석 셸" },
   { path: "/assembly", name: "assembly", description: "국회 현황 — 295명 의석 배치도 (wedge layout)" },
   { path: "/watch", name: "watch", description: "의원 워치 — 워치리스트 + hemicycle 피커" },
+  { path: "/legislators", name: "legislators", description: "의원 프로필 — 전체 의원 탐색 + 중요도/정당/위원회 필터" },
+  { path: "/transcripts", name: "transcripts", description: "회의록 — 전체 원문 + 산업 키워드 언급 발언 모니터링" },
+  { path: "/alerts", name: "alerts", description: "알림 센터 — 핵심 변화, 회의록 hit, 입법예고, 보도자료 알림" },
   { path: "/settings", name: "settings", description: "설정 — 프로필 / 환경 변수 / 동기화 로그" },
   { path: "/setup", name: "setup", description: "설정 위저드 — 5단계 온보딩" },
   { path: "/login", name: "login", description: "로그인 페이지" },
 ];
 
 async function login(page: Page) {
-  await page.goto(`${BASE_URL}/login`);
-  await page.fill('input[name="password"]', process.env.APP_PASSWORD!);
-  await page.click('button[type="submit"]');
-  await page.waitForURL(/\/briefing/);
+  await page.goto(`${BASE_URL}/briefing`);
+  if (!page.url().includes("/login")) {
+    await page.waitForLoadState("networkidle");
+    return;
+  }
+
+  const password = process.env.APP_PASSWORD;
+  if (!password) {
+    throw new Error("APP_PASSWORD is required when auth is enabled");
+  }
+
+  const token = await signToken(password);
+  await page.context().addCookies([
+    {
+      name: AUTH_COOKIE_NAME,
+      value: token,
+      url: BASE_URL,
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+
+  await page.goto(`${BASE_URL}/briefing`);
+  await page.waitForLoadState("networkidle");
 }
 
 /**
@@ -173,6 +197,81 @@ function absolutizeAssets(html: string): string {
   );
 }
 
+function injectThemeSupport(html: string): string {
+  const bootScript = `<script>
+(function () {
+  var STORAGE_KEY = "parlawatch-theme";
+  function readTheme() {
+    try {
+      var stored = window.localStorage.getItem(STORAGE_KEY);
+      if (stored === "light" || stored === "dark") return stored;
+    } catch (error) {}
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+  document.documentElement.dataset.theme = readTheme();
+})();
+</script>`;
+
+  const toggleScript = `<script>
+(function () {
+  var STORAGE_KEY = "parlawatch-theme";
+  function readTheme() {
+    try {
+      var stored = window.localStorage.getItem(STORAGE_KEY);
+      if (stored === "light" || stored === "dark") return stored;
+    } catch (error) {}
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+  function syncButtons(theme) {
+    document.querySelectorAll("[data-theme-toggle]").forEach(function (button) {
+      button.setAttribute(
+        "aria-label",
+        "현재 " + (theme === "dark" ? "다크" : "라이트") + " 모드, 전환",
+      );
+      button.setAttribute(
+        "title",
+        (theme === "dark" ? "라이트" : "다크") + " 모드로 전환",
+      );
+    });
+  }
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, theme);
+    } catch (error) {}
+    syncButtons(theme);
+  }
+  function bindToggle(button) {
+    if (button.getAttribute("data-static-theme-bound") === "true") return;
+    button.setAttribute("data-static-theme-bound", "true");
+    button.addEventListener("click", function (event) {
+      event.preventDefault();
+      var current = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+      applyTheme(current === "dark" ? "light" : "dark");
+    });
+  }
+  function init() {
+    var theme = readTheme();
+    applyTheme(theme);
+    document.querySelectorAll("[data-theme-toggle]").forEach(bindToggle);
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>`;
+
+  return html
+    .replace(/<\/head>/i, `${bootScript}\n</head>`)
+    .replace(/<\/body>/i, `${toggleScript}\n</body>`);
+}
+
 /**
  * Add an "exported" notice banner at the top of the body so
  * readers understand this is a static snapshot.
@@ -180,9 +279,9 @@ function absolutizeAssets(html: string): string {
 function addNotice(html: string, description: string): string {
   const banner = `
 <div style="
-  background: #fef3c7;
-  color: #78350f;
-  border-bottom: 1px solid #fde68a;
+  background: var(--color-warning-soft);
+  color: var(--color-warning-text);
+  border-bottom: 1px solid var(--color-warning);
   padding: 10px 20px;
   font-family: -apple-system, 'Segoe UI', 'Pretendard', sans-serif;
   font-size: 12px;
@@ -190,7 +289,7 @@ function addNotice(html: string, description: string): string {
   text-align: center;
 ">
   <strong>정적 스냅샷</strong> · ${description} ·
-  실제 앱: <code>pnpm start</code> 후 <code>http://localhost:3000</code> ·
+  실제 앱: <code style="background: color-mix(in srgb, var(--color-warning-text) 10%, transparent); padding: 1px 5px; border-radius: 3px;">pnpm start</code> 후 <code style="background: color-mix(in srgb, var(--color-warning-text) 10%, transparent); padding: 1px 5px; border-radius: 3px;">http://localhost:3000</code> ·
   클릭/편집은 동작하지 않습니다
 </div>`;
   return html.replace(/(<body[^>]*>)/i, `$1${banner}`);
@@ -211,6 +310,7 @@ async function exportPage(
   html = absolutizeAssets(html);
   html = rewriteLinks(html, TARGETS);
   html = addNotice(html, target.description);
+  html = injectThemeSupport(html);
 
   const outPath = resolve(OUT_DIR, `${target.name}.html`);
   writeFileSync(outPath, html, "utf-8");

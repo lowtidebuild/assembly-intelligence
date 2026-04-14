@@ -24,6 +24,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggleTheme}
+      data-theme-toggle="true"
       aria-label={`현재 ${theme === "dark" ? "다크" : "라이트"} 모드, 전환`}
       title={`${theme === "dark" ? "라이트" : "다크"} 모드로 전환`}
       className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-theme-toggle-bg)] text-[var(--color-theme-toggle-fg)] transition-colors hover:bg-[var(--color-surface-2)]"
