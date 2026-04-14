@@ -45,7 +45,9 @@ import { Plus, Sparkles, Users } from "lucide-react";
 export const revalidate = 60;
 
 export default async function WatchPage() {
-  const { allMembers, importanceById, profile, watchRows } =
+  const demoMode = isDemoMode();
+
+  const { allMembers, demoWatchRows, importanceById, profile, watchRows } =
     await withDbReadRetry(async () => {
       const profile = await loadActiveIndustryProfileCompat();
       const committees = profile
@@ -61,21 +63,43 @@ export default async function WatchPage() {
           })
         : new Map<number, ImportanceRecord>();
 
-      const [allMembers, watchRows] = await Promise.all([
+      const [allMembers, watchRows, demoWatchRows] = await Promise.all([
         loadActiveLegislatorSummaryCompat(),
-        profile
+        !demoMode && profile
           ? db
               .select({
                 legislatorId: industryLegislatorWatch.legislatorId,
                 reason: industryLegislatorWatch.reason,
                 addedAt: industryLegislatorWatch.addedAt,
-                legislator: legislator,
+                legislator: {
+                  id: legislator.id,
+                  memberId: legislator.memberId,
+                  name: legislator.name,
+                  nameHanja: legislator.nameHanja,
+                  party: legislator.party,
+                  district: legislator.district,
+                  electionType: legislator.electionType,
+                  committees: legislator.committees,
+                  termNumber: legislator.termNumber,
+                  committeeRole: legislator.committeeRole,
+                  photoUrl: legislator.photoUrl,
+                },
               })
               .from(industryLegislatorWatch)
               .innerJoin(
                 legislator,
                 eq(legislator.id, industryLegislatorWatch.legislatorId),
               )
+              .where(eq(industryLegislatorWatch.industryProfileId, profile.id))
+          : Promise.resolve([]),
+        demoMode && profile
+          ? db
+              .select({
+                legislatorId: industryLegislatorWatch.legislatorId,
+                reason: industryLegislatorWatch.reason,
+                addedAt: industryLegislatorWatch.addedAt,
+              })
+              .from(industryLegislatorWatch)
               .where(eq(industryLegislatorWatch.industryProfileId, profile.id))
           : Promise.resolve([]),
       ]);
@@ -85,6 +109,7 @@ export default async function WatchPage() {
         committees,
         importanceById,
         allMembers,
+        demoWatchRows,
         watchRows,
       };
     });
@@ -118,7 +143,7 @@ export default async function WatchPage() {
     highlighted: watchedIds.has(m.id),
   }));
 
-  if (isDemoMode()) {
+  if (demoMode) {
     return (
       <>
         <DemoWatchPage
@@ -129,7 +154,7 @@ export default async function WatchPage() {
               importance,
             }),
           )}
-          initialEntries={watchRows.map((row) => ({
+          initialEntries={demoWatchRows.map((row) => ({
             legislatorId: row.legislatorId,
             reason: row.reason ?? "데모 초기 워치",
             addedAt:
