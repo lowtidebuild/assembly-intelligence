@@ -24,6 +24,7 @@ import {
   Landmark,
   MessagesSquare,
   Settings,
+  Bell,
   LogOut,
   X,
 } from "lucide-react";
@@ -100,6 +101,12 @@ function buildItems(counts: SidebarCounts): NavItem[] {
       href: "/assembly",
       label: "국회 현황",
       icon: Landmark,
+    },
+    {
+      section: "system",
+      href: "/alerts",
+      label: "알림",
+      icon: Bell,
     },
     {
       section: "system",

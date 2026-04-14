@@ -86,6 +86,17 @@ export const alertTypeEnum = pgEnum("alert_type", [
   "new_bill",
   "vote_scheduled",
   "sync_failure",
+  "sync_summary",
+  "transcript_hit",
+  "legislation_notice",
+  "petition",
+  "press_release",
+]);
+
+export const alertSeverityEnum = pgEnum("alert_severity", [
+  "info",
+  "warning",
+  "critical",
 ]);
 
 /* ─────────────────────────────────────────────────────────────
@@ -613,9 +624,9 @@ export const committeeTranscriptUtterance = pgTable(
  * ────────────────────────────────────────────────────────────── */
 
 /**
- * Alert — dashboard-only notifications. Slack delivery was removed
- * (design.md section 15) because the company does not support
- * Slack API integration.
+ * Alert — in-app notification center entries surfaced in the bell
+ * dropdown and /alerts page. Sync jobs create structured alerts for
+ * stage changes, new key bills, transcript hits, and sync summaries.
  */
 export const alert = pgTable(
   "alert",
@@ -627,7 +638,11 @@ export const alert = pgTable(
     billId: bigint("bill_id", { mode: "number" }).references(() => bill.id, {
       onDelete: "cascade",
     }),
+    title: text("title").notNull(),
     message: text("message").notNull(),
+    href: text("href"),
+    meta: text("meta"),
+    severity: alertSeverityEnum("severity").notNull().default("info"),
     read: boolean("read").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -636,6 +651,7 @@ export const alert = pgTable(
   (t) => [
     index("idx_alert_unread").on(t.read, t.createdAt),
     index("idx_alert_bill").on(t.billId),
+    index("idx_alert_type_created").on(t.type, t.createdAt),
   ],
 );
 

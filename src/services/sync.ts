@@ -55,7 +55,6 @@ import {
   petitionItem,
   pressRelease,
   syncLog,
-  alert,
   vote,
   type NewBill,
   type NewLegislationNotice,
@@ -71,8 +70,12 @@ import { decodeHtmlEntities } from "@/lib/html-entities";
 import { getPreset } from "@/lib/industry-presets";
 import { evaluateKeywordRelevance } from "@/lib/keyword-relevance";
 import { resolveLegislatorPhotoUrl } from "@/lib/legislator-photo";
+import { buildAlertMeta, insertAlertIfMissing } from "@/lib/alerts";
 import { syncNews } from "@/services/news-sync";
-import { syncCommitteeTranscripts } from "@/services/transcript-sync";
+import {
+  loadRecentTranscriptHits,
+  syncCommitteeTranscripts,
+} from "@/services/transcript-sync";
 
 /* ─────────────────────────────────────────────────────────────
  * Bill stage enum literal — matches `bill_stage` postgres enum.
@@ -824,27 +827,15 @@ async function persistEveningStageTransition(
     timelineInserted = true;
   }
 
-  const [existingAlert] = await db
-    .select({ id: alert.id })
-    .from(alert)
-    .where(
-      and(
-        eq(alert.type, "stage_change"),
-        eq(alert.billId, tracked.id),
-        eq(alert.message, message),
-      ),
-    )
-    .limit(1);
-
-  let alertInserted = false;
-  if (!existingAlert) {
-    await db.insert(alert).values({
-      type: "stage_change",
-      billId: tracked.id,
-      message,
-    });
-    alertInserted = true;
-  }
+  const alertInserted = await insertAlertIfMissing({
+    type: "stage_change",
+    billId: tracked.id,
+    title: "법안 단계 변경",
+    message,
+    href: `/radar?bill=${tracked.id}`,
+    meta: buildAlertMeta([tracked.billName, description]),
+    severity: newStage === "stage_4" || newStage === "stage_5" ? "warning" : "info",
+  });
 
   const updatedRows = await db
     .update(bill)
@@ -862,6 +853,217 @@ async function persistEveningStageTransition(
   };
 }
 
+async function createMorningSummaryAlerts(input: {
+  briefingDate: string;
+  status: MorningSyncResult["status"];
+  billsProcessed: number;
+  billsScored: number;
+  legislatorsUpdated: number;
+  newsFetched: number;
+  legislationNoticeCount: number;
+  petitionCount: number;
+  pressCount: number;
+  transcriptMatchedUtterances: number;
+  recentBills: Bill[];
+  errors: string[];
+}) {
+  let created = 0;
+
+  if (
+    await insertAlertIfMissing({
+      type: "sync_summary",
+      title: `아침 동기화 ${input.status === "success" ? "완료" : input.status === "partial" ? "부분 완료" : "실패"}`,
+      message: `${input.briefingDate} 기준 법안 ${input.billsScored}/${input.billsProcessed}건 처리, 회의록 hit ${input.transcriptMatchedUtterances}건, 입법예고 ${input.legislationNoticeCount}건`,
+      href: "/settings",
+      meta: buildAlertMeta([
+        `뉴스 ${input.newsFetched}건`,
+        `청원 ${input.petitionCount}건`,
+        `보도자료 ${input.pressCount}건`,
+        input.legislatorsUpdated > 0
+          ? `의원 동기화 ${input.legislatorsUpdated}명`
+          : "의원 동기화 skip",
+      ]),
+      severity:
+        input.status === "failed"
+          ? "critical"
+          : input.status === "partial"
+            ? "warning"
+            : "info",
+    })
+  ) {
+    created += 1;
+  }
+
+  for (const row of input.recentBills.filter((entry) => (entry.relevanceScore ?? 0) >= 4).slice(0, 3)) {
+    if (
+      await insertAlertIfMissing({
+        type: "new_bill",
+        billId: row.id,
+        title: "신규 핵심 법안",
+        message: row.billName,
+        href: `/radar?bill=${row.id}`,
+        meta: buildAlertMeta([
+          row.billNumber ? `의안번호 ${row.billNumber}` : null,
+          row.committee,
+          row.proposerName,
+        ]),
+        severity: (row.relevanceScore ?? 0) >= 5 ? "warning" : "info",
+      })
+    ) {
+      created += 1;
+    }
+  }
+
+  if (input.transcriptMatchedUtterances > 0) {
+    const transcriptHits = await loadRecentTranscriptHits(3);
+    for (const item of transcriptHits) {
+      if (
+        await insertAlertIfMissing({
+          type: "transcript_hit",
+          title: "회의록 키워드 언급",
+          message: item.snippet ?? item.content.slice(0, 180),
+          href: `/transcripts/${item.minutesId}#utterance-${item.utteranceId}`,
+          meta: buildAlertMeta([
+            item.committee,
+            item.meetingName,
+            item.meetingDate,
+            item.speakerName,
+          ]),
+          severity: "info",
+        })
+      ) {
+        created += 1;
+      }
+    }
+  }
+
+  if (input.errors.length > 0) {
+    if (
+      await insertAlertIfMissing({
+        type: "sync_failure",
+        title: "아침 동기화 에러",
+        message: input.errors.slice(0, 3).join(" / "),
+        href: "/settings",
+        meta: `${input.errors.length}건 에러`,
+        severity: input.status === "failed" ? "critical" : "warning",
+      })
+    ) {
+      created += 1;
+    }
+  }
+
+  return created;
+}
+
+async function createEveningSummaryAlerts(input: {
+  billsChecked: number;
+  stageTransitions: number;
+  status: EveningSyncResult["status"];
+  errors: string[];
+}) {
+  let created = 0;
+
+  if (input.stageTransitions > 0) {
+    if (
+      await insertAlertIfMissing({
+        type: "sync_summary",
+        title: "저녁 점검 완료",
+        message: `추적 법안 ${input.billsChecked}건을 확인했고, 단계 변화 ${input.stageTransitions}건을 감지했습니다.`,
+        href: "/radar",
+        meta: buildAlertMeta([
+          input.status === "partial" ? "부분 성공" : "정상 완료",
+        ]),
+        severity: "warning",
+      })
+    ) {
+      created += 1;
+    }
+  }
+
+  if (input.errors.length > 0) {
+    if (
+      await insertAlertIfMissing({
+        type: "sync_failure",
+        title: "저녁 동기화 에러",
+        message: input.errors.slice(0, 3).join(" / "),
+        href: "/settings",
+        meta: `${input.errors.length}건 에러`,
+        severity: input.status === "failed" ? "critical" : "warning",
+      })
+    ) {
+      created += 1;
+    }
+  }
+
+  return created;
+}
+
+async function createLegislationNoticeAlerts(
+  items: NewLegislationNotice[],
+) {
+  let created = 0;
+  for (const item of items) {
+    if (
+      await insertAlertIfMissing({
+        type: "legislation_notice",
+        title: "신규 입법예고",
+        message: item.billName,
+        href: "/briefing",
+        meta: buildAlertMeta([
+          item.billNumber ? `의안번호 ${item.billNumber}` : null,
+          item.committee,
+          item.noticeEndDate ? `마감 ${item.noticeEndDate}` : null,
+        ]),
+        severity: "info",
+      })
+    ) {
+      created += 1;
+    }
+  }
+  return created;
+}
+
+async function createPetitionAlerts(items: NewPetitionItem[]) {
+  let created = 0;
+  for (const item of items) {
+    if (
+      await insertAlertIfMissing({
+        type: "petition",
+        title: "신규 관련 청원",
+        message: item.title,
+        href: "/briefing",
+        meta: buildAlertMeta([item.committee, item.proposerName, item.status]),
+        severity: "info",
+      })
+    ) {
+      created += 1;
+    }
+  }
+  return created;
+}
+
+async function createPressAlerts(items: NewPressRelease[]) {
+  let created = 0;
+  for (const item of items) {
+    if (
+      await insertAlertIfMissing({
+        type: "press_release",
+        title: "신규 공식 보도자료",
+        message: item.title,
+        href: item.url ?? "/briefing",
+        meta: buildAlertMeta([
+          item.publishedAt ? item.publishedAt.toISOString().slice(0, 10) : null,
+          item.summary?.slice(0, 60) ?? null,
+        ]),
+        severity: "info",
+      })
+    ) {
+      created += 1;
+    }
+  }
+  return created;
+}
+
 /* ─────────────────────────────────────────────────────────────
  * Morning sync: full pipeline
  * ────────────────────────────────────────────────────────────── */
@@ -877,6 +1079,7 @@ export interface MorningSyncResult {
   billsScored: number;
   legislatorsUpdated: number;
   briefingDate: string;
+  alertsCreated: number;
   status: "success" | "partial" | "failed";
   errors: string[];
 }
@@ -896,6 +1099,12 @@ export async function runMorningSync(
   let billsScored = 0;
   let legislatorsUpdated = 0;
   let legislatorsSynced = false;
+  let alertsCreated = 0;
+  let legislationNoticeCount = 0;
+  let petitionCount = 0;
+  let pressCount = 0;
+  let transcriptMatchedUtterances = 0;
+  let recentAlertBills: Bill[] = [];
 
   // 1. Active industry profile
   const [activeProfile] = await db.select().from(industryProfile).limit(1);
@@ -1199,6 +1408,7 @@ export async function runMorningSync(
       .where(sql`${bill.createdAt} > NOW() - INTERVAL '24 hours'`)
       .orderBy(sql`${bill.createdAt} DESC`, sql`${bill.proposalDate} DESC NULLS LAST`)
       .limit(10);
+    recentAlertBills = newBills;
 
     await deps.briefingGenerator.generateBriefing({
       date: briefingDate,
@@ -1214,19 +1424,31 @@ export async function runMorningSync(
 
   // 10. Legislation notice monitoring (pre-filing early signals)
   try {
-    await syncLegislationNotices(keywords, excludeKeywords);
+    const noticeResult = await syncLegislationNotices(keywords, excludeKeywords);
+    legislationNoticeCount = noticeResult.relevantCount;
+    alertsCreated += await createLegislationNoticeAlerts(
+      noticeResult.newRelevantItems.slice(0, 3),
+    );
   } catch (err) {
     errors.push(`legislation_notices: ${errorMessage(err)}`);
   }
 
   try {
-    await syncPetitions(keywords, excludeKeywords);
+    const petitionResult = await syncPetitions(keywords, excludeKeywords);
+    petitionCount = petitionResult.relevantCount;
+    alertsCreated += await createPetitionAlerts(
+      petitionResult.newRelevantItems.slice(0, 3),
+    );
   } catch (err) {
     errors.push(`petitions: ${errorMessage(err)}`);
   }
 
   try {
-    await syncPressReleases(keywords, excludeKeywords);
+    const pressResult = await syncPressReleases(keywords, excludeKeywords);
+    pressCount = pressResult.relevantCount;
+    alertsCreated += await createPressAlerts(
+      pressResult.newRelevantItems.slice(0, 3),
+    );
   } catch (err) {
     errors.push(`press: ${errorMessage(err)}`);
   }
@@ -1237,6 +1459,7 @@ export async function runMorningSync(
       committeeCodes,
       excludeKeywords,
     );
+    transcriptMatchedUtterances = transcriptResult.matchedUtterances;
     errors.push(...transcriptResult.errors.map((entry) => `transcripts: ${entry}`));
   } catch (err) {
     errors.push(`transcripts: ${errorMessage(err)}`);
@@ -1261,12 +1484,28 @@ export async function runMorningSync(
     })
     .returning({ id: syncLog.id });
 
+  alertsCreated += await createMorningSummaryAlerts({
+    briefingDate,
+    status,
+    billsProcessed,
+    billsScored,
+    legislatorsUpdated,
+    newsFetched,
+    legislationNoticeCount,
+    petitionCount,
+    pressCount,
+    transcriptMatchedUtterances,
+    recentBills: recentAlertBills,
+    errors,
+  });
+
   return {
     syncLogId: logRow.id,
     billsProcessed,
     billsScored,
     legislatorsUpdated,
     briefingDate,
+    alertsCreated,
     status,
     errors,
   };
@@ -1381,6 +1620,13 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
       errorsJson: errors.length > 0 ? errors : null,
     })
     .returning({ id: syncLog.id });
+
+  alertsCreated += await createEveningSummaryAlerts({
+    billsChecked,
+    stageTransitions,
+    status,
+    errors,
+  });
 
   return {
     syncLogId: logRow.id,
@@ -1577,7 +1823,10 @@ export async function backfillLegislatorPhotos(limitCount = 50): Promise<number>
 export async function syncLegislationNotices(
   keywords: string[],
   excludeKeywords: string[] = [],
-): Promise<number> {
+): Promise<{
+  relevantCount: number;
+  newRelevantItems: NewLegislationNotice[];
+}> {
   const resp = await callMcpToolOrThrow<McpLegislationNoticeResponse>(
     "assembly_org",
     {
@@ -1597,7 +1846,18 @@ export async function syncLegislationNotices(
       isRelevant: noticeIsRelevant(item.법률안명, keywords, excludeKeywords),
     }));
 
-  if (rows.length === 0) return 0;
+  if (rows.length === 0) {
+    return { relevantCount: 0, newRelevantItems: [] };
+  }
+
+  const existingRows = await db
+    .select({ billNumber: legislationNotice.billNumber })
+    .from(legislationNotice)
+    .where(inArray(legislationNotice.billNumber, rows.map((row) => row.billNumber)));
+  const existingSet = new Set(existingRows.map((row) => row.billNumber));
+  const newRelevantItems = rows.filter(
+    (row) => row.isRelevant && !existingSet.has(row.billNumber),
+  );
 
   await db
     .insert(legislationNotice)
@@ -1614,13 +1874,19 @@ export async function syncLegislationNotices(
       },
     });
 
-  return rows.filter((row) => row.isRelevant).length;
+  return {
+    relevantCount: rows.filter((row) => row.isRelevant).length,
+    newRelevantItems,
+  };
 }
 
 export async function syncPetitions(
   keywords: string[],
   excludeKeywords: string[] = [],
-): Promise<number> {
+): Promise<{
+  relevantCount: number;
+  newRelevantItems: NewPetitionItem[];
+}> {
   const resp = await callMcpToolOrThrow<McpPetitionResponse>("assembly_org", {
     type: "petition",
     petition_status: "all",
@@ -1639,7 +1905,18 @@ export async function syncPetitions(
       isRelevant: textIsRelevant(item.청원명, keywords, excludeKeywords),
     }));
 
-  if (rows.length === 0) return 0;
+  if (rows.length === 0) {
+    return { relevantCount: 0, newRelevantItems: [] };
+  }
+
+  const existingRows = await db
+    .select({ petitionId: petitionItem.petitionId })
+    .from(petitionItem)
+    .where(inArray(petitionItem.petitionId, rows.map((row) => row.petitionId)));
+  const existingSet = new Set(existingRows.map((row) => row.petitionId));
+  const newRelevantItems = rows.filter(
+    (row) => row.isRelevant && !existingSet.has(row.petitionId),
+  );
 
   await db
     .insert(petitionItem)
@@ -1656,13 +1933,19 @@ export async function syncPetitions(
       },
     });
 
-  return rows.filter((row) => row.isRelevant).length;
+  return {
+    relevantCount: rows.filter((row) => row.isRelevant).length,
+    newRelevantItems,
+  };
 }
 
 export async function syncPressReleases(
   keywords: string[],
   excludeKeywords: string[] = [],
-): Promise<number> {
+): Promise<{
+  relevantCount: number;
+  newRelevantItems: NewPressRelease[];
+}> {
   const resp = await callMcpToolOrThrow<McpPressResponse>("assembly_org", {
     type: "press",
     age: 22,
@@ -1685,7 +1968,18 @@ export async function syncPressReleases(
       ),
     }));
 
-  if (rows.length === 0) return 0;
+  if (rows.length === 0) {
+    return { relevantCount: 0, newRelevantItems: [] };
+  }
+
+  const existingRows = await db
+    .select({ externalId: pressRelease.externalId })
+    .from(pressRelease)
+    .where(inArray(pressRelease.externalId, rows.map((row) => row.externalId)));
+  const existingSet = new Set(existingRows.map((row) => row.externalId));
+  const newRelevantItems = rows.filter(
+    (row) => row.isRelevant && !existingSet.has(row.externalId),
+  );
 
   await db
     .insert(pressRelease)
@@ -1703,7 +1997,10 @@ export async function syncPressReleases(
       },
     });
 
-  return rows.filter((row) => row.isRelevant).length;
+  return {
+    relevantCount: rows.filter((row) => row.isRelevant).length,
+    newRelevantItems,
+  };
 }
 
 /**

@@ -9,6 +9,7 @@
  * the client-side SearchCommand.
  */
 
+import { AlertBell } from "@/components/alert-bell";
 import { SearchCommand } from "@/components/search-command";
 
 export function PageHeader({
@@ -33,6 +34,7 @@ export function PageHeader({
         )}
       </div>
       <div className="flex w-full items-center gap-[10px] md:w-auto">
+        <AlertBell />
         <SearchCommand />
         {actions}
       </div>
