@@ -140,11 +140,11 @@ export function Sidebar({
 
   const syncDotClass =
     lastSync?.status === "success"
-      ? "bg-[var(--color-success)] shadow-[0_0_0_3px_rgba(34,197,94,0.15)]"
+      ? "bg-[var(--color-success)] shadow-[0_0_0_3px_var(--color-success-soft)]"
       : lastSync?.status === "partial"
-        ? "bg-[var(--color-warning)] shadow-[0_0_0_3px_rgba(245,158,11,0.15)]"
+        ? "bg-[var(--color-warning)] shadow-[0_0_0_3px_var(--color-warning-soft)]"
         : lastSync?.status === "failed"
-          ? "bg-[var(--color-error)] shadow-[0_0_0_3px_rgba(239,68,68,0.15)]"
+          ? "bg-[var(--color-error)] shadow-[0_0_0_3px_var(--color-error-soft)]"
           : "bg-[var(--color-text-tertiary)]";
 
   const syncLabel =
@@ -163,7 +163,7 @@ export function Sidebar({
         aria-label="메뉴 닫기"
         onClick={onClose}
         className={cn(
-          "fixed inset-0 z-30 bg-black/20 backdrop-blur-[1px] md:hidden",
+          "fixed inset-0 z-30 bg-[var(--color-backdrop)] backdrop-blur-[1px] md:hidden",
           mobileOpen ? "block" : "hidden",
         )}
       />

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import {
   formatAlertTimestamp,
   type AlertListItem,
-} from "@/lib/alerts";
+} from "@/lib/alerts-ui";
 
 type FilterMode = "all" | "unread";
 

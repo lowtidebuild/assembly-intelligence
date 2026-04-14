@@ -176,7 +176,7 @@ export function CompanyImpactEditor({
             {impact}
           </p>
           {isAiDraft && (
-            <div className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] bg-[#fef3c7] px-2 py-1 text-[10px] font-semibold text-[#b45309]">
+            <div className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] bg-[var(--color-warning-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--color-warning-text)]">
               <Sparkles className="h-3 w-3" />
               AI 초안 · 검토 필요
             </div>

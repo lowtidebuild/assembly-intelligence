@@ -11,6 +11,7 @@
 
 import { AlertBell } from "@/components/alert-bell";
 import { SearchCommand } from "@/components/search-command";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function PageHeader({
   title,
@@ -34,6 +35,7 @@ export function PageHeader({
         )}
       </div>
       <div className="flex w-full items-center gap-[10px] md:w-auto">
+        <ThemeToggle />
         <AlertBell />
         <SearchCommand />
         {actions}

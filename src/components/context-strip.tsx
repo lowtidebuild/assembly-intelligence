@@ -21,7 +21,7 @@ export function ContextStrip({
   stats?: ContextStripStat[];
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-[14px] border-b border-[var(--color-border)] bg-gradient-to-r from-[rgba(37,99,235,0.05)] to-transparent px-6 py-[10px] text-[12px] text-[var(--color-text-secondary)]">
+    <div className="flex flex-wrap items-center gap-[14px] border-b border-[var(--color-border)] bg-gradient-to-r from-[var(--gradient-context-start)] to-transparent px-6 py-[10px] text-[12px] text-[var(--color-text-secondary)]">
       <span className="inline-flex items-center gap-[5px] rounded-[12px] bg-[var(--color-primary-light)] px-[10px] py-[3px] text-[11px] font-semibold text-[var(--color-primary)]">
         <span className="h-[5px] w-[5px] rounded-full bg-[var(--color-primary)]" />
         {industryName} 산업

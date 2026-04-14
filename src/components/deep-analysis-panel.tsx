@@ -181,17 +181,17 @@ export function DeepAnalysisPanel({
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <ImpactAxis
             label="운영"
-            color="border-l-[#3b82f6]"
+            color="border-l-[var(--color-info)]"
             text={analysis.impact_analysis.operational}
           />
           <ImpactAxis
             label="재무"
-            color="border-l-[#f59e0b]"
+            color="border-l-[var(--color-warning)]"
             text={analysis.impact_analysis.financial}
           />
           <ImpactAxis
             label="컴플라이언스"
-            color="border-l-[#ef4444]"
+            color="border-l-[var(--color-error)]"
             text={analysis.impact_analysis.compliance}
           />
         </div>

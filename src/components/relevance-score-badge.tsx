@@ -15,27 +15,27 @@ const MAP: Record<
 > = {
   5: {
     label: "S",
-    classes: "bg-[#fee2e2] text-[#b91c1c]",
+    classes: "bg-[var(--color-error-soft)] text-[var(--color-error-text)]",
     aria: "중요도 5 — 핵심",
   },
   4: {
     label: "A",
-    classes: "bg-[#fef3c7] text-[#b45309]",
+    classes: "bg-[var(--color-warning-soft)] text-[var(--color-warning-text)]",
     aria: "중요도 4 — 주요",
   },
   3: {
     label: "B",
-    classes: "bg-[#dbeafe] text-[#1d4ed8]",
+    classes: "bg-[var(--color-info-soft)] text-[var(--color-info-text)]",
     aria: "중요도 3 — 모니터링",
   },
   2: {
     label: "B-",
-    classes: "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)]",
+    classes: "bg-[var(--color-badge-neutral-bg)] text-[var(--color-badge-neutral-text)]",
     aria: "중요도 2 — 인접",
   },
   1: {
     label: "C",
-    classes: "bg-[var(--color-surface-2)] text-[var(--color-text-tertiary)]",
+    classes: "bg-[var(--color-badge-neutral-bg)] text-[var(--color-text-tertiary)]",
     aria: "중요도 1 — 무관",
   },
 };

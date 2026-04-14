@@ -26,12 +26,33 @@
   --color-primary-hover: #1d4ed8;
   --color-primary-light: #dbeafe;
   --color-domain: #3b82f6;
+  --color-link: #1d4ed8;
+  --color-link-hover: #1e40af;
 
   /* Status */
   --color-success: #22c55e;
   --color-warning: #f59e0b;
   --color-error: #ef4444;
   --color-info: #3b82f6;
+  --color-success-soft: #dcfce7;
+  --color-warning-soft: #fef3c7;
+  --color-error-soft: #fee2e2;
+  --color-error-soft-2: #fef2f2;
+  --color-info-soft: #dbeafe;
+  --color-success-text: #166534;
+  --color-warning-text: #92400e;
+  --color-error-text: #b91c1c;
+  --color-info-text: #1d4ed8;
+  --color-badge-neutral-bg: var(--color-surface-2);
+  --color-badge-neutral-text: var(--color-text-secondary);
+  --color-stage-text: #78350f;
+  --color-theme-toggle-bg: #ffffff;
+  --color-theme-toggle-fg: #1e293b;
+  --color-surface-overlay: rgba(255, 255, 255, 0.78);
+  --color-backdrop: rgba(15, 23, 42, 0.18);
+  --gradient-context-start: rgba(37, 99, 235, 0.05);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
 
   /* Stage colors (from GR/PA Excel convention) */
   --color-stage-0: #ffffff;
@@ -65,11 +86,32 @@
   --color-primary-hover: #4db8e0;
   --color-primary-light: rgba(29, 155, 209, 0.15);
   --color-domain: #1d9bd1;
+  --color-link: #7dd3fc;
+  --color-link-hover: #bae6fd;
 
   --color-success: #2eb67d;
   --color-warning: #e8a230;
   --color-error: #e05555;
   --color-info: #4db8e0;
+  --color-success-soft: rgba(46, 182, 125, 0.18);
+  --color-warning-soft: rgba(232, 162, 48, 0.18);
+  --color-error-soft: rgba(224, 85, 85, 0.18);
+  --color-error-soft-2: rgba(224, 85, 85, 0.12);
+  --color-info-soft: rgba(77, 184, 224, 0.18);
+  --color-success-text: #8ff0c4;
+  --color-warning-text: #f8cf7a;
+  --color-error-text: #ffb2b2;
+  --color-info-text: #a5e8ff;
+  --color-badge-neutral-bg: #31353a;
+  --color-badge-neutral-text: #b8bcc1;
+  --color-stage-text: #f6ddb0;
+  --color-theme-toggle-bg: #31353a;
+  --color-theme-toggle-fg: #f4f7fb;
+  --color-surface-overlay: rgba(34, 37, 41, 0.82);
+  --color-backdrop: rgba(0, 0, 0, 0.38);
+  --gradient-context-start: rgba(29, 155, 209, 0.14);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.5);
 
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -93,10 +135,29 @@
   --color-primary-light: var(--color-primary-light);
   --color-primary-foreground: #ffffff;
   --color-domain: var(--color-domain);
+  --color-link: var(--color-link);
+  --color-link-hover: var(--color-link-hover);
   --color-success: var(--color-success);
   --color-warning: var(--color-warning);
   --color-error: var(--color-error);
   --color-info: var(--color-info);
+  --color-success-soft: var(--color-success-soft);
+  --color-warning-soft: var(--color-warning-soft);
+  --color-error-soft: var(--color-error-soft);
+  --color-error-soft-2: var(--color-error-soft-2);
+  --color-info-soft: var(--color-info-soft);
+  --color-success-text: var(--color-success-text);
+  --color-warning-text: var(--color-warning-text);
+  --color-error-text: var(--color-error-text);
+  --color-info-text: var(--color-info-text);
+  --color-badge-neutral-bg: var(--color-badge-neutral-bg);
+  --color-badge-neutral-text: var(--color-badge-neutral-text);
+  --color-stage-text: var(--color-stage-text);
+  --color-theme-toggle-bg: var(--color-theme-toggle-bg);
+  --color-theme-toggle-fg: var(--color-theme-toggle-fg);
+  --color-surface-overlay: var(--color-surface-overlay);
+  --color-backdrop: var(--color-backdrop);
+  --gradient-context-start: var(--gradient-context-start);
 
   --color-stage-0: var(--color-stage-0);
   --color-stage-1: var(--color-stage-1);
@@ -108,9 +169,6 @@
 
   --radius: 8px;
   --radius-sm: 6px;
-
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
 
   --font-sans:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", Roboto,
@@ -138,4 +196,13 @@ body {
   font-size: 14px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: var(--color-primary-light);
+  color: var(--color-text);
 }

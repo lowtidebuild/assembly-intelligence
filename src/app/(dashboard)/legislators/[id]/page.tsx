@@ -481,11 +481,11 @@ function VoteResultPill({
             : "기타";
   const className =
     result === "yes"
-      ? "bg-[#dcfce7] text-[#166534]"
+      ? "bg-[var(--color-success-soft)] text-[var(--color-success-text)]"
       : result === "no"
-        ? "bg-[#fee2e2] text-[#b91c1c]"
+        ? "bg-[var(--color-error-soft)] text-[var(--color-error-text)]"
         : result === "abstain"
-          ? "bg-[#fef3c7] text-[#b45309]"
+          ? "bg-[var(--color-warning-soft)] text-[var(--color-warning-text)]"
           : "bg-[var(--color-surface)] text-[var(--color-text-secondary)]";
 
   return (
@@ -573,11 +573,23 @@ function IssueStancePill({
 }) {
   const config =
     stance === "support"
-      ? { label: "긍정 경향", className: "bg-[#dcfce7] text-[#166534]" }
+      ? {
+          label: "긍정 경향",
+          className:
+            "bg-[var(--color-success-soft)] text-[var(--color-success-text)]",
+        }
       : stance === "concern"
-        ? { label: "우려 경향", className: "bg-[#fee2e2] text-[#b91c1c]" }
+        ? {
+            label: "우려 경향",
+            className:
+              "bg-[var(--color-error-soft)] text-[var(--color-error-text)]",
+          }
         : stance === "mixed"
-          ? { label: "혼합", className: "bg-[#fef3c7] text-[#b45309]" }
+          ? {
+              label: "혼합",
+              className:
+                "bg-[var(--color-warning-soft)] text-[var(--color-warning-text)]",
+            }
           : { label: "불명", className: "bg-[var(--color-surface)] text-[var(--color-text-secondary)]" };
 
   return (
@@ -614,7 +626,9 @@ function SignalBucket({
       <div
         className={cn(
           "mb-2 text-[11px] font-bold uppercase tracking-wide",
-          tone === "support" ? "text-[#166534]" : "text-[#b91c1c]",
+          tone === "support"
+            ? "text-[var(--color-success-text)]"
+            : "text-[var(--color-error-text)]",
         )}
       >
         {title}

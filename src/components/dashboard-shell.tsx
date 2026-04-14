@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Menu } from "lucide-react";
 import { Sidebar, type SidebarProps } from "@/components/sidebar";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function DashboardShell({
   children,
@@ -58,6 +59,7 @@ function MobileHeader({
             {industryName ? `${industryName} 인텔리전스` : "산업별 국회 인텔리전스"}
           </div>
         </div>
+        <ThemeToggle />
       </div>
     </div>
   );

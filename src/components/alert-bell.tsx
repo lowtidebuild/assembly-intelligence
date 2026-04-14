@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   formatAlertTimestamp,
   type AlertListItem,
-} from "@/lib/alerts";
+} from "@/lib/alerts-ui";
 
 interface AlertFeedResponse {
   unreadCount: number;
@@ -92,7 +92,7 @@ export function AlertBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-11 z-30 w-[340px] rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[-4px_0_20px_rgba(0,0,0,0.08)]">
+        <div className="absolute right-0 top-11 z-30 w-[340px] rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface-overlay)] p-3 shadow-[var(--shadow-card-hover)] backdrop-blur-sm">
           <div className="mb-3 flex items-center gap-2">
             <div className="text-[13px] font-bold text-[var(--color-text)]">
               알림

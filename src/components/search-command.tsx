@@ -286,7 +286,7 @@ export function SearchCommand() {
           className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card-hover)]"
         >
           {actionError && (
-            <div className="border-b border-[var(--color-border)] bg-[#fef2f2] px-4 py-2 text-[11px] text-[#b91c1c]">
+            <div className="border-b border-[var(--color-border)] bg-[var(--color-error-soft-2)] px-4 py-2 text-[11px] text-[var(--color-error-text)]">
               {actionError}
             </div>
           )}
@@ -376,7 +376,7 @@ function billTrailing(
 
   return (
     <div className="flex shrink-0 items-center gap-1">
-      <Badge classes="bg-[#dbeafe] text-[#1d4ed8]" label="LIVE" />
+      <Badge classes="bg-[var(--color-info-soft)] text-[var(--color-info-text)]" label="LIVE" />
       <button
         type="button"
         onMouseDown={(event) => {
@@ -456,13 +456,13 @@ function SearchOption({
 
 function scoreBadge(score: number | null) {
   if (score === 5) {
-    return <Badge classes="bg-[#fee2e2] text-[#b91c1c]" label="S5" />;
+    return <Badge classes="bg-[var(--color-error-soft)] text-[var(--color-error-text)]" label="S5" />;
   }
   if (score === 4) {
-    return <Badge classes="bg-[#fef3c7] text-[#b45309]" label="A4" />;
+    return <Badge classes="bg-[var(--color-warning-soft)] text-[var(--color-warning-text)]" label="A4" />;
   }
   if (score === 3) {
-    return <Badge classes="bg-[#dbeafe] text-[#1d4ed8]" label="B3" />;
+    return <Badge classes="bg-[var(--color-info-soft)] text-[var(--color-info-text)]" label="B3" />;
   }
   return null;
 }

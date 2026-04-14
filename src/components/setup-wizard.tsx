@@ -643,13 +643,13 @@ function KeywordChipEditor({
 
   const chipClassName =
     tone === "primary"
-      ? "bg-[var(--color-primary-light)] text-[var(--color-primary)] hover:bg-[#bfdbfe]"
-      : "bg-[#fef3c7] text-[#b45309] hover:bg-[#fde68a]";
+      ? "bg-[var(--color-primary-light)] text-[var(--color-primary)] hover:opacity-90"
+      : "bg-[var(--color-warning-soft)] text-[var(--color-warning-text)] hover:opacity-90";
 
   const buttonClassName =
     tone === "primary"
       ? "bg-[var(--color-primary)] text-white"
-      : "bg-[#b45309] text-white";
+      : "bg-[var(--color-warning)] text-white";
 
   return (
     <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
@@ -1036,7 +1036,7 @@ function Step5Confirm({
             {state.excludeKeywords.map((kw) => (
               <span
                 key={kw}
-                className="rounded-[var(--radius-sm)] bg-[#fef3c7] px-2 py-0.5 text-[11px] font-semibold text-[#b45309]"
+                className="rounded-[var(--radius-sm)] bg-[var(--color-warning-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-warning-text)]"
               >
                 {kw}
               </span>
@@ -1094,7 +1094,7 @@ function Step5Confirm({
         </div>
 
         {error && (
-          <div className="rounded-[var(--radius-sm)] border border-[var(--color-error)] bg-[#fef2f2] px-3 py-2 text-[12px] text-[var(--color-error)]">
+          <div className="rounded-[var(--radius-sm)] border border-[var(--color-error)] bg-[var(--color-error-soft-2)] px-3 py-2 text-[12px] text-[var(--color-error)]">
             {error}
           </div>
         )}

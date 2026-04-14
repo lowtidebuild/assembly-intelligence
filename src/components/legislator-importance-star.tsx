@@ -5,9 +5,9 @@ import {
 } from "@/lib/legislator-importance-ui";
 
 const STAR_COLOR: Record<Exclude<ImportanceLevel, null>, string> = {
-  S: "#eab308",
-  A: "#2563eb",
-  B: "#94a3b8",
+  S: "var(--color-warning)",
+  A: "var(--color-info)",
+  B: "var(--color-text-tertiary)",
 };
 
 export function LegislatorImportanceStar({

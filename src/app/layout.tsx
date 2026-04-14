@@ -13,7 +13,25 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" data-theme="light" suppressHydrationWarning>
-      <body>{children}</body>
+      <body>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function () {
+                try {
+                  var stored = window.localStorage.getItem("parlawatch-theme");
+                  var theme =
+                    stored === "dark" || stored === "light"
+                      ? stored
+                      : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+                  document.documentElement.dataset.theme = theme;
+                } catch (error) {}
+              })();
+            `,
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

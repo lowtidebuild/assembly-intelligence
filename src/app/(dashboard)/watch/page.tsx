@@ -439,9 +439,9 @@ function compareImportance(
 function CommitteeRoleBadge({ role }: { role: string }) {
   const color =
     role === "위원장"
-      ? "bg-[#fef3c7] text-[#b45309]"
+      ? "bg-[var(--color-warning-soft)] text-[var(--color-warning-text)]"
       : role === "간사"
-        ? "bg-[#dbeafe] text-[#1d4ed8]"
+        ? "bg-[var(--color-info-soft)] text-[var(--color-info-text)]"
         : "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)]";
   return (
     <span

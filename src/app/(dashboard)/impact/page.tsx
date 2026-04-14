@@ -557,12 +557,28 @@ function PassageLikelihoodPill({
 }) {
   const config =
     likelihood === "passed"
-      ? { label: "통과 완료", className: "bg-[#dcfce7] text-[#166534]" }
+      ? {
+          label: "통과 완료",
+          className:
+            "bg-[var(--color-success-soft)] text-[var(--color-success-text)]",
+        }
       : likelihood === "high"
-        ? { label: "높음", className: "bg-[#dbeafe] text-[#1d4ed8]" }
+        ? {
+            label: "높음",
+            className:
+              "bg-[var(--color-info-soft)] text-[var(--color-info-text)]",
+          }
         : likelihood === "low"
-          ? { label: "낮음", className: "bg-[#fee2e2] text-[#b91c1c]" }
-          : { label: "중간", className: "bg-[#fef3c7] text-[#b45309]" };
+          ? {
+              label: "낮음",
+              className:
+                "bg-[var(--color-error-soft)] text-[var(--color-error-text)]",
+            }
+          : {
+              label: "중간",
+              className:
+                "bg-[var(--color-warning-soft)] text-[var(--color-warning-text)]",
+            };
 
   return (
     <span
@@ -603,7 +619,9 @@ function SignalList({
       <div
         className={cn(
           "mb-2 text-[11px] font-bold uppercase tracking-wide",
-          tone === "support" ? "text-[#166534]" : "text-[#b91c1c]",
+          tone === "support"
+            ? "text-[var(--color-success-text)]"
+            : "text-[var(--color-error-text)]",
         )}
       >
         {title}
@@ -632,11 +650,11 @@ function LegislatorStanceRow({
 }) {
   const toneClass =
     signal.stance === "support"
-      ? "bg-[#dcfce7] text-[#166534]"
+      ? "bg-[var(--color-success-soft)] text-[var(--color-success-text)]"
       : signal.stance === "concern"
-        ? "bg-[#fee2e2] text-[#b91c1c]"
+        ? "bg-[var(--color-error-soft)] text-[var(--color-error-text)]"
         : signal.stance === "mixed"
-          ? "bg-[#fef3c7] text-[#b45309]"
+          ? "bg-[var(--color-warning-soft)] text-[var(--color-warning-text)]"
           : "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)]";
 
   const label =

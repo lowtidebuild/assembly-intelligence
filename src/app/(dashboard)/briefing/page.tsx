@@ -911,7 +911,7 @@ function LegislationNoticeRow({
           "shrink-0 rounded-[4px] px-[7px] py-[2px] font-mono text-[11px] font-semibold",
           isUrgent
             ? "bg-[var(--color-error)] text-white"
-            : "bg-[var(--color-warning)] text-[#78350f]",
+            : "bg-[var(--color-warning-soft)] text-[var(--color-warning-text)]",
         )}
       >
         {daysLeft !== null ? `D-${daysLeft}` : notice.noticeEndDate ?? "마감일 미정"}
@@ -935,9 +935,9 @@ function PartyBadge({
 }) {
   const color =
     party === "더불어민주당"
-      ? "bg-[#dbeafe] text-[#1d4ed8]"
+      ? "bg-[var(--color-info-soft)] text-[var(--color-info-text)]"
       : party === "국민의힘"
-        ? "bg-[#fee2e2] text-[#b91c1c]"
+        ? "bg-[var(--color-error-soft)] text-[var(--color-error-text)]"
         : "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)]";
   const label =
     party === "더불어민주당"

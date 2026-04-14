@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   alertsSince,
-  buildAlertMeta,
   filterUnreadAlerts,
   formatAlertTimestamp,
   type AlertListItem,
+} from "@/lib/alerts-ui";
+import {
+  buildAlertMeta,
 } from "@/lib/alerts";
 
 function makeItem(

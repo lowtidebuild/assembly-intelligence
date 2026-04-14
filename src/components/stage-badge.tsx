@@ -28,7 +28,7 @@ const STAGE_BG: Record<string, string> = {
 export function StageBadge({ stage }: { stage: string }) {
   return (
     <span
-      className={`inline-block rounded-[4px] px-[7px] py-[2px] text-[10px] font-semibold text-[#78350f] ${STAGE_BG[stage] ?? ""}`}
+      className={`inline-block rounded-[4px] px-[7px] py-[2px] text-[10px] font-semibold text-[var(--color-stage-text)] ${STAGE_BG[stage] ?? ""}`}
     >
       {STAGE_LABELS[stage] ?? stage}
     </span>
