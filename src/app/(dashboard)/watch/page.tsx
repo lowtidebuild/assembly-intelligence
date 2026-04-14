@@ -20,7 +20,7 @@ import {
   legislator,
   industryLegislatorWatch,
 } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { revalidatePath, revalidateTag } from "next/cache";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
@@ -35,7 +35,11 @@ import {
 } from "@/lib/legislator-importance";
 import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
 import { isDemoMode } from "@/lib/demo-mode";
-import { loadActiveIndustryProfileCompat, withDbReadRetry } from "@/lib/db-compat";
+import {
+  loadActiveIndustryProfileCompat,
+  loadActiveLegislatorSummaryCompat,
+  withDbReadRetry,
+} from "@/lib/db-compat";
 import { Plus, Sparkles, Users } from "lucide-react";
 
 export const revalidate = 60;
@@ -58,23 +62,7 @@ export default async function WatchPage() {
         : new Map<number, ImportanceRecord>();
 
       const [allMembers, watchRows] = await Promise.all([
-        db
-          .select({
-            id: legislator.id,
-            memberId: legislator.memberId,
-            name: legislator.name,
-            nameHanja: legislator.nameHanja,
-            party: legislator.party,
-            district: legislator.district,
-            electionType: legislator.electionType,
-            committees: legislator.committees,
-            termNumber: legislator.termNumber,
-            committeeRole: legislator.committeeRole,
-            photoUrl: legislator.photoUrl,
-          })
-          .from(legislator)
-          .where(eq(legislator.isActive, true))
-          .orderBy(asc(legislator.seatIndex)),
+        loadActiveLegislatorSummaryCompat(),
         profile
           ? db
               .select({

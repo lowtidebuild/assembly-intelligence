@@ -36,6 +36,14 @@ function isMissingIndustryExcludeKeywordsColumn(err: unknown): boolean {
   return flattenErrorText(err).includes('column "exclude_keywords" does not exist');
 }
 
+function isMissingLegislatorCompatColumn(err: unknown): boolean {
+  const message = flattenErrorText(err);
+  return (
+    message.includes('column "committee_role" does not exist') ||
+    message.includes('column "photo_url" does not exist')
+  );
+}
+
 function normalizeKeywordList(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.filter((item): item is string => typeof item === "string");
@@ -68,6 +76,20 @@ type LegacyIndustryProfileRow = {
   isCustom: boolean;
   createdAt: Date | string;
   updatedAt: Date | string;
+};
+
+export type CompatLegislatorSummaryRow = {
+  id: number;
+  memberId: string;
+  name: string;
+  nameHanja: string | null;
+  party: string;
+  district: string | null;
+  electionType: string | null;
+  termNumber: number | null;
+  committeeRole: string | null;
+  committees: string[];
+  photoUrl: string | null;
 };
 
 function toDate(value: Date | string): Date {
@@ -127,6 +149,62 @@ export async function loadActiveIndustryProfileCompat(): Promise<IndustryProfile
 
     const row = rows[0];
     return row ? mapLegacyIndustryProfileRow(row) : null;
+  }
+}
+
+export async function loadActiveLegislatorSummaryCompat(): Promise<
+  CompatLegislatorSummaryRow[]
+> {
+  const { legislator } = await import("@/db/schema");
+  const { asc, eq } = await import("drizzle-orm");
+
+  try {
+    return await db
+      .select({
+        id: legislator.id,
+        memberId: legislator.memberId,
+        name: legislator.name,
+        nameHanja: legislator.nameHanja,
+        party: legislator.party,
+        district: legislator.district,
+        electionType: legislator.electionType,
+        termNumber: legislator.termNumber,
+        committeeRole: legislator.committeeRole,
+        committees: legislator.committees,
+        photoUrl: legislator.photoUrl,
+      })
+      .from(legislator)
+      .where(eq(legislator.isActive, true))
+      .orderBy(asc(legislator.seatIndex));
+  } catch (err) {
+    if (!isMissingLegislatorCompatColumn(err) || !rawSql) {
+      throw err;
+    }
+
+    const rows = (await withDbReadRetry(() =>
+      rawSql`
+        select
+          id,
+          member_id as "memberId",
+          name,
+          name_hanja as "nameHanja",
+          party,
+          district,
+          election_type as "electionType",
+          term_number as "termNumber",
+          null::text as "committeeRole",
+          committees,
+          null::text as "photoUrl"
+        from legislator
+        where is_active = true
+        order by seat_index asc
+      `,
+    )) as CompatLegislatorSummaryRow[];
+
+    return rows.map((row) => ({
+      ...row,
+      committees: normalizeKeywordList(row.committees),
+    }));
   }
 }
 

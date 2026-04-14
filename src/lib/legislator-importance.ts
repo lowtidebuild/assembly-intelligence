@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache";
 import { db } from "@/db";
 import { bill, industryLegislatorWatch, legislator } from "@/db/schema";
 import { type ImportanceLevel } from "@/lib/legislator-importance-ui";
+import { flattenErrorText } from "@/lib/db-compat";
 
 export interface ImportanceRecord {
   level: ImportanceLevel;
@@ -30,6 +31,98 @@ interface CachedImportanceEntry {
 
 function isLeadershipRole(role: string | null): boolean {
   return role === "위원장" || role === "간사";
+}
+
+function isMissingCommitteeRoleColumn(err: unknown): boolean {
+  return flattenErrorText(err).includes('column "committee_role" does not exist');
+}
+
+async function selectImportanceRows(
+  ctx: ImportanceContext,
+  legislatorId?: number,
+) {
+  const includeCommitteeRole = (value: string | null) =>
+    sql<string | null>`${value}`;
+  const whereClause = legislatorId
+    ? and(eq(legislator.id, legislatorId), eq(legislator.isActive, true))
+    : eq(legislator.isActive, true);
+
+  try {
+    const query = db
+      .select({
+        id: legislator.id,
+        committees: legislator.committees,
+        committeeRole: legislator.committeeRole,
+        isManualWatch:
+          sql<boolean>`${industryLegislatorWatch.legislatorId} IS NOT NULL`,
+        sponsoredBillCount: sql<number>`count(${bill.id})::int`,
+      })
+      .from(legislator)
+      .leftJoin(
+        industryLegislatorWatch,
+        and(
+          eq(industryLegislatorWatch.legislatorId, legislator.id),
+          eq(industryLegislatorWatch.industryProfileId, ctx.profileId),
+        ),
+      )
+      .leftJoin(
+        bill,
+        and(
+          eq(bill.proposerName, legislator.name),
+          sql`(${bill.proposerParty} IS NULL OR ${bill.proposerParty} = ${legislator.party})`,
+          sql`${bill.relevanceScore} >= 3`,
+          sql`${bill.proposalDate} > NOW() - INTERVAL '180 days'`,
+        ),
+      )
+      .where(whereClause)
+      .groupBy(
+        legislator.id,
+        legislator.committees,
+        legislator.committeeRole,
+        industryLegislatorWatch.legislatorId,
+      );
+
+    return legislatorId ? query.limit(1) : query;
+  } catch (err) {
+    if (!isMissingCommitteeRoleColumn(err)) {
+      throw err;
+    }
+
+    const fallbackQuery = db
+      .select({
+        id: legislator.id,
+        committees: legislator.committees,
+        committeeRole: includeCommitteeRole(null),
+        isManualWatch:
+          sql<boolean>`${industryLegislatorWatch.legislatorId} IS NOT NULL`,
+        sponsoredBillCount: sql<number>`count(${bill.id})::int`,
+      })
+      .from(legislator)
+      .leftJoin(
+        industryLegislatorWatch,
+        and(
+          eq(industryLegislatorWatch.legislatorId, legislator.id),
+          eq(industryLegislatorWatch.industryProfileId, ctx.profileId),
+        ),
+      )
+      .leftJoin(
+        bill,
+        and(
+          eq(bill.proposerName, legislator.name),
+          sql`(${bill.proposerParty} IS NULL OR ${bill.proposerParty} = ${legislator.party})`,
+          sql`${bill.relevanceScore} >= 3`,
+          sql`${bill.proposalDate} > NOW() - INTERVAL '180 days'`,
+        ),
+      )
+      .where(whereClause)
+      .groupBy(
+        legislator.id,
+        legislator.committees,
+        industryLegislatorWatch.legislatorId,
+      );
+
+    return legislatorId ? fallbackQuery.limit(1) : fallbackQuery;
+  }
 }
 
 function relevantCommitteesFor(
@@ -76,39 +169,7 @@ export function makeProposerKey(name: string, party: string | null): string {
 export async function computeImportance(
   ctx: ImportanceContext,
 ): Promise<Map<number, ImportanceRecord>> {
-  const rows = await db
-    .select({
-      id: legislator.id,
-      committees: legislator.committees,
-      committeeRole: legislator.committeeRole,
-      isManualWatch:
-        sql<boolean>`${industryLegislatorWatch.legislatorId} IS NOT NULL`,
-      sponsoredBillCount: sql<number>`count(${bill.id})::int`,
-    })
-    .from(legislator)
-    .leftJoin(
-      industryLegislatorWatch,
-      and(
-        eq(industryLegislatorWatch.legislatorId, legislator.id),
-        eq(industryLegislatorWatch.industryProfileId, ctx.profileId),
-      ),
-    )
-    .leftJoin(
-      bill,
-      and(
-        eq(bill.proposerName, legislator.name),
-        sql`(${bill.proposerParty} IS NULL OR ${bill.proposerParty} = ${legislator.party})`,
-        sql`${bill.relevanceScore} >= 3`,
-        sql`${bill.proposalDate} > NOW() - INTERVAL '180 days'`,
-      ),
-    )
-    .where(eq(legislator.isActive, true))
-    .groupBy(
-      legislator.id,
-      legislator.committees,
-      legislator.committeeRole,
-      industryLegislatorWatch.legislatorId,
-    );
+  const rows = await selectImportanceRows(ctx);
 
   const result = new Map<number, ImportanceRecord>();
 
@@ -205,40 +266,7 @@ export async function loadImportanceForLegislator(
   legislatorId: number,
   ctx: ImportanceContext,
 ): Promise<ImportanceRecord | null> {
-  const [row] = await db
-    .select({
-      id: legislator.id,
-      committees: legislator.committees,
-      committeeRole: legislator.committeeRole,
-      isManualWatch:
-        sql<boolean>`${industryLegislatorWatch.legislatorId} IS NOT NULL`,
-      sponsoredBillCount: sql<number>`count(${bill.id})::int`,
-    })
-    .from(legislator)
-    .leftJoin(
-      industryLegislatorWatch,
-      and(
-        eq(industryLegislatorWatch.legislatorId, legislator.id),
-        eq(industryLegislatorWatch.industryProfileId, ctx.profileId),
-      ),
-    )
-    .leftJoin(
-      bill,
-      and(
-        eq(bill.proposerName, legislator.name),
-        sql`(${bill.proposerParty} IS NULL OR ${bill.proposerParty} = ${legislator.party})`,
-        sql`${bill.relevanceScore} >= 3`,
-        sql`${bill.proposalDate} > NOW() - INTERVAL '180 days'`,
-      ),
-    )
-    .where(and(eq(legislator.id, legislatorId), eq(legislator.isActive, true)))
-    .groupBy(
-      legislator.id,
-      legislator.committees,
-      legislator.committeeRole,
-      industryLegislatorWatch.legislatorId,
-    )
-    .limit(1);
+  const [row] = await selectImportanceRows(ctx, legislatorId);
 
   if (!row) return null;
 

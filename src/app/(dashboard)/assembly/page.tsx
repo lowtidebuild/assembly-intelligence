@@ -13,14 +13,18 @@
 
 import { db } from "@/db";
 import { industryCommittee, legislator } from "@/db/schema";
-import { asc, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
 import {
   loadCachedImportance,
   type ImportanceRecord,
 } from "@/lib/legislator-importance";
-import { loadActiveIndustryProfileCompat, withDbReadRetry } from "@/lib/db-compat";
+import {
+  loadActiveIndustryProfileCompat,
+  loadActiveLegislatorSummaryCompat,
+  withDbReadRetry,
+} from "@/lib/db-compat";
 
 export const revalidate = 300;
 
@@ -42,23 +46,7 @@ export default async function AssemblyPage() {
         : new Map<number, ImportanceRecord>();
 
       const [members, partyStats] = await Promise.all([
-        db
-          .select({
-            id: legislator.id,
-            memberId: legislator.memberId,
-            name: legislator.name,
-            nameHanja: legislator.nameHanja,
-            party: legislator.party,
-            district: legislator.district,
-            electionType: legislator.electionType,
-            termNumber: legislator.termNumber,
-            committeeRole: legislator.committeeRole,
-            committees: legislator.committees,
-            photoUrl: legislator.photoUrl,
-          })
-          .from(legislator)
-          .where(eq(legislator.isActive, true))
-          .orderBy(asc(legislator.seatIndex)),
+        loadActiveLegislatorSummaryCompat(),
         db
           .select({
             party: legislator.party,
