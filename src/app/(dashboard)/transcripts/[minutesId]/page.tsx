@@ -6,6 +6,8 @@ import { bill, legislator } from "@/db/schema";
 import { PageHeader } from "@/components/page-header";
 import { LegislatorAvatar } from "@/components/legislator-avatar";
 import { flattenErrorText } from "@/lib/db-compat";
+import { getDemoBills, getDemoTranscriptByMinutesId } from "@/lib/demo-content";
+import { isDemoMode } from "@/lib/demo-mode";
 import { loadTranscriptByMinutesId } from "@/services/transcript-sync";
 import { ExternalLink } from "lucide-react";
 
@@ -23,6 +25,10 @@ export default async function TranscriptDetailPage(props: {
     if (!isMissingTranscriptSchemaError(err)) {
       throw err;
     }
+  }
+
+  if (!payload && isDemoMode()) {
+    payload = getDemoTranscriptByMinutesId(params.minutesId);
   }
 
   if (!payload) {
@@ -80,6 +86,7 @@ export default async function TranscriptDetailPage(props: {
           .where(inArray(bill.billId, agendaBillIds))
       : [];
   const billMap = new Map(relatedBills.map((row) => [row.billId, row]));
+  const demoBillMap = new Map(getDemoBills().map((row) => [row.billId, row]));
 
   return (
     <>
@@ -182,7 +189,9 @@ export default async function TranscriptDetailPage(props: {
             </div>
             <div className="space-y-2">
               {transcript.agendaItems.map((item) => {
-                const localBill = item.billId ? billMap.get(item.billId) : null;
+                const localBill = item.billId
+                  ? billMap.get(item.billId) ?? demoBillMap.get(item.billId)
+                  : null;
                 return (
                   <div
                     key={`${item.sortOrder}-${item.title}`}

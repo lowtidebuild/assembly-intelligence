@@ -40,6 +40,7 @@ import {
   loadActiveLegislatorSummaryCompat,
   withDbReadRetry,
 } from "@/lib/db-compat";
+import { buildSeededDemoWatchEntries } from "@/lib/demo-content";
 import { Plus, Sparkles, Users } from "lucide-react";
 
 export const revalidate = 60;
@@ -47,7 +48,7 @@ export const revalidate = 60;
 export default async function WatchPage() {
   const demoMode = isDemoMode();
 
-  const { allMembers, demoWatchRows, importanceById, profile, watchRows } =
+  const { allMembers, importanceById, profile, watchRows } =
     await withDbReadRetry(async () => {
       const profile = await loadActiveIndustryProfileCompat();
       const committees = profile
@@ -63,7 +64,7 @@ export default async function WatchPage() {
           })
         : new Map<number, ImportanceRecord>();
 
-      const [allMembers, watchRows, demoWatchRows] = await Promise.all([
+      const [allMembers, watchRows] = await Promise.all([
         loadActiveLegislatorSummaryCompat(),
         !demoMode && profile
           ? db
@@ -92,16 +93,6 @@ export default async function WatchPage() {
               )
               .where(eq(industryLegislatorWatch.industryProfileId, profile.id))
           : Promise.resolve([]),
-        demoMode && profile
-          ? db
-              .select({
-                legislatorId: industryLegislatorWatch.legislatorId,
-                reason: industryLegislatorWatch.reason,
-                addedAt: industryLegislatorWatch.addedAt,
-              })
-              .from(industryLegislatorWatch)
-              .where(eq(industryLegislatorWatch.industryProfileId, profile.id))
-          : Promise.resolve([]),
       ]);
 
       return {
@@ -109,7 +100,6 @@ export default async function WatchPage() {
         committees,
         importanceById,
         allMembers,
-        demoWatchRows,
         watchRows,
       };
     });
@@ -144,6 +134,8 @@ export default async function WatchPage() {
   }));
 
   if (demoMode) {
+    const seededEntries = buildSeededDemoWatchEntries(allMembers);
+
     return (
       <>
         <DemoWatchPage
@@ -154,14 +146,7 @@ export default async function WatchPage() {
               importance,
             }),
           )}
-          initialEntries={demoWatchRows.map((row) => ({
-            legislatorId: row.legislatorId,
-            reason: row.reason ?? "데모 초기 워치",
-            addedAt:
-              row.addedAt instanceof Date
-                ? row.addedAt.toISOString()
-                : new Date(row.addedAt).toISOString(),
-          }))}
+          initialEntries={seededEntries}
         />
       </>
     );

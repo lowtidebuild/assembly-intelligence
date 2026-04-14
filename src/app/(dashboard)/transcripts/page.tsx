@@ -2,7 +2,9 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { ContextStrip } from "@/components/context-strip";
 import { flattenErrorText, withDbReadRetry } from "@/lib/db-compat";
+import { getDemoTranscriptOverview } from "@/lib/demo-content";
 import { todayKst, weekdayKo } from "@/lib/dashboard-data";
+import { isDemoMode } from "@/lib/demo-mode";
 import { buildTranscriptSnippet } from "@/lib/transcript-parser";
 import {
   loadRecentTranscriptCount,
@@ -34,6 +36,14 @@ export default async function TranscriptsPage() {
     if (!isMissingTranscriptSchemaError(err)) {
       throw err;
     }
+  }
+
+  if (isDemoMode() && transcripts.length === 0) {
+    const demo = getDemoTranscriptOverview();
+    transcripts = demo.transcripts;
+    hits = demo.hits;
+    recentCount = demo.recentCount;
+    summaryMap = demo.summaryMap;
   }
 
   const today = todayKst();

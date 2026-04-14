@@ -49,6 +49,12 @@ import {
   loadActiveIndustryProfileCompat,
   withDbReadRetry,
 } from "@/lib/db-compat";
+import {
+  getDemoNewsItems,
+  getDemoRecentBills,
+  getDemoTopBills,
+  getDemoTranscriptHits,
+} from "@/lib/demo-content";
 import { FileText, RefreshCw, Newspaper, ExternalLink, MessagesSquare } from "lucide-react";
 
 export const revalidate = 60;
@@ -147,6 +153,12 @@ export default async function BriefingPage() {
   const demoFallbackContent = isDemoMode()
     ? buildDemoPageFallback()
     : null;
+  const displayTranscriptHits =
+    transcriptHits.length > 0
+      ? transcriptHits
+      : isDemoMode()
+        ? getDemoTranscriptHits(6)
+        : [];
 
   const displayTopBills =
     topBills.length > 0 ? topBills : demoFallbackContent?.topBills ?? [];
@@ -305,14 +317,14 @@ export default async function BriefingPage() {
             </SideSection>
           )}
 
-          {transcriptHits.length > 0 && (
+          {displayTranscriptHits.length > 0 && (
             <SideSection
               title="회의록 동향"
               icon={<MessagesSquare className="h-4 w-4" />}
               sublabel="최근 키워드 언급"
             >
               <ul className="flex flex-col">
-                {transcriptHits.map((item) => (
+                {displayTranscriptHits.map((item) => (
                   <TranscriptHitRow
                     key={`${item.minutesId}-${item.speakerName}-${item.snippet ?? "none"}`}
                     item={item}
@@ -1201,183 +1213,10 @@ function buildDemoPageFallback(): {
   recentBills: Bill[];
   newsItems: BriefingNewsItem[];
 } {
-  const topBills = [
-    makeDemoBill({
-      id: 9001,
-      billId: "DEMO_BILL_9001",
-      billName: "게임산업진흥에 관한 법률 일부개정법률안",
-      proposerName: "진종오",
-      proposerParty: "국민의힘",
-      committee: "문화체육관광위원회",
-      proposalDate: "2026-03-29T00:00:00.000Z",
-      relevanceScore: 5,
-      summaryText:
-        "게임산업진흥에 관한 법률 개정안은 현재의 게임 관련 규제들을 시대에 맞게 개선하려는 목적을 가지고 있습니다. 이는 게임 산업의 성장과 발전을 저해하는 불필요한 규제를 완화하고, 새로운 기술 및 서비스 도입을 촉진하여 국내 게임 산업의 경쟁력을 강화하기 위함입니다. 이 개정안은 게임 개발사, 유통사, 그리고 게임 이용자들에게 직접적인 영향을 미 미칠 것으로 보입니다.",
-    }),
-    makeDemoBill({
-      id: 9002,
-      billId: "DEMO_BILL_9002",
-      billName: "게임산업진흥에 관한 법률 일부개정법률안",
-      proposerName: "조계원",
-      proposerParty: "더불어민주당",
-      committee: "문화체육관광위원회",
-      proposalDate: "2026-03-05T00:00:00.000Z",
-      relevanceScore: 5,
-      summaryText:
-        "게임산업진흥에 관한 법률 개정안은 현재 게임 산업을 규제하는 법률을 현대화하고 개선하려는 목적을 가지고 있습니다. 이는 빠르게 변화하는 게임 산업 환경에 발맞춰 새로운 기술과 서비스 모델을 포용하고, 산업의 지속적인 성장과 혁신을 지원하기 위함입니다. 궁극적으로는 게임 개발사, 유통사, 그리고 게임 이용자 모두에게 더 나은 환경을 제공하는 것을 목표로 합니다.",
-    }),
-    makeDemoBill({
-      id: 9003,
-      billId: "DEMO_BILL_9003",
-      billName: "게임산업진흥에 관한 법률 일부개정법률안",
-      proposerName: "김성원",
-      proposerParty: "국민의힘",
-      committee: "문화체육관광위원회",
-      proposalDate: "2026-03-03T00:00:00.000Z",
-      relevanceScore: 5,
-      summaryText:
-        "게임산업진흥에 관한 법률 일부개정법률안은 현재 게임 산업을 규제하는 법을 시대에 맞게 고치고, 새로운 기술이나 서비스가 나올 때마다 법을 바꾸는 번거로움을 줄이려 합니다. 이는 게임 산업의 성장을 돕고, 이용자들을 더 잘 보호하기 위함입니다. 이 법안은 게임 개발사, 유통사 그리고 게임 이용자들에게 직접적인 영향을 미칠 것입니다.",
-    }),
-    makeDemoBill({
-      id: 9004,
-      billId: "DEMO_BILL_9004",
-      billName: "게임산업진흥에 관한 법률 일부개정법률안",
-      proposerName: "김성원",
-      proposerParty: "국민의힘",
-      committee: "문화체육관광위원회",
-      proposalDate: "2026-02-24T00:00:00.000Z",
-      relevanceScore: 5,
-      summaryText:
-        "게임산업진흥에 관한 법률 일부개정법률안은 현재의 게임 관련 법규를 시대에 맞게 손질하여 게임 산업의 성장을 돕고 건전한 게임 문화를 만들려는 목적을 가지고 있습니다. 이는 빠르게 변화하는 게임 산업의 특성을 반영하고, 새로운 기술과 서비스에 대한 법적 기반을 마련하여 국내 게임 산업의 경쟁력을 높이는 데 기여할 것입니다. 궁극적으로 게임 개발사, 유통사, 그리고 게임 이용자 모두에게 긍정적인 영향을 미칠 것으로 예상됩니다.",
-    }),
-  ];
-
-  const recentBills = [
-    topBills[0],
-    makeDemoBill({
-      id: 9005,
-      billId: "DEMO_BILL_9005",
-      billName: "이스포츠(전자스포츠) 진흥에 관한 법률 일부개정법률안",
-      proposerName: "진종오",
-      proposerParty: "국민의힘",
-      committee: "문화체육관광위원회",
-      proposalDate: "2026-03-15T00:00:00.000Z",
-      relevanceScore: 4,
-    }),
-    topBills[1],
-    topBills[2],
-    topBills[3],
-  ];
-
-  const newsItems: BriefingNewsItem[] = [
-    makeDemoNewsItem({
-      id: 9901,
-      title: "[창간20년 인터뷰] 이철우 한국게임이용자협회 협회장 \"이용자 대변하는...\"",
-      url: "https://www.todaykorea.co.kr/news/articleView.html?idxno=400378",
-      source: "todaykorea.co.kr",
-      publishedAt: "2026-04-10T00:00:00.000Z",
-    }),
-    makeDemoNewsItem({
-      id: 9902,
-      title: "[기자수첩] 게임산업 부흥, 제도가 바뀔 차례",
-      url: "https://www.shinailbo.co.kr/news/articleView.html?idxno=5007895",
-      source: "shinailbo.co.kr",
-      publishedAt: "2026-04-05T00:00:00.000Z",
-    }),
-    makeDemoNewsItem({
-      id: 9903,
-      title: "[온라인 게임 30년] '한류 선봉장' 게임산업이지만...이면엔 '낡은 규제...'",
-      url: "https://www.techm.kr/news/articleView.html?idxno=150784",
-      source: "techm.kr",
-      publishedAt: "2026-04-02T00:00:00.000Z",
-    }),
-    makeDemoNewsItem({
-      id: 9904,
-      title: "\"개천에서 페이커난다\"... 지역 e스포츠 육성법, 국회 본회의 통과",
-      url: "https://www.insight.co.kr/news/548611",
-      source: "insight.co.kr",
-      publishedAt: "2026-04-02T00:00:00.000Z",
-    }),
-    makeDemoNewsItem({
-      id: 9905,
-      title: "‘지역 e스포츠 활성화’ 법제화…지자체가 팀·리그·교육 직접 키운다",
-      url: "http://www.metroseoul.co.kr/article/20260402500431",
-      source: "metroseoul.co.kr",
-      publishedAt: "2026-04-02T00:00:00.000Z",
-    }),
-    makeDemoNewsItem({
-      id: 9906,
-      title: "정연욱 의원, e스포츠 진흥법 개정안 통과...지자체 지원 명시",
-      url: "https://www.joongdo.co.kr/web/view.php?key=20260402010000707",
-      source: "joongdo.co.kr",
-      publishedAt: "2026-04-02T00:00:00.000Z",
-    }),
-  ];
-
   return {
-    topBills,
-    recentBills,
-    newsItems,
-  };
-}
-
-function makeDemoBill(input: {
-  id: number;
-  billId: string;
-  billNumber?: string | null;
-  billName: string;
-  proposerName: string;
-  proposerParty: string | null;
-  committee: string | null;
-  proposalDate: string;
-  relevanceScore: number;
-  summaryText?: string | null;
-}): Bill {
-  const timestamp = new Date(input.proposalDate);
-  return {
-    id: input.id,
-    billId: input.billId,
-    billNumber: input.billNumber ?? null,
-    billName: input.billName,
-    proposerName: input.proposerName,
-    proposerParty: input.proposerParty,
-    coSponsorCount: 0,
-    committee: input.committee,
-    stage: "stage_2",
-    status: "계류중",
-    proposalDate: timestamp,
-    relevanceScore: input.relevanceScore,
-    relevanceReasoning: null,
-    proposalReason: null,
-    mainContent: null,
-    summaryText: input.summaryText ?? null,
-    companyImpact: null,
-    companyImpactIsAiDraft: false,
-    deepAnalysis: null,
-    deepAnalysisGeneratedAt: null,
-    externalLink: null,
-    lastSynced: timestamp,
-    createdAt: timestamp,
-  };
-}
-
-function makeDemoNewsItem(input: {
-  id: number;
-  title: string;
-  url: string;
-  source: string;
-  publishedAt: string;
-}): BriefingNewsItem {
-  return {
-    id: input.id,
-    billId: null,
-    query: "게임 산업",
-    title: input.title,
-    url: input.url,
-    source: input.source,
-    description: null,
-    publishedAt: new Date(input.publishedAt),
-    fetchedAt: new Date(input.publishedAt),
+    topBills: getDemoTopBills(),
+    recentBills: getDemoRecentBills(),
+    newsItems: getDemoNewsItems(),
   };
 }
 

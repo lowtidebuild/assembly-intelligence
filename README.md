@@ -21,7 +21,7 @@
 [ParlaWatch](https://github.com/lowtidebuild/parlawatch)는 국정감사 등 국회 유튜브 방송을 모니터링하는 도구였습니다.
 **ParlaWatch+** 는 그 철학을 확장한 **산업별 종합 국회 모니터링 시스템**입니다.
 
-[@hollobit](https://www.threads.com/@hollobit) 님이 만든 [assembly-api-mcp](https://github.com/hollobit/assembly-api-mcp) 를 보고 아이디어가 떠올라 바로 기획 + 개발했습니다. 국회 공공데이터를 MCP(Model Context Protocol)로 깔끔하게 노출해주는 이 서버 덕분에, 법안 수집부터 의원 프로필까지 모든 데이터를 실시간으로 가져올 수 있게 되었습니다. 현재 앱은 upstream 최신 `full` 프로필 기준으로 동작하며, `research_data`, `assembly_org(type=lawmaking)`, `get_nabo` 준비 상태도 `/settings`에서 확인할 수 있습니다.
+핵심 경험은 단순합니다. 아침에 대시보드를 열면 우리 산업 관련 핵심 법안, 관련 의원, 회의록 키워드 언급, 입법예고, 보도자료까지 한 화면에서 이어서 볼 수 있어야 합니다. 현재 앱은 upstream 최신 `full` 프로필 기준으로 동작하며, `research_data`, `assembly_org(type=lawmaking)`, `get_nabo` 준비 상태도 `/settings`에서 확인할 수 있습니다.
 
 **한 줄 요약**: 매일 아침 출근하면, 우리 산업에 영향 주는 법안이 뭐가 올라왔는지, AI가 정리해서 알려주는 대시보드.
 

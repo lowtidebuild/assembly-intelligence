@@ -42,6 +42,8 @@ import {
   makeProposerKey,
   type ImportanceRecord,
 } from "@/lib/legislator-importance";
+import { getDemoBills } from "@/lib/demo-content";
+import { isDemoMode } from "@/lib/demo-mode";
 import { loadActiveIndustryProfileCompat } from "@/lib/db-compat";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +61,7 @@ interface SearchParams {
 export default async function RadarPage(props: {
   searchParams: Promise<SearchParams>;
 }) {
+  const demoMode = isDemoMode();
   const sp = await props.searchParams;
   const q = sp.q?.trim() || "";
   const stageFilter = sp.stage || "";
@@ -113,26 +116,39 @@ export default async function RadarPage(props: {
       })
     : new Map();
 
-  const [rows, totalCount, committees] = await Promise.all([
-    db.select().from(bill).where(whereExpr).orderBy(orderBy).limit(200),
-    db.select({ total: sql<number>`count(*)::int` }).from(bill),
-    db
-      .select({
-        committee: bill.committee,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(bill)
-      .groupBy(bill.committee),
-  ]);
-
-  const [c] = totalCount;
+  const demoBills = demoMode ? getDemoBills() : [];
+  const rows = demoMode
+    ? filterAndSortDemoBills(demoBills, {
+        q,
+        stageFilter,
+        minScore,
+        cteFilter,
+        sort,
+      }).slice(0, 200)
+    : await db.select().from(bill).where(whereExpr).orderBy(orderBy).limit(200);
+  const total = demoMode
+    ? demoBills.length
+    : (
+        await db.select({ total: sql<number>`count(*)::int` }).from(bill)
+      )[0]?.total ?? 0;
+  const committees = demoMode
+    ? summarizeDemoCommittees(demoBills)
+    : await db
+        .select({
+          committee: bill.committee,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(bill)
+        .groupBy(bill.committee);
   const selectedBill = selectedBillId
     ? rows.find((r) => r.id === selectedBillId) ??
-      (await db
-        .select()
-        .from(bill)
-        .where(eq(bill.id, selectedBillId))
-        .then((r) => r[0] ?? null))
+      (demoMode
+        ? demoBills.find((row) => row.id === selectedBillId) ?? null
+        : await db
+            .select()
+            .from(bill)
+            .where(eq(bill.id, selectedBillId))
+            .then((r) => r[0] ?? null))
     : null;
   const proposerImportance = await loadProposerImportanceMap(
     [...rows, ...(selectedBill ? [selectedBill] : [])].map((entry) => ({
@@ -151,13 +167,13 @@ export default async function RadarPage(props: {
     <>
       <PageHeader
         title="입법 레이더"
-        subtitle={`${c?.total ?? 0}건 중 ${rows.length}건 표시`}
+        subtitle={`${total}건 중 ${rows.length}건 표시`}
       />
       {profile && (
         <ContextStrip
           industryName={profile.name}
           stats={[
-            { label: "전체", value: c?.total ?? 0 },
+            { label: "전체", value: total },
             { label: "필터", value: rows.length },
           ]}
         />
@@ -481,4 +497,67 @@ function buildHref(params: SearchParams): string {
   }
   const qs = sp.toString();
   return qs ? `/radar?${qs}` : "/radar";
+}
+
+function filterAndSortDemoBills(
+  rows: Bill[],
+  input: {
+    q: string;
+    stageFilter: string;
+    minScore: number;
+    cteFilter: string;
+    sort: string;
+  },
+): Bill[] {
+  const filtered = rows.filter((entry) => {
+    if (
+      input.q &&
+      !`${entry.billName} ${entry.proposerName}`.toLowerCase().includes(input.q.toLowerCase())
+    ) {
+      return false;
+    }
+    if (input.stageFilter && entry.stage !== input.stageFilter) {
+      return false;
+    }
+    if (input.minScore > 0 && (entry.relevanceScore ?? 0) < input.minScore) {
+      return false;
+    }
+    if (input.cteFilter && entry.committee !== input.cteFilter) {
+      return false;
+    }
+    return true;
+  });
+
+  const sorted = [...filtered];
+  sorted.sort((left, right) => {
+    switch (input.sort) {
+      case "date":
+        return compareDate(left.proposalDate, right.proposalDate);
+      case "-score":
+        return (right.relevanceScore ?? 0) - (left.relevanceScore ?? 0);
+      case "score":
+        return (left.relevanceScore ?? 0) - (right.relevanceScore ?? 0);
+      case "-name":
+        return right.billName.localeCompare(left.billName, "ko");
+      case "name":
+        return left.billName.localeCompare(right.billName, "ko");
+      case "-date":
+      default:
+        return compareDate(right.proposalDate, left.proposalDate);
+    }
+  });
+
+  return sorted;
+}
+
+function summarizeDemoCommittees(rows: Bill[]) {
+  const map = new Map<string | null, number>();
+  for (const entry of rows) {
+    map.set(entry.committee, (map.get(entry.committee) ?? 0) + 1);
+  }
+  return [...map.entries()].map(([committee, count]) => ({ committee, count }));
+}
+
+function compareDate(left: Date | null, right: Date | null) {
+  return (left?.getTime() ?? 0) - (right?.getTime() ?? 0);
 }

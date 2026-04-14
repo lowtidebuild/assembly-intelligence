@@ -41,6 +41,8 @@ import {
   type LegislatorStanceSignal,
   type PassageLikelihood,
 } from "@/lib/stance-analysis";
+import { getDemoBills } from "@/lib/demo-content";
+import { isDemoMode } from "@/lib/demo-mode";
 import { loadActiveIndustryProfileCompat } from "@/lib/db-compat";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +50,7 @@ export const dynamic = "force-dynamic";
 export default async function ImpactPage(props: {
   searchParams: Promise<{ bill?: string; legislator?: string }>;
 }) {
+  const demoMode = isDemoMode();
   const sp = await props.searchParams;
   const selectedBillId = sp.bill ? parseInt(sp.bill, 10) : null;
   const selectedLegislatorId = sp.legislator
@@ -68,39 +71,50 @@ export default async function ImpactPage(props: {
       })
     : new Map();
 
-  const [recentBills, selected] = await Promise.all([
-    db
-      .select()
-      .from(bill)
-      .orderBy(desc(bill.relevanceScore), desc(bill.proposalDate))
-      .limit(30),
-    selectedBillId
-      ? db
+  const demoBills = demoMode ? getDemoBills() : [];
+  const [recentBills, selected] = demoMode
+    ? [
+        demoBills,
+        selectedBillId
+          ? demoBills.find((entry) => entry.id === selectedBillId) ?? null
+          : null,
+      ]
+    : await Promise.all([
+        db
           .select()
           .from(bill)
-          .where(eq(bill.id, selectedBillId))
-          .then((r) => r[0] ?? null)
-      : Promise.resolve(null),
-  ]);
-  const voteRows = selected
-    ? await db
-        .select({
-          result: vote.result,
-          voteDate: vote.voteDate,
-          legislatorName: legislator.name,
-          party: legislator.party,
-        })
-        .from(vote)
-        .innerJoin(legislator, eq(vote.legislatorId, legislator.id))
-        .where(eq(vote.billId, selected.id))
-        .orderBy(desc(vote.voteDate), legislator.name)
-    : [];
-  const references = selected
-    ? await loadBillReferenceSections(selected.billName)
-    : null;
-  const stanceBundle = selected
-    ? await computeLegislatorStanceSignals(selected.id)
-    : null;
+          .orderBy(desc(bill.relevanceScore), desc(bill.proposalDate))
+          .limit(30),
+        selectedBillId
+          ? db
+              .select()
+              .from(bill)
+              .where(eq(bill.id, selectedBillId))
+              .then((r) => r[0] ?? null)
+          : Promise.resolve(null),
+      ]);
+  const voteRows =
+    selected && !demoMode
+      ? await db
+          .select({
+            result: vote.result,
+            voteDate: vote.voteDate,
+            legislatorName: legislator.name,
+            party: legislator.party,
+          })
+          .from(vote)
+          .innerJoin(legislator, eq(vote.legislatorId, legislator.id))
+          .where(eq(vote.billId, selected.id))
+          .orderBy(desc(vote.voteDate), legislator.name)
+      : [];
+  const references =
+    selected && !demoMode
+      ? await loadBillReferenceSections(selected.billName)
+      : null;
+  const stanceBundle =
+    selected && !demoMode
+      ? await computeLegislatorStanceSignals(selected.id)
+      : null;
   const proposerImportance = await loadProposerImportanceMap(
     [...recentBills, ...(selected ? [selected] : [])].map((entry) => ({
       name: entry.proposerName,

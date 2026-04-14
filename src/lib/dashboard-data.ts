@@ -20,6 +20,8 @@ import {
 } from "@/db/schema";
 import { desc, sql } from "drizzle-orm";
 import { loadActiveIndustryProfileCompat } from "@/lib/db-compat";
+import { getDemoWatchSeedCount } from "@/lib/demo-content";
+import { isDemoMode } from "@/lib/demo-mode";
 
 export interface DashboardContext {
   profile: IndustryProfile | null;
@@ -64,13 +66,17 @@ export async function getDashboardContext(): Promise<DashboardContext> {
   const [b] = billStats;
   const [w] = watchStats;
   const [s] = lastSyncRow;
+  const watchedLegislators =
+    isDemoMode() && (w?.count ?? 0) === 0
+      ? getDemoWatchSeedCount()
+      : (w?.count ?? 0);
 
   return {
     profile,
     counts: {
       totalBills: b?.total ?? 0,
       radarBills: b?.radar ?? 0,
-      watchedLegislators: w?.count ?? 0,
+      watchedLegislators,
     },
     lastSync: {
       timestamp: s?.completedAt ? formatKstShort(s.completedAt) : null,
