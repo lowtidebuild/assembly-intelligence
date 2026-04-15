@@ -10,6 +10,9 @@
   <a href="https://lowtidebuild.github.io/assembly-intelligence/"><img src="https://img.shields.io/badge/정적_데모-GitHub_Pages-green?style=for-the-badge" alt="정적 데모" /></a>
 </p>
 
+> 기본 문서는 한국어입니다. 영어 버전은 [README.en.md](./README.en.md)에서 볼 수 있습니다.<br/>
+> 앱 UI와 공개 데모는 현재 한국어로만 제공됩니다.
+
 ---
 
 > **TL;DR** — Full-stack legislative intelligence dashboard for Korean GR/PA teams. Syncs bills via MCP, scores with Gemini AI, generates daily briefings. 7 industry presets, 295 legislator profiles, auto-sync twice daily. Next.js 15 + Neon Postgres + Gemini. [Non-developer setup guide](./docs/setup-guide.md)
