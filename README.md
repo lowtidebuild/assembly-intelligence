@@ -10,8 +10,8 @@
   <a href="https://lowtidebuild.github.io/assembly-intelligence/"><img src="https://img.shields.io/badge/정적_데모-GitHub_Pages-green?style=for-the-badge" alt="정적 데모" /></a>
 </p>
 
-> 기본 문서는 한국어입니다. 영어 버전은 [README.en.md](./README.en.md)에서 볼 수 있습니다.<br/>
-> 앱 UI와 공개 데모는 현재 한국어로만 제공됩니다.
+> Default documentation and the live app are currently in Korean. For English documentation, see [README.en.md](./README.en.md).<br/>
+> 기본 문서와 실제 앱은 현재 한국어 기준입니다. 영어 문서는 [README.en.md](./README.en.md)에서 볼 수 있습니다.
 
 ---
 
