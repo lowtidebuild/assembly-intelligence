@@ -166,7 +166,7 @@ MCP에서 법안 수집 → Gemini Flash 평가 → 브리핑 생성 → 뉴스 
 
 > 비개발자용 상세 가이드: [docs/setup-guide.md](./docs/setup-guide.md)
 >
-> 데모/운영 재배포 순서: [docs/demo-deploy-runbook.md](./docs/demo-deploy-runbook.md)
+> 데모/운영 재배포 순서는 내부 런북으로 관리합니다.
 
 ### 1. 환경 변수
 

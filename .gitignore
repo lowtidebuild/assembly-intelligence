@@ -55,6 +55,7 @@ Thumbs.db
 # Local handoff briefs + archive (not part of the public repo)
 CODEX_BRIEF_*.md
 docs/archive/
+docs/demo-deploy-runbook.md
 
 # Design docs / internal planning (keep local, not public)
 RESUME.md

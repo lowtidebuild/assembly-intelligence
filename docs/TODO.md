@@ -22,7 +22,7 @@
 - [x] Gemini Pro 3.1 업그레이드
 - [x] Apache 2.0 라이선스
 - [x] 품질 개선 리메디에이션 (브리핑 snapshot 정합성, evening sync 안정화, 검색 접근성/정렬, 회귀 테스트)
-- [x] 데모 배포 런북 추가 (`docs/demo-deploy-runbook.md`)
+- [x] 데모 배포 내부 런북 정리
 
 ## 다음 — 법안 본문 가져오기 (블로커: 국회 서버 복구)
 

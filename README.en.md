@@ -165,7 +165,7 @@ Deploy a public demo with a single env var: `DEMO_MODE=true`. Read access is ope
 
 > Detailed guide for non-developers (Korean): [docs/setup-guide.md](./docs/setup-guide.md)
 >
-> Demo/production redeploy runbook (Korean): [docs/demo-deploy-runbook.md](./docs/demo-deploy-runbook.md)
+> Demo/production redeploy instructions are kept in an internal runbook.
 
 ### 1. Environment variables
 
