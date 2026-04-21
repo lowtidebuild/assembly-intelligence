@@ -29,6 +29,10 @@ const EXPECTED: ExpectedTable[] = [
     table: "press_release",
     columns: ["title", "committee", "is_relevant"],
   },
+  {
+    table: "industry_profile",
+    columns: ["exclude_keywords", "selected_law_mixins"],
+  },
 ];
 
 function quote(value: string): string {
