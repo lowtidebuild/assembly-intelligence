@@ -201,8 +201,10 @@ pnpm static:refresh    # refresh examples/*.html + examples/app.html + docs/inde
 
 ```bash
 pnpm install
-pnpm db:migrate
+pnpm db:migrate   # local dev DB only
 ```
+
+**Production deploys are not a manual `pnpm db:migrate` target.** After `git push origin main`, the Vercel build runs `pnpm deploy:migrate` → `pnpm build` automatically. Preview deploys (`VERCEL_ENV=preview`) skip migrations.
 
 ### 3. Start the server
 
