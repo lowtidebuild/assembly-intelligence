@@ -134,6 +134,12 @@ export const industryProfile = pgTable("industry_profile", {
     .$type<string[]>()
     .notNull()
     .default([]),
+  // Selected law mixins (slugs from law-mixins.ts). Empty array means
+  // no additional cross-law keyword sets beyond the base preset.
+  selectedLawMixins: jsonb("selected_law_mixins")
+    .$type<string[]>()
+    .notNull()
+    .default([]),
   // Injected as system prompt prefix for Gemini relevance scoring.
   llmContext: text("llm_context").notNull().default(""),
   presetVersion: text("preset_version"), // null = custom

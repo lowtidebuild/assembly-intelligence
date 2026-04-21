@@ -22,6 +22,7 @@ import { McpCapabilityPanel } from "@/components/mcp-capability-panel";
 import Link from "next/link";
 import { getMcpRuntimeConfig, hasMcpKey } from "@/lib/mcp-client";
 import { loadActiveIndustryProfileCompat, withDbReadRetry } from "@/lib/db-compat";
+import { getMixin } from "@/lib/law-mixins";
 import {
   Settings as SettingsIcon,
   Database,
@@ -115,6 +116,29 @@ export default async function SettingsPage() {
                 <span className="font-mono text-[12px] text-[var(--color-text-secondary)]">
                   {profile.presetVersion ?? "custom"}
                 </span>
+              </Row>
+              <Row label="관련 법률">
+                {profile.selectedLawMixins.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {profile.selectedLawMixins.map((slug) => {
+                      const mixin = getMixin(slug);
+                      return (
+                        <span
+                          key={slug}
+                          title={mixin?.formalName ?? slug}
+                          className="inline-block rounded-[var(--radius-sm)] bg-[var(--color-primary-light)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-primary)]"
+                        >
+                          {mixin?.name ?? slug}
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <span className="text-[12px] text-[var(--color-text-tertiary)]">
+                    추가 법률 없음. <Link href="/setup" className="underline">/setup</Link>
+                    에서 선택할 수 있습니다.
+                  </span>
+                )}
               </Row>
               <Row label="설명">{profile.description || "—"}</Row>
               <Row label={`키워드 (${profile.keywords.length})`}>

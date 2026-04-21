@@ -69,6 +69,10 @@ import { fetchBillBodyFragment } from "@/lib/bill-scraper";
 import { decodeHtmlEntities } from "@/lib/html-entities";
 import { getPreset } from "@/lib/industry-presets";
 import { evaluateKeywordRelevance } from "@/lib/keyword-relevance";
+import {
+  mergeExcludesWithMixins,
+  mergeKeywordsWithMixins,
+} from "@/lib/law-mixins";
 import { resolveLegislatorPhotoUrl } from "@/lib/legislator-photo";
 import { buildAlertMeta, insertAlertIfMissing } from "@/lib/alerts";
 import { syncNews } from "@/services/news-sync";
@@ -1118,11 +1122,17 @@ export async function runMorningSync(
     .from(industryCommittee)
     .where(eq(industryCommittee.industryProfileId, activeProfile.id));
   const committeeCodes = committees.map((c) => c.committeeCode);
-  const keywords = activeProfile.keywords ?? [];
-  const excludeKeywords =
+  const profileKeywords = activeProfile.keywords ?? [];
+  const profileExcludes =
     activeProfile.excludeKeywords?.length > 0
       ? activeProfile.excludeKeywords
       : (getPreset(activeProfile.slug)?.excludeKeywords ?? []);
+  const mixinSlugs = activeProfile.selectedLawMixins ?? [];
+  const keywords = mergeKeywordsWithMixins(profileKeywords, mixinSlugs);
+  const excludeKeywords = mergeExcludesWithMixins(
+    profileExcludes,
+    mixinSlugs,
+  );
   const manualWatchRows = await db
     .select({
       billId: bill.billId,

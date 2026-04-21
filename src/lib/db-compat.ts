@@ -32,8 +32,12 @@ export function isRetryableDbReadError(err: unknown): boolean {
   );
 }
 
-function isMissingIndustryExcludeKeywordsColumn(err: unknown): boolean {
-  return flattenErrorText(err).includes('column "exclude_keywords" does not exist');
+function isMissingIndustryProfileCompatColumn(err: unknown): boolean {
+  const message = flattenErrorText(err);
+  return (
+    message.includes('column "exclude_keywords" does not exist') ||
+    message.includes('column "selected_law_mixins" does not exist')
+  );
 }
 
 function isMissingLegislatorCompatColumn(err: unknown): boolean {
@@ -71,6 +75,8 @@ type LegacyIndustryProfileRow = {
   icon: string;
   description: string;
   keywords: unknown;
+  excludeKeywords?: unknown;
+  selectedLawMixins?: unknown;
   llmContext: string;
   presetVersion: string | null;
   isCustom: boolean;
@@ -107,7 +113,8 @@ function mapLegacyIndustryProfileRow(
     icon: row.icon,
     description: row.description,
     keywords: normalizeKeywordList(row.keywords),
-    excludeKeywords: [],
+    excludeKeywords: normalizeKeywordList(row.excludeKeywords),
+    selectedLawMixins: normalizeKeywordList(row.selectedLawMixins),
     llmContext: row.llmContext,
     presetVersion: row.presetVersion,
     isCustom: row.isCustom,
@@ -123,7 +130,7 @@ export async function loadActiveIndustryProfileCompat(): Promise<IndustryProfile
     const [profile] = await db.select().from(industryProfile).limit(1);
     return profile ?? null;
   } catch (err) {
-    if (!isMissingIndustryExcludeKeywordsColumn(err) || !rawSql) {
+    if (!isMissingIndustryProfileCompatColumn(err) || !rawSql) {
       throw err;
     }
 
@@ -137,6 +144,8 @@ export async function loadActiveIndustryProfileCompat(): Promise<IndustryProfile
           icon,
           description,
           keywords,
+          '[]'::jsonb as "excludeKeywords",
+          '[]'::jsonb as "selectedLawMixins",
           llm_context as "llmContext",
           preset_version as "presetVersion",
           is_custom as "isCustom",

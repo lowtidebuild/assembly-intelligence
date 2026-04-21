@@ -111,6 +111,7 @@ export default async function SetupPage() {
               presetVersion: existingProfile.presetVersion,
               committees: existingCommittees,
               legislatorIds: existingWatchedIds,
+              selectedLawMixins: existingProfile.selectedLawMixins ?? [],
             }
           : null
       }

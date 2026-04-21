@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Hemicycle, type HemicycleMember } from "@/components/hemicycle";
 import type { AssemblyCommittee } from "@/lib/assembly-committees";
+import { getMixin, listMixins } from "@/lib/law-mixins";
 import {
   Check,
   ChevronLeft,
@@ -64,6 +65,7 @@ export interface ExistingProfileDTO {
   presetVersion: string | null;
   committees: string[];
   legislatorIds: number[];
+  selectedLawMixins: string[];
 }
 
 export interface SetupWizardProps {
@@ -91,7 +93,10 @@ interface WizardState {
   presetVersion: string | null;
   committees: string[];
   legislatorIds: Set<number>;
+  selectedLawMixins: string[];
 }
+
+const LAW_MIXIN_OPTIONS = listMixins();
 
 function initialStateFromProfile(p: ExistingProfileDTO): WizardState {
   return {
@@ -106,6 +111,7 @@ function initialStateFromProfile(p: ExistingProfileDTO): WizardState {
     presetVersion: p.presetVersion,
     committees: [...p.committees],
     legislatorIds: new Set(p.legislatorIds),
+    selectedLawMixins: [...p.selectedLawMixins],
   };
 }
 
@@ -122,6 +128,7 @@ function initialStateFromPreset(p: PresetDTO): WizardState {
     presetVersion: p.presetVersion,
     committees: [...p.suggestedCommittees],
     legislatorIds: new Set(),
+    selectedLawMixins: [],
   };
 }
 
@@ -138,6 +145,7 @@ function emptyCustomState(): WizardState {
     presetVersion: null,
     committees: [],
     legislatorIds: new Set(),
+    selectedLawMixins: [],
   };
 }
 
@@ -153,10 +161,13 @@ export function SetupWizard({
 }: SetupWizardProps) {
   const router = useRouter();
   const isEditMode = existingProfile !== null;
+  const initialStep: StepId =
+    existingProfile && existingProfile.presetVersion === null ? 2 : 1;
 
-  // Determine starting step. Edit mode starts at step 2 (skip preset
-  // picker since they already chose one).
-  const [step, setStep] = useState<StepId>(isEditMode ? 2 : 1);
+  // Preset-backed profiles start at step 1 so users can edit mixins.
+  // Truly custom profiles still skip to step 2 because step 1 is
+  // preset-oriented.
+  const [step, setStep] = useState<StepId>(initialStep);
   const [state, setState] = useState<WizardState>(() =>
     existingProfile
       ? initialStateFromProfile(existingProfile)
@@ -176,7 +187,6 @@ export function SetupWizard({
 
   const pickPreset = (preset: PresetDTO) => {
     setState(initialStateFromPreset(preset));
-    setStep(2);
   };
 
   const pickCustom = () => {
@@ -184,8 +194,22 @@ export function SetupWizard({
     setStep(2);
   };
 
+  const toggleMixin = (slug: string) => {
+    setState((current) => {
+      const hasSlug = current.selectedLawMixins.includes(slug);
+      return {
+        ...current,
+        selectedLawMixins: hasSlug
+          ? current.selectedLawMixins.filter((value) => value !== slug)
+          : [...current.selectedLawMixins, slug],
+      };
+    });
+  };
+
+  const hasSelectedPreset = presets.some((preset) => preset.slug === state.slug);
+
   const canProceed = ((): boolean => {
-    if (step === 1) return true; // step 1 navigates via pickPreset
+    if (step === 1) return hasSelectedPreset;
     if (step === 2) {
       return state.name.trim().length > 0 && state.keywords.length > 0;
     }
@@ -225,6 +249,7 @@ export function SetupWizard({
             presetVersion: state.presetVersion,
             committees: state.committees,
             legislatorIds: Array.from(state.legislatorIds),
+            selectedLawMixins: state.selectedLawMixins,
           }),
         });
         if (!res.ok) {
@@ -260,8 +285,10 @@ export function SetupWizard({
         {step === 1 && (
           <Step1Industry
             presets={presets}
+            state={state}
             onPickPreset={pickPreset}
             onPickCustom={pickCustom}
+            onToggleMixin={toggleMixin}
           />
         )}
         {step === 2 && (
@@ -297,18 +324,21 @@ export function SetupWizard({
           />
         )}
 
-        {/* Step nav (not shown on step 1 since pickPreset moves forward) */}
-        {step > 1 && step < 5 && (
+        {step < 5 && (step > 1 || (step === 1 && hasSelectedPreset)) && (
           <div className="mt-6 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={back}
-              disabled={isEditMode && step === 2}
-              className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-[13px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] disabled:opacity-30"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              이전
-            </button>
+            {step > 1 ? (
+              <button
+                type="button"
+                onClick={back}
+                disabled={step === initialStep}
+                className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-[13px] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] disabled:opacity-30"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                이전
+              </button>
+            ) : (
+              <div />
+            )}
             <button
               type="button"
               onClick={next}
@@ -377,13 +407,21 @@ function StepIndicator({ step }: { step: StepId }) {
 
 function Step1Industry({
   presets,
+  state,
   onPickPreset,
   onPickCustom,
+  onToggleMixin,
 }: {
   presets: PresetDTO[];
+  state: WizardState;
   onPickPreset: (p: PresetDTO) => void;
   onPickCustom: () => void;
+  onToggleMixin: (slug: string) => void;
 }) {
+  const hasPickedPreset = presets.some((preset) => preset.slug === state.slug);
+  const effectiveKeywordCount = countEffectiveKeywordCount(state);
+  const additionalKeywordCount = effectiveKeywordCount - state.keywords.length;
+
   return (
     <div>
       <div className="mb-6">
@@ -402,7 +440,12 @@ function Step1Industry({
             key={p.slug}
             type="button"
             onClick={() => onPickPreset(p)}
-            className="group flex flex-col gap-2 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-left shadow-[var(--shadow-card)] transition-all hover:border-[var(--color-primary)] hover:shadow-[var(--shadow-card-hover)]"
+            className={cn(
+              "group flex flex-col gap-2 rounded-[var(--radius)] border bg-[var(--color-surface)] p-5 text-left shadow-[var(--shadow-card)] transition-all hover:shadow-[var(--shadow-card-hover)]",
+              state.slug === p.slug
+                ? "border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]"
+                : "border-[var(--color-border)] hover:border-[var(--color-primary)]",
+            )}
           >
             <div className="flex items-start gap-3">
               <span className="text-[28px] leading-none">{p.icon}</span>
@@ -451,6 +494,75 @@ function Step1Industry({
           </p>
         </button>
       </div>
+
+      {hasPickedPreset && (
+        <section
+          aria-label="관련 법률 선택"
+          className="mt-8 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-card)]"
+        >
+          <div className="mb-4">
+            <h3 className="text-[16px] font-bold text-[var(--color-text)]">
+              관련 법률 (선택)
+            </h3>
+            <p className="mt-1 text-[12px] text-[var(--color-text-secondary)]">
+              이 산업에 영향을 주는 법률을 추가로 체크하면, 해당 법률의 키워드가
+              watchlist에 합쳐집니다. 나중에 프로필 편집에서 언제든 바꿀 수
+              있습니다.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {LAW_MIXIN_OPTIONS.map((mixin) => {
+              const checked = state.selectedLawMixins.includes(mixin.slug);
+              return (
+                <label
+                  key={mixin.slug}
+                  title={buildMixinPreview(mixin.slug)}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-[var(--radius-sm)] border p-3 transition-colors",
+                    checked
+                      ? "border-[var(--color-primary)] bg-[var(--color-primary-light)]"
+                      : "border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)]",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggleMixin(mixin.slug)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-primary)]"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-semibold text-[var(--color-text)]">
+                      {mixin.name}
+                    </div>
+                    <div className="text-[11px] text-[var(--color-text-tertiary)]">
+                      {mixin.formalName}
+                    </div>
+                    <div className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
+                      키워드 {mixin.keywords.length}개 ·{" "}
+                      {mixin.regulators.join(", ")}
+                    </div>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 rounded-[var(--radius-sm)] bg-[var(--color-surface-2)] px-3 py-2 text-[11px] text-[var(--color-text-secondary)]">
+            <strong>Pre-filter 키워드:</strong> {effectiveKeywordCount}개 = 기본{" "}
+            {state.keywords.length}개
+            {state.selectedLawMixins.length > 0 && (
+              <>
+                {" "}
+                + 법률 {state.selectedLawMixins.length}개 추가
+                {additionalKeywordCount > 0
+                  ? ` (+${additionalKeywordCount})`
+                  : ""}
+              </>
+            )}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -1011,6 +1123,28 @@ function Step5Confirm({
           </dd>
 
           <dt className="text-[var(--color-text-tertiary)]">
+            관련 법률 ({state.selectedLawMixins.length})
+          </dt>
+          <dd className="flex flex-wrap gap-1">
+            {state.selectedLawMixins.length === 0 && (
+              <span className="text-[11px] italic text-[var(--color-text-tertiary)]">
+                없음
+              </span>
+            )}
+            {state.selectedLawMixins.map((slug) => {
+              const mixin = getMixin(slug);
+              return (
+                <span
+                  key={slug}
+                  className="rounded-[var(--radius-sm)] bg-[var(--color-primary-light)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-primary)]"
+                >
+                  {mixin?.name ?? slug}
+                </span>
+              );
+            })}
+          </dd>
+
+          <dt className="text-[var(--color-text-tertiary)]">
             포함 키워드 ({state.keywords.length})
           </dt>
           <dd className="flex flex-wrap gap-1">
@@ -1127,4 +1261,23 @@ function Step5Confirm({
       </div>
     </div>
   );
+}
+
+function countEffectiveKeywordCount(state: WizardState): number {
+  const keywords = new Set(state.keywords);
+  for (const slug of state.selectedLawMixins) {
+    const mixin = getMixin(slug);
+    if (!mixin) continue;
+    for (const keyword of mixin.keywords) {
+      keywords.add(keyword);
+    }
+  }
+  return keywords.size;
+}
+
+function buildMixinPreview(slug: string): string {
+  const mixin = getMixin(slug);
+  if (!mixin) return slug;
+  const examples = mixin.keywords.slice(0, 3).join(", ");
+  return `이 법률을 추가하면 관련 키워드 ${mixin.keywords.length}개가 watchlist에 더해집니다. 예: ${examples}`;
 }

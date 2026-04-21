@@ -15,7 +15,7 @@
 
 ---
 
-> **TL;DR** — Full-stack legislative intelligence dashboard for Korean GR/PA teams. Syncs bills via MCP, scores with Gemini AI, generates daily briefings. 7 industry presets, 295 legislator profiles, auto-sync twice daily. Next.js 15 + Neon Postgres + Gemini. [Non-developer setup guide (Korean)](./docs/setup-guide.md)
+> **TL;DR** — Full-stack legislative intelligence dashboard for Korean GR/PA teams. Syncs bills via MCP, scores with Gemini AI, generates daily briefings. 7 industry presets + 8 cross-law mixins (E-Commerce Act, Information Communications Network Act, Copyright Act, etc.) for precise watchlists, 295 legislator profiles, auto-sync twice daily. Next.js 15 + Neon Postgres + Gemini. [Non-developer setup guide (Korean)](./docs/setup-guide.md)
 
 ---
 
@@ -98,7 +98,7 @@ Stores full plenary and committee transcripts, then highlights only the speeches
 
 ![Setup Wizard](./screenshots/13-setup-step2.png)
 
-Industry selection -> keyword editing -> committee selection -> legislator selection -> final review. You can download the project and customize it for your own industry.
+Industry preset + related law mixins -> keyword editing -> committee selection -> legislator selection -> final review. A game company can monitor Game Industry Act alongside the E-Commerce Act and Information Communications Network Act by checking multiple law mixins directly on Step 1. You can download the project and customize it for your own industry.
 
 ---
 
@@ -112,7 +112,7 @@ Industry selection -> keyword editing -> committee selection -> legislator selec
 Runs automatically every day at 06:30 and 18:30 KST via Vercel Cron.
 Bill collection from MCP -> Gemini Flash scoring -> briefing generation -> news collection.
 
-### Seven industry presets
+### Seven industry presets + eight law mixins
 | Industry | Keywords | Committees |
 |---|---|---|
 | Game | 20 | 4 |
@@ -123,7 +123,7 @@ Bill collection from MCP -> Gemini Flash scoring -> briefing generation -> news 
 | E-commerce | 15 | 4 |
 | Artificial Intelligence | 15 | 4 |
 
-Manual input is also supported. Every field is editable.
+On top of the industry preset, **cross-law mixins** (E-Commerce Act, Fair Labeling Act, Information Communications Network Act, Personal Information Protection Act, Copyright Act, E-Sports Promotion Act, Youth Protection Act, Contents Industry Promotion Act) can be toggled via checkboxes. A game company can track "Game + E-Commerce Act + Info. Comm. Network Act" from a single profile. Manual input also supported. Every field editable.
 
 </td>
 <td width="50%">
@@ -212,7 +212,7 @@ pnpm dev    # http://localhost:3000
 
 ### 4. Configure an industry profile
 
-Select an industry preset in `/setup` -> edit keywords/committees -> save.
+Select an industry preset in `/setup` -> check related law mixins (optional) -> edit keywords/committees -> save.
 Or use the CLI: `pnpm tsx scripts/seed-test-profile.ts game`
 
 ### 5. Run the first sync
@@ -230,10 +230,12 @@ Return to `/briefing` to see live data.
 You do not need to change a single line of code. The runtime profile is injected into every Gemini prompt.
 
 1. Pick a preset in `/setup` (or enter one manually)
-2. Edit keywords, committees, and LLM context
-3. Save -> starting from the next sync, the app begins collecting bills for that industry
+2. Check related law mixins (optional) — reuse cross-industry law keyword sets
+3. Edit keywords, committees, and LLM context
+4. Save -> starting from the next sync, the app begins collecting bills for that industry
 
 Current presets: [`src/lib/industry-presets.ts`](./src/lib/industry-presets.ts)
+Law mixins: [`src/lib/law-mixins.ts`](./src/lib/law-mixins.ts) · Shared keyword blocks: [`src/lib/law-keyword-blocks.ts`](./src/lib/law-keyword-blocks.ts)
 
 ---
 

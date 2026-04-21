@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { evaluateKeywordRelevance } from "@/lib/keyword-relevance";
+import { mergeExcludesWithMixins, mergeKeywordsWithMixins } from "@/lib/law-mixins";
 import {
   hasPlenarySignal,
   noticeIsRelevant,
@@ -112,5 +114,58 @@ describe("hasPlenarySignal", () => {
     );
     expect(hasPlenarySignal(makeSimsa({ 본회의_결과: "원안가결" }))).toBe(true);
     expect(hasPlenarySignal(makeSimsa({}))).toBe(false);
+  });
+});
+
+describe("sync pre-filter merge", () => {
+  it("preserves the pre-feature keyword set when no mixins are selected", () => {
+    const keywords = ["게임", "게임산업"];
+    expect(new Set(mergeKeywordsWithMixins(keywords, []))).toEqual(
+      new Set(keywords),
+    );
+  });
+
+  it("preserves the pre-feature exclude set when no mixins are selected", () => {
+    const excludes = ["제로섬 게임", "치킨게임"];
+    expect(new Set(mergeExcludesWithMixins(excludes, []))).toEqual(
+      new Set(excludes),
+    );
+  });
+
+  it("merges mixin keywords into the profile keyword set", () => {
+    const merged = mergeKeywordsWithMixins(["게임", "게임산업"], [
+      "ecommerce-act",
+    ]);
+    expect(merged).toContain("게임");
+    expect(merged).toContain("전자상거래");
+  });
+
+  it("does not throw on unknown mixin slugs", () => {
+    expect(() =>
+      mergeKeywordsWithMixins(["게임"], ["no-such-act"]),
+    ).not.toThrow();
+  });
+
+  it("matches a law-mixin bill for a game profile with ecommerce selected", () => {
+    const result = evaluateKeywordRelevance({
+      text: "전자상거래 등에서의 소비자보호에 관한 법률 일부개정법률안 (다크패턴 규제 강화)",
+      includeKeywords: mergeKeywordsWithMixins(["게임", "게임산업"], [
+        "ecommerce-act",
+      ]),
+      excludeKeywords: [],
+    });
+
+    expect(result.isRelevant).toBe(true);
+    expect(result.matchedIncludeKeywords.length).toBeGreaterThan(0);
+  });
+
+  it("does not match a bill outside both the preset and selected mixins", () => {
+    const result = evaluateKeywordRelevance({
+      text: "농업 지원에 관한 특별법안",
+      includeKeywords: mergeKeywordsWithMixins(["게임산업"], ["ecommerce-act"]),
+      excludeKeywords: [],
+    });
+
+    expect(result.isRelevant).toBe(false);
   });
 });

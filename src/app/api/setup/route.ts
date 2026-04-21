@@ -26,7 +26,8 @@
  *   llmContext: string,           // 50-5000 chars
  *   presetVersion: string | null, // null = custom
  *   committees: string[],         // canonical Korean names
- *   legislatorIds: number[]       // bigints from legislator.id
+ *   legislatorIds: number[],      // bigints from legislator.id
+ *   selectedLawMixins: string[]   // law mixin slugs
  * }
  */
 
@@ -41,6 +42,9 @@ import {
 } from "@/db/schema";
 import { eq, ne } from "drizzle-orm";
 import { errorMessage } from "@/lib/api-base";
+import { listMixinSlugs } from "@/lib/law-mixins";
+
+const knownMixinSlugs = new Set(listMixinSlugs());
 
 const bodySchema = z.object({
   slug: z
@@ -58,6 +62,14 @@ const bodySchema = z.object({
   presetVersion: z.string().max(50).nullable().default(null),
   committees: z.array(z.string().min(1).max(60)).max(20),
   legislatorIds: z.array(z.number().int().positive()).max(100),
+  selectedLawMixins: z
+    .array(z.string().min(1).max(80))
+    .max(20)
+    .default([])
+    .refine(
+      (slugs) => slugs.every((slug) => knownMixinSlugs.has(slug)),
+      "selectedLawMixins contains unknown slug(s).",
+    ),
 });
 
 function errorResponse(status: number, code: string, message: string) {
@@ -113,6 +125,7 @@ export async function POST(req: NextRequest) {
         description: input.description,
         keywords: input.keywords,
         excludeKeywords: input.excludeKeywords,
+        selectedLawMixins: input.selectedLawMixins,
         llmContext: input.llmContext,
         presetVersion: input.presetVersion,
         isCustom: input.presetVersion === null,
@@ -126,6 +139,7 @@ export async function POST(req: NextRequest) {
           description: input.description,
           keywords: input.keywords,
           excludeKeywords: input.excludeKeywords,
+          selectedLawMixins: input.selectedLawMixins,
           llmContext: input.llmContext,
           presetVersion: input.presetVersion,
           isCustom: input.presetVersion === null,

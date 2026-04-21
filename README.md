@@ -15,7 +15,7 @@
 
 ---
 
-> **TL;DR** — Full-stack legislative intelligence dashboard for Korean GR/PA teams. Syncs bills via MCP, scores with Gemini AI, generates daily briefings. 7 industry presets, 295 legislator profiles, auto-sync twice daily. Next.js 15 + Neon Postgres + Gemini. [Non-developer setup guide](./docs/setup-guide.md)
+> **TL;DR** — Full-stack legislative intelligence dashboard for Korean GR/PA teams. Syncs bills via MCP, scores with Gemini AI, generates daily briefings. 7 industry presets + 8 cross-law mixins (전자상거래법, 정보통신망법, 저작권법 등) for precise watchlists, 295 legislator profiles, auto-sync twice daily. Next.js 15 + Neon Postgres + Gemini. [Non-developer setup guide](./docs/setup-guide.md)
 
 ---
 
@@ -99,7 +99,7 @@ S/A 등급 의원 자동 추천. 한자명, 선거구, 위원회, 보좌진, 약
 
 ![설정 위저드](./screenshots/13-setup-step2.png)
 
-산업 선택 → 키워드 편집 → 위원회 선택 → 의원 선택 → 확인. 다운받아서 자기 산업에 맞게 커스터마이징 가능.
+산업 프리셋 + 관련 법률 선택 → 키워드 편집 → 위원회 선택 → 의원 선택 → 확인. 게임사가 게임산업법 외에도 전자상거래법·정보통신망법을 동시에 추적하는 식의 교차 법률 조합을 Step 1에서 바로 체크박스로 구성.
 
 ---
 
@@ -113,7 +113,7 @@ S/A 등급 의원 자동 추천. 한자명, 선거구, 위원회, 보좌진, 약
 Vercel Cron으로 매일 06:30 / 18:30 KST 자동 실행.
 MCP에서 법안 수집 → Gemini Flash 평가 → 브리핑 생성 → 뉴스 수집.
 
-### 산업별 프리셋 7종
+### 산업별 프리셋 7종 + 법률 믹스인 8종
 | | 산업 | 키워드 | 위원회 |
 |---|---|---|---|
 | 🎮 | 게임 | 20개 | 4개 |
@@ -124,7 +124,7 @@ MCP에서 법안 수집 → Gemini Flash 평가 → 브리핑 생성 → 뉴스 
 | 🛒 | 이커머스 | 15개 | 4개 |
 | 🤖 | 인공지능 | 15개 | 4개 |
 
-직접 입력도 가능. 모든 필드 편집 가능.
+산업 프리셋 위에 **교차 법률 믹스인** (전자상거래법, 표시·광고법, 정보통신망법, 개인정보보호법, 저작권법, 이스포츠 진흥법, 청소년 보호법, 콘텐츠산업진흥법)을 체크박스로 조합. 게임사가 "게임 + 전자상거래법 + 정보통신망법"을 한 프로필로 모니터링. 직접 입력도 가능, 모든 필드 편집 가능.
 
 </td>
 <td width="50%">
@@ -219,7 +219,7 @@ pnpm dev    # http://localhost:3000
 
 ### 4. 산업 프로필 설정
 
-`/setup`에서 산업 프리셋 선택 → 키워드/위원회 편집 → 저장.
+`/setup`에서 산업 프리셋 선택 → 관련 법률 믹스인 체크 (선택) → 키워드/위원회 편집 → 저장.
 또는 CLI: `pnpm tsx scripts/seed-test-profile.ts game`
 
 ### 5. 첫 동기화
@@ -237,10 +237,12 @@ pnpm tsx scripts/dry-run-morning-sync.ts   # ~45초, 실제 Gemini 호출
 코드 수정 **0줄**. 런타임 프로필이 모든 Gemini 프롬프트에 주입됩니다.
 
 1. `/setup`에서 원하는 프리셋 선택 (또는 직접 입력)
-2. 키워드, 위원회, LLM 컨텍스트 편집
-3. 저장 → 다음 동기화부터 해당 산업 법안이 수집됩니다
+2. 관련 법률 믹스인 체크 (선택) — 산업을 가로지르는 법률 키워드를 재사용
+3. 키워드, 위원회, LLM 컨텍스트 편집
+4. 저장 → 다음 동기화부터 해당 산업 법안이 수집됩니다
 
 현재 프리셋: [`src/lib/industry-presets.ts`](./src/lib/industry-presets.ts)
+법률 믹스인: [`src/lib/law-mixins.ts`](./src/lib/law-mixins.ts) · 공유 키워드 블록: [`src/lib/law-keyword-blocks.ts`](./src/lib/law-keyword-blocks.ts)
 
 ---
 
