@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { STANDING_COMMITTEES } from "@/lib/assembly-committees";
 import {
   getMixin,
   listMixinSlugs,
   listMixins,
+  mergeCommitteesWithMixins,
   mergeExcludesWithMixins,
   mergeKeywordsWithMixins,
 } from "@/lib/law-mixins";
@@ -41,6 +43,44 @@ describe("law-mixins registry", () => {
       expect(mixin.formalName.length).toBeGreaterThan(0);
       expect(mixin.keywords.length).toBeGreaterThan(3);
     }
+  });
+});
+
+describe("LawMixin.suggestedCommittees", () => {
+  it("gives every mixin at least one committee", () => {
+    for (const mixin of listMixins()) {
+      expect(mixin.suggestedCommittees.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("uses canonical standing committee names", () => {
+    const validCommitteeNames = new Set(
+      STANDING_COMMITTEES.map((committee) => committee.name),
+    );
+
+    for (const mixin of listMixins()) {
+      for (const committeeCode of mixin.suggestedCommittees) {
+        expect(
+          validCommitteeNames.has(committeeCode),
+          `${mixin.slug} -> ${committeeCode}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("keeps the expected committee mappings for shipped mixins", () => {
+    expect(getMixin("ecommerce-act")?.suggestedCommittees).toContain(
+      "정무위원회",
+    );
+    expect(getMixin("fair-labeling-act")?.suggestedCommittees).toContain(
+      "정무위원회",
+    );
+    expect(getMixin("info-comm-network-act")?.suggestedCommittees).toContain(
+      "과학기술정보방송통신위원회",
+    );
+    expect(getMixin("copyright-act")?.suggestedCommittees).toContain(
+      "문화체육관광위원회",
+    );
   });
 });
 
@@ -91,5 +131,54 @@ describe("mergeExcludesWithMixins", () => {
       "pipa",
     ]);
     expect(merged).toContain("제로섬 게임");
+  });
+});
+
+describe("mergeCommitteesWithMixins", () => {
+  it("returns the profile committee set unchanged when no mixins are selected", () => {
+    const result = mergeCommitteesWithMixins(
+      ["문화체육관광위원회", "과학기술정보방송통신위원회"],
+      [],
+    );
+
+    expect(result).toEqual([
+      "문화체육관광위원회",
+      "과학기술정보방송통신위원회",
+    ]);
+  });
+
+  it("unions mixin committees into the profile committee set", () => {
+    const result = mergeCommitteesWithMixins(
+      ["문화체육관광위원회"],
+      ["ecommerce-act", "copyright-act"],
+    );
+
+    expect(new Set(result)).toEqual(
+      new Set(["문화체육관광위원회", "정무위원회"]),
+    );
+  });
+
+  it("silently skips unknown mixin slugs", () => {
+    expect(
+      mergeCommitteesWithMixins(["정무위원회"], ["unknown-mixin"]),
+    ).toEqual(["정무위원회"]);
+  });
+
+  it("dedupes committees shared by multiple mixins", () => {
+    const result = mergeCommitteesWithMixins(
+      [],
+      ["ecommerce-act", "fair-labeling-act"],
+    );
+
+    expect(result.filter((committee) => committee === "정무위원회")).toHaveLength(
+      1,
+    );
+  });
+
+  it("includes every committee from multi-committee mixins", () => {
+    const result = mergeCommitteesWithMixins([], ["pipa"]);
+
+    expect(result).toContain("정무위원회");
+    expect(result).toContain("행정안전위원회");
   });
 });

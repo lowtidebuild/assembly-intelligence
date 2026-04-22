@@ -70,6 +70,7 @@ import { decodeHtmlEntities } from "@/lib/html-entities";
 import { getPreset } from "@/lib/industry-presets";
 import { evaluateKeywordRelevance } from "@/lib/keyword-relevance";
 import {
+  mergeCommitteesWithMixins,
   mergeExcludesWithMixins,
   mergeKeywordsWithMixins,
 } from "@/lib/law-mixins";
@@ -1121,7 +1122,7 @@ export async function runMorningSync(
     .select()
     .from(industryCommittee)
     .where(eq(industryCommittee.industryProfileId, activeProfile.id));
-  const committeeCodes = committees.map((c) => c.committeeCode);
+  const profileCommitteeCodes = committees.map((c) => c.committeeCode);
   const profileKeywords = activeProfile.keywords ?? [];
   const profileExcludes =
     activeProfile.excludeKeywords?.length > 0
@@ -1133,6 +1134,17 @@ export async function runMorningSync(
     profileExcludes,
     mixinSlugs,
   );
+  const committeeCodes = mergeCommitteesWithMixins(
+    profileCommitteeCodes,
+    mixinSlugs,
+  );
+  const profileCommitteeSet = new Set(profileCommitteeCodes);
+  if (committeeCodes.length !== profileCommitteeCodes.length) {
+    const derived = committeeCodes.filter((code) => !profileCommitteeSet.has(code));
+    console.log(
+      `[sync] mixin-derived committees added to fetch pool: ${derived.join(", ")}`,
+    );
+  }
   const manualWatchRows = await db
     .select({
       billId: bill.billId,

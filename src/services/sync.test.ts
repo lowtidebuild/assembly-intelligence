@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { evaluateKeywordRelevance } from "@/lib/keyword-relevance";
-import { mergeExcludesWithMixins, mergeKeywordsWithMixins } from "@/lib/law-mixins";
+import {
+  mergeCommitteesWithMixins,
+  mergeExcludesWithMixins,
+  mergeKeywordsWithMixins,
+} from "@/lib/law-mixins";
 import {
   hasPlenarySignal,
   noticeIsRelevant,
@@ -167,5 +171,74 @@ describe("sync pre-filter merge", () => {
     });
 
     expect(result.isRelevant).toBe(false);
+  });
+});
+
+describe("sync committee fetch pool", () => {
+  it("keeps the existing committee fetch pool when no mixins are selected", () => {
+    const result = mergeCommitteesWithMixins(
+      [
+        "문화체육관광위원회",
+        "과학기술정보방송통신위원회",
+        "여성가족위원회",
+        "법제사법위원회",
+      ],
+      [],
+    );
+
+    expect(new Set(result)).toEqual(
+      new Set([
+        "문화체육관광위원회",
+        "과학기술정보방송통신위원회",
+        "여성가족위원회",
+        "법제사법위원회",
+      ]),
+    );
+  });
+
+  it("adds 정무위원회 to the fetch pool when ecommerce-act is selected", () => {
+    const result = mergeCommitteesWithMixins(
+      [
+        "문화체육관광위원회",
+        "과학기술정보방송통신위원회",
+        "여성가족위원회",
+        "법제사법위원회",
+      ],
+      ["ecommerce-act"],
+    );
+
+    expect(result).toContain("정무위원회");
+  });
+
+  it("does not duplicate fetch targets when multiple mixins resolve to the same committee", () => {
+    const result = mergeCommitteesWithMixins(
+      [
+        "문화체육관광위원회",
+        "과학기술정보방송통신위원회",
+        "여성가족위원회",
+        "법제사법위원회",
+      ],
+      ["ecommerce-act", "fair-labeling-act"],
+    );
+
+    expect(result.filter((committee) => committee === "정무위원회")).toHaveLength(
+      1,
+    );
+  });
+
+  it("remains industry-agnostic for multi-committee mixins", () => {
+    const result = mergeCommitteesWithMixins(
+      [
+        "보건복지위원회",
+        "산업통상자원중소벤처기업위원회",
+        "과학기술정보방송통신위원회",
+        "법제사법위원회",
+      ],
+      ["pipa"],
+    );
+
+    expect(result).toContain("보건복지위원회");
+    expect(result).toContain("정무위원회");
+    expect(result).toContain("행정안전위원회");
   });
 });

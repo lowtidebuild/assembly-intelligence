@@ -16,6 +16,12 @@ export interface LawMixin {
   keywords: readonly string[];
   excludeKeywords: readonly string[];
   regulators: readonly string[];
+  /**
+   * 소관 상임위원회 공식 한글명 배열.
+   * STANDING_COMMITTEES[].name 과 정확히 일치해야 하며,
+   * sync 시 프로필 위원회와 union되어 fetch gate에 포함된다.
+   */
+  suggestedCommittees: readonly string[];
   version: string;
 }
 
@@ -27,6 +33,7 @@ const RAW_LAW_MIXINS: Record<string, LawMixin> = {
     keywords: ECOMMERCE_ACT_KEYWORDS,
     excludeKeywords: [],
     regulators: ["공정거래위원회"],
+    suggestedCommittees: ["정무위원회"],
     version: "ecommerce-act-v1.0",
   },
   "fair-labeling-act": {
@@ -36,6 +43,7 @@ const RAW_LAW_MIXINS: Record<string, LawMixin> = {
     keywords: FAIR_LABELING_ACT_KEYWORDS,
     excludeKeywords: [],
     regulators: ["공정거래위원회"],
+    suggestedCommittees: ["정무위원회"],
     version: "fair-labeling-act-v1.0",
   },
   "info-comm-network-act": {
@@ -45,6 +53,7 @@ const RAW_LAW_MIXINS: Record<string, LawMixin> = {
     keywords: INFO_COMM_NETWORK_ACT_KEYWORDS,
     excludeKeywords: [],
     regulators: ["방송통신위원회", "한국인터넷진흥원(KISA)"],
+    suggestedCommittees: ["과학기술정보방송통신위원회"],
     version: "info-comm-network-act-v1.0",
   },
   pipa: {
@@ -54,6 +63,7 @@ const RAW_LAW_MIXINS: Record<string, LawMixin> = {
     keywords: PIPA_KEYWORDS,
     excludeKeywords: [],
     regulators: ["개인정보보호위원회(PIPC)"],
+    suggestedCommittees: ["정무위원회", "행정안전위원회"],
     version: "pipa-v1.0",
   },
   "copyright-act": {
@@ -63,6 +73,7 @@ const RAW_LAW_MIXINS: Record<string, LawMixin> = {
     keywords: COPYRIGHT_ACT_KEYWORDS,
     excludeKeywords: [],
     regulators: ["문화체육관광부", "한국저작권위원회"],
+    suggestedCommittees: ["문화체육관광위원회"],
     version: "copyright-act-v1.0",
   },
   "esports-promotion-act": {
@@ -72,6 +83,7 @@ const RAW_LAW_MIXINS: Record<string, LawMixin> = {
     keywords: ESPORTS_PROMOTION_ACT_KEYWORDS,
     excludeKeywords: [],
     regulators: ["문화체육관광부", "한국콘텐츠진흥원"],
+    suggestedCommittees: ["문화체육관광위원회"],
     version: "esports-promotion-act-v1.0",
   },
   "youth-protection-act": {
@@ -81,6 +93,7 @@ const RAW_LAW_MIXINS: Record<string, LawMixin> = {
     keywords: YOUTH_PROTECTION_ACT_KEYWORDS,
     excludeKeywords: [],
     regulators: ["여성가족부"],
+    suggestedCommittees: ["여성가족위원회"],
     version: "youth-protection-act-v1.0",
   },
   "content-industry-act": {
@@ -90,6 +103,7 @@ const RAW_LAW_MIXINS: Record<string, LawMixin> = {
     keywords: CONTENT_INDUSTRY_ACT_KEYWORDS,
     excludeKeywords: [],
     regulators: ["문화체육관광부", "한국콘텐츠진흥원"],
+    suggestedCommittees: ["문화체육관광위원회"],
     version: "content-industry-act-v1.0",
   },
 };
@@ -134,4 +148,14 @@ export function mergeExcludesWithMixins(
     (slug) => getMixin(slug)?.excludeKeywords ?? [],
   );
   return Array.from(new Set([...profileExcludes, ...mixinExcludes]));
+}
+
+export function mergeCommitteesWithMixins(
+  profileCommittees: readonly string[],
+  mixinSlugs: readonly string[],
+): string[] {
+  const mixinCommittees = mixinSlugs.flatMap(
+    (slug) => getMixin(slug)?.suggestedCommittees ?? [],
+  );
+  return Array.from(new Set([...profileCommittees, ...mixinCommittees]));
 }

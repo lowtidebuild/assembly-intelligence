@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 
 import * as blocks from "../src/lib/law-keyword-blocks.ts";
+import { STANDING_COMMITTEES } from "../src/lib/assembly-committees.ts";
 import { listPresets } from "../src/lib/industry-presets.ts";
 import {
   getMixin,
@@ -19,6 +20,10 @@ function ok(message: string) {
   console.log(`OK:   ${message}`);
 }
 
+const validCommitteeNames = new Set(
+  STANDING_COMMITTEES.map((committee) => committee.name),
+);
+
 for (const slug of listMixinSlugs()) {
   const mixin = getMixin(slug);
   if (!mixin) {
@@ -30,6 +35,16 @@ for (const slug of listMixinSlugs()) {
   }
   if (!mixin.keywords.includes(mixin.name)) {
     fail(`mixin "${slug}" name is missing from keywords`);
+  }
+  if (mixin.suggestedCommittees.length === 0) {
+    fail(`mixin "${slug}" suggestedCommittees is empty`);
+  }
+  for (const committeeCode of mixin.suggestedCommittees) {
+    if (!validCommitteeNames.has(committeeCode)) {
+      fail(
+        `mixin "${slug}" committee "${committeeCode}" is not in STANDING_COMMITTEES`,
+      );
+    }
   }
   ok(`mixin "${slug}" invariants satisfied`);
 }
@@ -70,4 +85,7 @@ if (failures > 0) {
   process.exit(1);
 }
 
+console.log(
+  `✅ all ${listMixins().length} mixins have valid suggestedCommittees`,
+);
 console.log("\nAll law-mixin invariants pass.");

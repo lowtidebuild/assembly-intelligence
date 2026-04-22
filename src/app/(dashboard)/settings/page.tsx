@@ -22,7 +22,7 @@ import { McpCapabilityPanel } from "@/components/mcp-capability-panel";
 import Link from "next/link";
 import { getMcpRuntimeConfig, hasMcpKey } from "@/lib/mcp-client";
 import { loadActiveIndustryProfileCompat, withDbReadRetry } from "@/lib/db-compat";
-import { getMixin } from "@/lib/law-mixins";
+import { getMixin, mergeCommitteesWithMixins } from "@/lib/law-mixins";
 import {
   Settings as SettingsIcon,
   Database,
@@ -71,6 +71,17 @@ export default async function SettingsPage() {
           ),
       )
     : [];
+  const profileCommitteeCodes = committees.map((c) => c.committeeCode);
+  const effectiveCommitteeCodes = profile
+    ? mergeCommitteesWithMixins(
+        profileCommitteeCodes,
+        profile.selectedLawMixins ?? [],
+      )
+    : [];
+  const profileCommitteeSet = new Set(profileCommitteeCodes);
+  const mixinDerivedCommittees = effectiveCommitteeCodes.filter(
+    (code) => !profileCommitteeSet.has(code),
+  );
 
   const envStatus = {
     db: Boolean(process.env.DATABASE_URL),
@@ -153,20 +164,32 @@ export default async function SettingsPage() {
                   ))}
                 </div>
               </Row>
-              <Row label={`위원회 (${committees.length})`}>
+              <Row label={`위원회 (${effectiveCommitteeCodes.length})`}>
                 <div className="flex flex-col gap-2">
-                  {committees.map((c) => {
+                  {mixinDerivedCommittees.length > 0 && (
+                    <p className="text-[11px] text-[var(--color-text-tertiary)]">
+                      선택한 법률 믹스인의 소관위는 아침 동기화 시 자동으로 fetch
+                      pool에 포함됩니다.
+                    </p>
+                  )}
+                  {effectiveCommitteeCodes.map((committeeCode) => {
                     const leaders = leadersForCommittee(
-                      c.committeeCode,
+                      committeeCode,
                       committeeLeaders,
                     );
+                    const isDerived = mixinDerivedCommittees.includes(committeeCode);
                     return (
                       <div
-                        key={c.id}
+                        key={committeeCode}
                         className="rounded-[var(--radius-sm)] bg-[var(--color-surface-2)] px-3 py-2 text-[12px] text-[var(--color-text-secondary)]"
                       >
-                        <div className="font-semibold text-[var(--color-text)]">
-                          {c.committeeCode}
+                        <div className="flex items-center gap-2 font-semibold text-[var(--color-text)]">
+                          <span>{committeeCode}</span>
+                          {isDerived && (
+                            <span className="rounded-[var(--radius-sm)] border border-[var(--color-primary)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-primary)]">
+                              믹스인 자동 추가
+                            </span>
+                          )}
                         </div>
                         <div className="mt-0.5">
                           {leaders.chair.length > 0 || leaders.secretaries.length > 0 ? (
