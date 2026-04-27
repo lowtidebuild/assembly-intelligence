@@ -21,6 +21,8 @@
     "static:bundle": "tsx scripts/bundle-static.ts",
     "static:verify": "tsx scripts/verify-bundle.ts",
     "static:refresh": "pnpm static:export && pnpm static:bundle && pnpm static:verify",
+    "eval:golden": "pnpm eval:golden:offline",
+    "eval:golden:offline": "tsx scripts/eval-golden-bills.ts",
     "ci:check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "test": "vitest run",
     "test:watch": "vitest",

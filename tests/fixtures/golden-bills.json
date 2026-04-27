@@ -1,0 +1,201 @@
+[
+  {
+    "id": "golden-000-game-ecommerce-act-recall",
+    "description": "게임 프로필에서 ecommerce-act mixin을 선택했을 때 정무위원회/전자상거래법 후보가 누락되지 않아야 한다.",
+    "profile": {
+      "industryName": "게임",
+      "industryContext": "게임 퍼블리싱, 플랫폼 운영, 결제/환불, 이용자 보호, 확률형 아이템 정책 대응",
+      "committees": [
+        "문화체육관광위원회",
+        "과학기술정보방송통신위원회",
+        "여성가족위원회",
+        "법제사법위원회"
+      ],
+      "keywords": ["게임", "게임산업", "확률형 아이템"],
+      "excludeKeywords": ["제로섬 게임", "치킨게임"],
+      "selectedMixins": ["ecommerce-act"]
+    },
+    "mcp": {
+      "bill": {
+        "의안ID": "PRC_GOLDEN_ECOM_000",
+        "의안번호": "2219999",
+        "의안명": "전자상거래 등에서의 소비자보호에 관한 법률 일부개정법률안",
+        "제안자": "홍길동의원 등 10인",
+        "제안자구분": "의원",
+        "대수": "22",
+        "소관위원회": "정무위원회",
+        "제안일": "2026-04-01",
+        "처리상태": "소관위접수",
+        "처리일": null,
+        "상세링크": "https://example.test/bills/PRC_GOLDEN_ECOM_000",
+        "대표발의자": "홍길동",
+        "공동발의자": "김정책,이규제"
+      },
+      "committeeHits": {
+        "정무위원회": ["PRC_GOLDEN_ECOM_000"]
+      },
+      "billNameHits": {
+        "전자상거래 등에서의 소비자보호에 관한 법률": [
+          "PRC_GOLDEN_ECOM_000"
+        ],
+        "전자상거래법": ["PRC_GOLDEN_ECOM_000"]
+      }
+    },
+    "expected": {
+      "candidateBillIds": ["PRC_GOLDEN_ECOM_000"],
+      "discoverySourceTypes": ["committee", "mixin_law"],
+      "discoveryKeywords": [
+        "전자상거래 등에서의 소비자보호에 관한 법률"
+      ],
+      "expectedScoreMin": 4,
+      "expectedScoreMax": 5,
+      "mustMention": ["전자상거래", "소비자보호"],
+      "forbiddenWhenTitleOnly": ["과태료", "24시간 내", "신고 의무"]
+    }
+  },
+  {
+    "id": "golden-001-platform-pipa-recall",
+    "description": "플랫폼 프로필에서 pipa mixin을 선택했을 때 행정안전위원회/개인정보 보호법 후보가 누락되지 않아야 한다.",
+    "profile": {
+      "industryName": "플랫폼",
+      "industryContext": "온라인 플랫폼 운영, 회원 계정, 개인정보 처리, 맞춤형 추천, 광고 타게팅 정책 대응",
+      "committees": [
+        "과학기술정보방송통신위원회",
+        "정무위원회"
+      ],
+      "keywords": ["플랫폼", "개인정보", "맞춤형 추천"],
+      "excludeKeywords": ["개인정보보호 캠페인"],
+      "selectedMixins": ["pipa"]
+    },
+    "mcp": {
+      "bill": {
+        "의안ID": "PRC_GOLDEN_PIPA_001",
+        "의안번호": "2220001",
+        "의안명": "개인정보 보호법 일부개정법률안",
+        "제안자": "김데이터의원 등 12인",
+        "제안자구분": "의원",
+        "대수": "22",
+        "소관위원회": "행정안전위원회",
+        "제안일": "2026-04-02",
+        "처리상태": "소관위접수",
+        "처리일": null,
+        "상세링크": "https://example.test/bills/PRC_GOLDEN_PIPA_001",
+        "대표발의자": "김데이터",
+        "공동발의자": "박보안,이프라이버시"
+      },
+      "committeeHits": {
+        "행정안전위원회": ["PRC_GOLDEN_PIPA_001"]
+      },
+      "billNameHits": {
+        "개인정보 보호법": ["PRC_GOLDEN_PIPA_001"],
+        "개인정보보호법": ["PRC_GOLDEN_PIPA_001"]
+      }
+    },
+    "expected": {
+      "candidateBillIds": ["PRC_GOLDEN_PIPA_001"],
+      "discoverySourceTypes": ["committee", "mixin_law"],
+      "discoveryKeywords": ["개인정보", "개인정보 보호법"],
+      "expectedScoreMin": 4,
+      "expectedScoreMax": 5,
+      "mustMention": ["개인정보", "정보주체"],
+      "forbiddenWhenTitleOnly": ["과징금", "72시간 내", "국외이전 신고 의무"]
+    }
+  },
+  {
+    "id": "golden-002-game-info-comm-law-name-rescue",
+    "description": "위원회 목록에서 빠진 게임 관련 정보통신망법 법안도 법률명 검색으로 후보에 들어와야 한다.",
+    "profile": {
+      "industryName": "게임",
+      "industryContext": "게임 퍼블리싱, 플랫폼 운영, 이용자 계정, 커뮤니티, 본인확인과 청소년 보호 정책 대응",
+      "committees": [
+        "문화체육관광위원회",
+        "여성가족위원회"
+      ],
+      "keywords": ["게임", "계정", "커뮤니티"],
+      "excludeKeywords": ["제로섬 게임"],
+      "selectedMixins": ["info-comm-network-act"]
+    },
+    "mcp": {
+      "bill": {
+        "의안ID": "PRC_GOLDEN_INFOCOMM_002",
+        "의안번호": "2220002",
+        "의안명": "정보통신망 이용촉진 및 정보보호 등에 관한 법률 일부개정법률안",
+        "제안자": "최네트워크의원 등 11인",
+        "제안자구분": "의원",
+        "대수": "22",
+        "소관위원회": "과학기술정보방송통신위원회",
+        "제안일": "2026-04-03",
+        "처리상태": "소관위접수",
+        "처리일": null,
+        "상세링크": "https://example.test/bills/PRC_GOLDEN_INFOCOMM_002",
+        "대표발의자": "최네트워크",
+        "공동발의자": "정통신,한보호"
+      },
+      "committeeHits": {},
+      "billNameHits": {
+        "정보통신망 이용촉진 및 정보보호 등에 관한 법률": [
+          "PRC_GOLDEN_INFOCOMM_002"
+        ],
+        "정보통신망법": ["PRC_GOLDEN_INFOCOMM_002"]
+      }
+    },
+    "expected": {
+      "candidateBillIds": ["PRC_GOLDEN_INFOCOMM_002"],
+      "discoverySourceTypes": ["mixin_law"],
+      "discoveryKeywords": [
+        "정보통신망",
+        "정보통신망 이용촉진 및 정보보호 등에 관한 법률"
+      ],
+      "expectedScoreMin": 3,
+      "expectedScoreMax": 5,
+      "mustMention": ["정보통신망", "이용자 보호"],
+      "forbiddenWhenTitleOnly": ["과태료", "삭제 요청 24시간", "접속 차단 의무"]
+    }
+  },
+  {
+    "id": "golden-003-ai-content-copyright-recall",
+    "description": "AI 콘텐츠 프로필에서 copyright-act mixin을 선택했을 때 문체위/저작권법 후보가 누락되지 않아야 한다.",
+    "profile": {
+      "industryName": "AI 콘텐츠",
+      "industryContext": "생성형 AI 콘텐츠 제작, 학습 데이터, 저작권 라이선스, TDM, 2차적저작물 정책 대응",
+      "committees": [
+        "과학기술정보방송통신위원회"
+      ],
+      "keywords": ["AI", "콘텐츠", "학습 데이터"],
+      "excludeKeywords": ["저작권 교육 행사"],
+      "selectedMixins": ["copyright-act"]
+    },
+    "mcp": {
+      "bill": {
+        "의안ID": "PRC_GOLDEN_COPYRIGHT_003",
+        "의안번호": "2220003",
+        "의안명": "저작권법 일부개정법률안",
+        "제안자": "윤콘텐츠의원 등 10인",
+        "제안자구분": "의원",
+        "대수": "22",
+        "소관위원회": "문화체육관광위원회",
+        "제안일": "2026-04-04",
+        "처리상태": "소관위접수",
+        "처리일": null,
+        "상세링크": "https://example.test/bills/PRC_GOLDEN_COPYRIGHT_003",
+        "대표발의자": "윤콘텐츠",
+        "공동발의자": "오창작,문라이선스"
+      },
+      "committeeHits": {
+        "문화체육관광위원회": ["PRC_GOLDEN_COPYRIGHT_003"]
+      },
+      "billNameHits": {
+        "저작권법": ["PRC_GOLDEN_COPYRIGHT_003"]
+      }
+    },
+    "expected": {
+      "candidateBillIds": ["PRC_GOLDEN_COPYRIGHT_003"],
+      "discoverySourceTypes": ["committee", "mixin_law"],
+      "discoveryKeywords": ["저작권", "저작권법"],
+      "expectedScoreMin": 4,
+      "expectedScoreMax": 5,
+      "mustMention": ["저작권", "TDM"],
+      "forbiddenWhenTitleOnly": ["보상금 지급 의무", "학습 데이터 신고", "침해 간주"]
+    }
+  }
+]
