@@ -40,7 +40,7 @@ async function main() {
   const t0 = Date.now();
 
   try {
-    const result = await runMorningSync({ scorer, briefingGenerator });
+    const result = await runMorningSync({ scorer, briefingGenerator, aiMode: mode });
 
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     console.log(`\n✅ completed in ${elapsed}s\n`);

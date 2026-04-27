@@ -16,6 +16,7 @@
     "deploy:build": "pnpm deploy:migrate && pnpm build",
     "audit:law-mixins": "tsx scripts/audit-law-mixin-invariants.ts",
     "preflight:schema": "tsx scripts/preflight-schema.ts",
+    "backfill:discovery-metadata": "tsx scripts/backfill-discovery-metadata.ts",
     "smoke:postdeploy": "tsx scripts/postdeploy-smoke.ts",
     "static:export": "tsx scripts/export-static.ts",
     "static:bundle": "tsx scripts/bundle-static.ts",
