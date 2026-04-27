@@ -12,8 +12,8 @@
  * Response 4xx: { error: { code, message } }
  *
  * If the user has already edited companyImpact manually
- * (isAiDraft=false), we overwrite with the new draft and flip the
- * flag — the client should confirm first.
+ * (isAiDraft=false), the default behavior is 409 Conflict. The client
+ * must explicitly retry with ?force=1 after user confirmation.
  */
 
 import { NextResponse, type NextRequest } from "next/server";
@@ -34,7 +34,7 @@ import { errorMessage } from "@/lib/api-base";
 export const maxDuration = 60;
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const blocked = demoGuardResponse();
@@ -44,6 +44,15 @@ export async function POST(
   const loaded = await requireBillAndProfile(id);
   if (isErrorResponse(loaded)) return loaded;
   const { bill: b, profile } = loaded;
+  const forceOverwrite = req.nextUrl.searchParams.get("force") === "1";
+
+  if (b.companyImpact?.trim() && !b.companyImpactIsAiDraft && !forceOverwrite) {
+    return errorResponse(
+      409,
+      "manual_impact_exists",
+      "이미 사람이 편집한 당사 영향 사항이 있습니다. 덮어쓰려면 확인 후 다시 요청하세요.",
+    );
+  }
 
   try {
     const draft = await generateCompanyImpact({
@@ -55,6 +64,7 @@ export async function POST(
       mainContent: b.mainContent,
       industryName: profile.name,
       industryContext: profile.llmContext,
+      evidence: b.evidenceMeta ?? undefined,
     });
 
     await db

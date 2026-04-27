@@ -18,6 +18,7 @@ import Link from "next/link";
 import { StageBadge } from "@/components/stage-badge";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
 import { CompanyImpactEditor } from "@/components/company-impact-editor";
+import { EvidenceBadge, EvidenceMetaList } from "@/components/evidence-badge";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
 import type { ImportanceRecord } from "@/lib/legislator-importance";
 import { X, ExternalLink } from "lucide-react";
@@ -113,6 +114,14 @@ export function BillSlideOver({
         <div className="space-y-5 px-5 py-5">
           {/* Quick facts */}
           <Facts bill={bill} />
+
+          <Block label="근거 수준" sublabel="본문 확보 상태">
+            <EvidenceBadge
+              level={bill.evidenceLevel}
+              status={bill.bodyFetchStatus}
+            />
+            <EvidenceMetaList meta={bill.evidenceMeta} />
+          </Block>
 
           {/* Gemini summary (pre-generated during morning sync) */}
           <Block label="AI 요약" sublabel="Gemini Flash">

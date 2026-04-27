@@ -21,6 +21,7 @@ import { StageBadge } from "@/components/stage-badge";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
 import { CompanyImpactEditor } from "@/components/company-impact-editor";
 import { DeepAnalysisPanel } from "@/components/deep-analysis-panel";
+import { EvidenceBadge, EvidenceMetaList } from "@/components/evidence-badge";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
 import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import { Sparkles, TrendingUp, FileText } from "lucide-react";
@@ -284,6 +285,18 @@ export default async function ImpactPage(props: {
                 </p>
               </Block>
             )}
+
+            <Block
+              icon={<FileText className="h-4 w-4" />}
+              title="근거 수준"
+              sublabel="본문 확보 상태"
+            >
+              <EvidenceBadge
+                level={selected.evidenceLevel}
+                status={selected.bodyFetchStatus}
+              />
+              <EvidenceMetaList meta={selected.evidenceMeta} />
+            </Block>
 
             {voteSummary && (
               <Block

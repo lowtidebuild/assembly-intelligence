@@ -17,8 +17,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runMorningSync } from "@/services/sync";
 import {
+  getGeminiUsageStats,
   getGeminiBillScorer,
   getGeminiBriefingGenerator,
+  resetGeminiUsageStats,
+  shouldUseGeminiOrThrow,
 } from "@/lib/gemini-client";
 import {
   getStubBillScorer,
@@ -43,7 +46,7 @@ export const maxDuration = 60;
  * the pipeline end-to-end.
  */
 function chooseDeps() {
-  if (process.env.GEMINI_API_KEY) {
+  if (shouldUseGeminiOrThrow("cron/sync-morning")) {
     return {
       scorer: getGeminiBillScorer(),
       briefingGenerator: getGeminiBriefingGenerator(),
@@ -72,13 +75,18 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const { scorer, briefingGenerator, mode } = chooseDeps();
-
   try {
+    const { scorer, briefingGenerator, mode } = chooseDeps();
+    resetGeminiUsageStats();
     const result = await runMorningSync({ scorer, briefingGenerator });
+    const geminiUsage =
+      mode === "gemini" ? { geminiUsage: getGeminiUsageStats() } : {};
 
     const httpStatus = result.status === "failed" ? 500 : 200;
-    return NextResponse.json({ mode, ...result }, { status: httpStatus });
+    return NextResponse.json(
+      { mode, ...result, ...geminiUsage },
+      { status: httpStatus },
+    );
   } catch (err) {
     console.error("[cron/sync-morning] fatal error", err);
     return NextResponse.json(

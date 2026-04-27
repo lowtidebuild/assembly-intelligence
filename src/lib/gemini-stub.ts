@@ -18,6 +18,10 @@ import type {
   BillScorer,
   BriefingGenerator,
 } from "@/services/sync";
+import {
+  buildFallbackDailyBriefingContent,
+  renderDailyBriefingContentHtml,
+} from "@/lib/daily-briefing-content";
 
 /**
  * Stub scorer — assigns score 3 to everything, no real LLM calls.
@@ -25,6 +29,22 @@ import type {
  */
 export function getStubBillScorer(): BillScorer {
   return {
+    async analyzeBillQuick(input) {
+      const firstLine = (input.proposalReason || input.mainContent || "")
+        .split("\n")[0]
+        .slice(0, 200);
+      return {
+        score: 3,
+        reasoning: `[STUB] No Gemini call made. Title: ${input.billName}`,
+        summary: `[STUB 요약] ${firstLine}`,
+        analysisKeywords: input.industryKeywords.slice(0, 3),
+        confidence: "low",
+        unknowns:
+          input.proposalReason || input.mainContent
+            ? []
+            : ["제안이유 및 주요내용 미확보"],
+      };
+    },
     async scoreBill(input) {
       return {
         score: 3, // Medium relevance default — enough to surface in UI
@@ -46,20 +66,15 @@ export function getStubBillScorer(): BillScorer {
 export function getStubBriefingGenerator(): BriefingGenerator {
   return {
     async generateBriefing(input) {
-      const contentHtml = `
-        <div class="stub-briefing">
-          <h1>${input.industryName} 일일 인텔리전스</h1>
-          <p>${input.date}</p>
-          <p>[STUB] Gemini 브리핑 생성기는 Lane B에서 구현됩니다.</p>
-          <p>현재 핵심 법안 ${input.keyBills.length}건, 신규 발의 ${input.newBills.length}건.</p>
-        </div>
-      `.trim();
+      const contentJson = buildFallbackDailyBriefingContent(input);
+      const contentHtml = renderDailyBriefingContentHtml(contentJson);
 
       await db
         .insert(dailyBriefing)
         .values({
           date: input.date,
           contentHtml,
+          contentJson,
           keyItemCount: input.keyBills.length,
           scheduleCount: input.scheduleItems.length,
           newBillCount: input.newBills.length,
@@ -70,6 +85,7 @@ export function getStubBriefingGenerator(): BriefingGenerator {
           target: dailyBriefing.date,
           set: {
             contentHtml,
+            contentJson,
             keyItemCount: input.keyBills.length,
             scheduleCount: input.scheduleItems.length,
             newBillCount: input.newBills.length,
@@ -81,6 +97,7 @@ export function getStubBriefingGenerator(): BriefingGenerator {
 
       return {
         contentHtml,
+        contentJson,
         keyItemCount: input.keyBills.length,
         scheduleCount: input.scheduleItems.length,
         newBillCount: input.newBills.length,

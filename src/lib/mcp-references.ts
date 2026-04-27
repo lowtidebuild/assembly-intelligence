@@ -16,6 +16,13 @@ export interface BillReferenceSections {
   lawmaking: BillReferenceItem[];
 }
 
+export interface BillAnalysisReference {
+  title: string;
+  subtitle?: string | null;
+  url?: string | null;
+  source: BillReferenceItem["source"];
+}
+
 interface McpErrorPayload {
   error: string;
 }
@@ -191,4 +198,15 @@ export async function loadBillReferenceSections(
       ["링크", "url", "URL", "detailUrl", "detail_url"],
     ),
   };
+}
+
+export function flattenBillReferenceSections(
+  sections: BillReferenceSections,
+  limit = 5,
+): BillAnalysisReference[] {
+  return dedupeReferenceItems([
+    ...sections.lawmaking,
+    ...sections.research,
+    ...sections.nabo,
+  ]).slice(0, limit);
 }

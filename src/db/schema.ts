@@ -39,6 +39,12 @@ import {
   pgEnum,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import type {
+  BodyFetchStatus,
+  EvidenceLevel,
+  EvidenceMeta,
+} from "@/lib/evidence";
+import type { DailyBriefingContent } from "@/lib/daily-briefing-content";
 
 /* ─────────────────────────────────────────────────────────────
  * Enums
@@ -353,6 +359,10 @@ export const bill = pgTable(
     // Full bill body (제안이유 + 주요내용) — used for impact analysis
     proposalReason: text("proposal_reason"),
     mainContent: text("main_content"),
+    // Evidence provenance for the latest body/enrichment pass.
+    evidenceLevel: text("evidence_level").$type<EvidenceLevel>(),
+    bodyFetchStatus: text("body_fetch_status").$type<BodyFetchStatus>(),
+    evidenceMeta: jsonb("evidence_meta").$type<EvidenceMeta>(),
     // Pre-generated summary shown in slide-over panel (Gemini Flash, sync-time)
     summaryText: text("summary_text"),
     // User-editable company impact assessment (GR/PA judgment)
@@ -673,6 +683,7 @@ export const dailyBriefing = pgTable(
       .generatedAlwaysAsIdentity(),
     date: text("date").notNull().unique(), // "2026-04-09" (KST date, not timestamp)
     contentHtml: text("content_html").notNull(),
+    contentJson: jsonb("content_json").$type<DailyBriefingContent>(),
     // Summary stats for sidebar/header display
     keyItemCount: integer("key_item_count").notNull().default(0),
     scheduleCount: integer("schedule_count").notNull().default(0),

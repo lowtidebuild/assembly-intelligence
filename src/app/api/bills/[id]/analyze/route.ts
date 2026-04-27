@@ -22,6 +22,14 @@ import { bill } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { generateBillAnalysis } from "@/lib/gemini-client";
 import {
+  flattenBillReferenceSections,
+  loadBillReferenceSections,
+} from "@/lib/mcp-references";
+import {
+  buildEvidenceMeta,
+  withReferenceEvidence,
+} from "@/lib/evidence";
+import {
   requireBillAndProfile,
   isErrorResponse,
   errorResponse,
@@ -43,6 +51,26 @@ export async function POST(
   const { bill: b, profile } = loaded;
 
   try {
+    const referenceSections = await loadBillReferenceSections(b.billName);
+    const references = flattenBillReferenceSections(referenceSections, 5);
+    const baseEvidence =
+      b.evidenceMeta ??
+      buildEvidenceMeta({
+        billName: b.billName,
+        committee: b.committee,
+        proposerName: b.proposerName,
+        proposerParty: b.proposerParty,
+        proposalDate: b.proposalDate
+          ? b.proposalDate.toISOString().slice(0, 10)
+          : null,
+        proposalReason: b.proposalReason,
+        mainContent: b.mainContent,
+      });
+    const analysisEvidence = withReferenceEvidence(
+      baseEvidence,
+      references.length,
+    );
+
     const analysis = await generateBillAnalysis({
       billName: b.billName,
       committee: b.committee,
@@ -57,6 +85,8 @@ export async function POST(
       mainContent: b.mainContent,
       industryName: profile.name,
       industryContext: profile.llmContext,
+      evidence: analysisEvidence,
+      references,
     });
 
     const generatedAt = new Date();
@@ -65,6 +95,9 @@ export async function POST(
       .set({
         deepAnalysis: analysis,
         deepAnalysisGeneratedAt: generatedAt,
+        evidenceLevel: analysisEvidence.level,
+        bodyFetchStatus: analysisEvidence.bodyFetchStatus,
+        evidenceMeta: analysisEvidence,
       })
       .where(eq(bill.id, b.id));
 

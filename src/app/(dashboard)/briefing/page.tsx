@@ -32,6 +32,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { PageHeader } from "@/components/page-header";
 import { ContextStrip } from "@/components/context-strip";
 import { BillKeyCard } from "@/components/bill-key-card";
+import { DailyBriefingRenderer } from "@/components/daily-briefing-renderer";
 import { todayKst, weekdayKo } from "@/lib/dashboard-data";
 import {
   type ImportanceRecord,
@@ -55,6 +56,7 @@ import {
   getDemoTopBills,
   getDemoTranscriptHits,
 } from "@/lib/demo-content";
+import type { DailyBriefingContent } from "@/lib/daily-briefing-content";
 import { FileText, RefreshCw, Newspaper, ExternalLink, MessagesSquare } from "lucide-react";
 
 export const revalidate = 60;
@@ -271,7 +273,11 @@ export default async function BriefingPage() {
         <aside className="flex flex-col gap-4">
           <SideSection title="Gemini 브리핑" icon={<FileText className="h-4 w-4" />}>
             {renderedBriefing ? (
-              <GeminiBriefingHtml html={renderedBriefing.contentHtml} />
+              renderedBriefing.contentJson ? (
+                <DailyBriefingRenderer content={renderedBriefing.contentJson} />
+              ) : (
+                <GeminiBriefingHtml html={renderedBriefing.contentHtml} />
+              )
             ) : (
               <p className="text-[12px] text-[var(--color-text-tertiary)]">
                 아직 브리핑이 생성되지 않았습니다.
@@ -343,6 +349,7 @@ type BriefingSnapshot = {
   id: number;
   date: string;
   contentHtml: string;
+  contentJson: DailyBriefingContent | null;
   keyItemCount: number;
   scheduleCount: number;
   newBillCount: number;
@@ -353,7 +360,11 @@ type BriefingSnapshot = {
 
 type BriefingRenderData = Pick<
   BriefingSnapshot,
-  "contentHtml" | "keyItemCount" | "scheduleCount" | "newBillCount"
+  | "contentHtml"
+  | "contentJson"
+  | "keyItemCount"
+  | "scheduleCount"
+  | "newBillCount"
 >;
 
 type BriefingNewsItem = Awaited<ReturnType<typeof loadRecentNewsCompat>>[number];
@@ -408,6 +419,7 @@ async function loadLatestBriefingCompat(): Promise<BriefingSnapshot | null> {
         id: row.id,
         date: row.date,
         contentHtml: row.content_html,
+        contentJson: null,
         keyItemCount: row.key_item_count,
         scheduleCount: row.schedule_count,
         newBillCount: row.new_bill_count,
@@ -1136,6 +1148,7 @@ function buildDemoFallbackBriefing({
         </footer>
       </article>
     `.trim(),
+    contentJson: null,
     keyItemCount: topBills.length,
     scheduleCount: relevantNotices.length,
     newBillCount: recentBills.length,
@@ -1202,6 +1215,7 @@ function buildStaticDemoBriefing({
         </footer>
       </article>
     `.trim(),
+    contentJson: null,
     keyItemCount: 4,
     scheduleCount: 69,
     newBillCount: 0,

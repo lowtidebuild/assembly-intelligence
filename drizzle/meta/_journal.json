@@ -92,6 +92,20 @@
       "when": 1776750458658,
       "tag": "0012_industry_profile_law_mixins",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1776834194164,
+      "tag": "0013_bill_evidence_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1776917929670,
+      "tag": "0014_daily_briefing_content_json",
+      "breakpoints": true
     }
   ]
 }

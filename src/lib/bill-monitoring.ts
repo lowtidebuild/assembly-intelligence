@@ -3,9 +3,12 @@ import type { SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { bill, industryBillWatch, industryProfile } from "@/db/schema";
 import { callMcpToolOrThrow, hasMcpKey } from "@/lib/mcp-client";
-import { fetchBillBodyFragment } from "@/lib/bill-scraper";
-import { getGeminiBillScorer } from "@/lib/gemini-client";
+import {
+  getGeminiBillScorer,
+  shouldUseGeminiOrThrow,
+} from "@/lib/gemini-client";
 import { getStubBillScorer } from "@/lib/gemini-stub";
+import { enrichBillEvidence } from "@/services/evidence-enrichment";
 import {
   stageFromSimsa,
   syncVotesForBillTargets,
@@ -186,7 +189,7 @@ function proposerPartyFromDetail(detail: McpBillDetailItem): string | null {
 }
 
 function getBillScorer(): BillScorer {
-  return process.env.GEMINI_API_KEY
+  return shouldUseGeminiOrThrow("bill-monitoring.trackBill")
     ? getGeminiBillScorer()
     : getStubBillScorer();
 }
@@ -325,45 +328,39 @@ export async function trackBillForActiveProfile(
     .where(eq(bill.billId, input.billId))
     .limit(1);
 
-  let proposalReason =
-    detail.제안이유 ?? existingBill?.proposalReason ?? null;
-  let mainContent =
-    detail.주요내용 ?? existingBill?.mainContent ?? null;
-
-  if (!proposalReason && !mainContent) {
-    const body = await fetchBillBodyFragment(input.billId);
-    if (body) {
-      proposalReason = body.proposalReason;
-      mainContent = body.mainContent;
-    }
-  }
-
   const scorer = getBillScorer();
   const billName = detail.의안명 || input.billName;
   const committee = detail.심사경과?.소관위원회 ?? input.committee;
   const proposerName = input.proposerName || "제안자 미상";
+  const proposerParty = proposerPartyFromDetail(detail);
   const billNumber = detail.의안번호 ?? input.billNumber;
+  const evidenceResult = await enrichBillEvidence({
+    billId: input.billId,
+    billName,
+    committee,
+    proposerName,
+    proposerParty,
+    proposalDate: input.proposalDate,
+    mcpBody: {
+      proposalReason: detail.제안이유,
+      mainContent: detail.주요내용,
+    },
+    existingBody: existingBill,
+  });
+  const { proposalReason, mainContent } = evidenceResult;
 
-  const [scoreResult, summary] = await Promise.all([
-    scorer.scoreBill({
-      billName,
-      committee,
-      proposerName,
-      proposerParty: proposerPartyFromDetail(detail),
-      proposalReason,
-      mainContent,
-      industryName: profile.name,
-      industryContext: profile.llmContext,
-      industryKeywords: profile.keywords ?? [],
-    }),
-    scorer.summarizeBill({
-      billName,
-      committee,
-      proposerName,
-      proposalReason,
-      mainContent,
-    }),
-  ]);
+  const quickAnalysis = await scorer.analyzeBillQuick({
+    billName,
+    committee,
+    proposerName,
+    proposerParty,
+    proposalReason,
+    mainContent,
+    industryName: profile.name,
+    industryContext: profile.llmContext,
+    industryKeywords: profile.keywords ?? [],
+    evidence: evidenceResult.evidence,
+  });
 
   const proposalDate = parseKstDate(input.proposalDate);
   const [billRow] = await db
@@ -373,16 +370,19 @@ export async function trackBillForActiveProfile(
       billNumber,
       billName,
       proposerName,
-      proposerParty: proposerPartyFromDetail(detail),
+      proposerParty,
       coSponsorCount: detail.공동발의자_총수 ?? 0,
       committee,
       stage: stageFromSimsa(detail.심사경과),
       proposalDate,
-      relevanceScore: scoreResult.score,
-      relevanceReasoning: scoreResult.reasoning,
+      relevanceScore: quickAnalysis.score,
+      relevanceReasoning: quickAnalysis.reasoning,
       proposalReason,
       mainContent,
-      summaryText: summary,
+      evidenceLevel: evidenceResult.evidence.level,
+      bodyFetchStatus: evidenceResult.evidence.bodyFetchStatus,
+      evidenceMeta: evidenceResult.evidence,
+      summaryText: quickAnalysis.summary,
       externalLink: detail.LINK_URL,
       lastSynced: new Date(),
     })
@@ -392,16 +392,19 @@ export async function trackBillForActiveProfile(
         billNumber: sql`coalesce(excluded.bill_number, ${bill.billNumber})`,
         billName,
         proposerName,
-        proposerParty: proposerPartyFromDetail(detail),
+        proposerParty,
         coSponsorCount: detail.공동발의자_총수 ?? 0,
         committee,
         stage: stageFromSimsa(detail.심사경과),
         proposalDate,
-        relevanceScore: scoreResult.score,
-        relevanceReasoning: scoreResult.reasoning,
+        relevanceScore: quickAnalysis.score,
+        relevanceReasoning: quickAnalysis.reasoning,
         proposalReason: sql`coalesce(excluded.proposal_reason, ${bill.proposalReason})`,
         mainContent: sql`coalesce(excluded.main_content, ${bill.mainContent})`,
-        summaryText: summary,
+        evidenceLevel: sql`excluded.evidence_level`,
+        bodyFetchStatus: sql`excluded.body_fetch_status`,
+        evidenceMeta: sql`excluded.evidence_meta`,
+        summaryText: quickAnalysis.summary,
         externalLink: sql`coalesce(excluded.external_link, ${bill.externalLink})`,
         lastSynced: new Date(),
       },

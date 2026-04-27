@@ -49,13 +49,26 @@ export function CompanyImpactEditor({
   const [saving, startSave] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const handleGenerate = () => {
+  const handleGenerate = (forceOverwrite = false) => {
+    if (impact && !isAiDraft && !forceOverwrite) {
+      const confirmed = window.confirm(
+        "사람이 편집한 당사 영향 사항이 있습니다. AI 초안으로 덮어쓸까요?",
+      );
+      if (!confirmed) return;
+      handleGenerate(true);
+      return;
+    }
+
     setError(null);
     startGenerate(async () => {
       try {
-        const res = await fetch(`/api/bills/${billId}/generate-impact`, {
-          method: "POST",
-        });
+        const query = forceOverwrite ? "?force=1" : "";
+        const res = await fetch(
+          `/api/bills/${billId}/generate-impact${query}`,
+          {
+            method: "POST",
+          },
+        );
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body?.error?.message || `HTTP ${res.status}`);
@@ -191,7 +204,7 @@ export function CompanyImpactEditor({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={handleGenerate}
+          onClick={() => handleGenerate()}
           disabled={generating}
           className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] bg-[var(--color-primary)] px-3 py-1.5 text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           title="Gemini Pro로 초안 생성 (20-30초 소요)"

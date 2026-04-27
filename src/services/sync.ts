@@ -65,7 +65,8 @@ import {
 } from "@/db/schema";
 import { callMcpToolOrThrow } from "@/lib/mcp-client";
 import { errorMessage } from "@/lib/api-base";
-import { fetchBillBodyFragment } from "@/lib/bill-scraper";
+import type { BodyFetchStatus, EvidenceLevel, EvidenceMeta } from "@/lib/evidence";
+import type { DailyBriefingContent } from "@/lib/daily-briefing-content";
 import { decodeHtmlEntities } from "@/lib/html-entities";
 import { getPreset } from "@/lib/industry-presets";
 import { evaluateKeywordRelevance } from "@/lib/keyword-relevance";
@@ -76,6 +77,11 @@ import {
 } from "@/lib/law-mixins";
 import { resolveLegislatorPhotoUrl } from "@/lib/legislator-photo";
 import { buildAlertMeta, insertAlertIfMissing } from "@/lib/alerts";
+import {
+  discoverBillCandidates,
+  type McpBillListItem,
+} from "@/services/candidate-discovery";
+import { enrichBillEvidence } from "@/services/evidence-enrichment";
 import { syncNews } from "@/services/news-sync";
 import {
   loadRecentTranscriptHits,
@@ -97,11 +103,33 @@ type BillStage =
   | "stage_5"
   | "stage_6";
 
+type PersistedEvidenceMeta = EvidenceMeta & Record<string, unknown>;
+
 /* ─────────────────────────────────────────────────────────────
  * Dependency contracts (injected by orchestrator)
  * ────────────────────────────────────────────────────────────── */
 
 export interface BillScorer {
+  analyzeBillQuick(input: {
+    billName: string;
+    committee: string | null;
+    proposerName: string;
+    proposerParty: string | null;
+    proposalReason: string | null;
+    mainContent: string | null;
+    industryName: string;
+    industryContext: string;
+    industryKeywords: string[];
+    evidence?: EvidenceMeta;
+  }): Promise<{
+    score: number;
+    reasoning: string;
+    summary: string;
+    analysisKeywords: string[];
+    confidence: "low" | "medium" | "high";
+    unknowns: string[];
+  }>;
+
   scoreBill(input: {
     billName: string;
     committee: string | null;
@@ -132,6 +160,7 @@ export interface BriefingGenerator {
     newBills: Bill[];
   }): Promise<{
     contentHtml: string;
+    contentJson?: DailyBriefingContent;
     keyItemCount: number;
     scheduleCount: number;
     newBillCount: number;
@@ -141,28 +170,6 @@ export interface BriefingGenerator {
 /* ─────────────────────────────────────────────────────────────
  * Real MCP response shapes (Korean field names)
  * ────────────────────────────────────────────────────────────── */
-
-/** `assembly_bill` search mode — list item. */
-interface McpBillListItem {
-  의안ID: string;
-  의안번호: string;
-  의안명: string;
-  제안자: string | null; // "박성훈의원 등 10인"
-  제안자구분: string | null;
-  대수: string | null;
-  소관위원회: string | null;
-  제안일: string | null; // "YYYY-MM-DD"
-  처리상태: string | null;
-  처리일: string | null;
-  상세링크: string | null;
-  대표발의자: string | null;
-  공동발의자: string | null; // "김기현,이달희,..." (comma-joined)
-}
-
-interface McpBillListResponse {
-  total?: number;
-  items?: McpBillListItem[];
-}
 
 /** `assembly_bill` detail mode (bill_id param). */
 interface McpBillDetailSimsa {
@@ -566,24 +573,6 @@ function ingestLegislatorRow(
     isActive: true,
     lastSynced: new Date(),
   };
-}
-
-/**
- * Keyword pre-filter against the 의안명 only. MCP does not give us
- * body text, so title is all we have for cheap filtering.
- * Returns true when any keyword matches.
- */
-function keywordMatches(
-  listItem: McpBillListItem,
-  keywords: string[],
-  excludeKeywords: string[] = [],
-): boolean {
-  return evaluateKeywordRelevance({
-    text: listItem.의안명,
-    includeKeywords: keywords,
-    excludeKeywords,
-    defaultWhenEmpty: true,
-  }).isRelevant;
 }
 
 export function noticeIsRelevant(
@@ -1085,8 +1074,55 @@ export interface MorningSyncResult {
   legislatorsUpdated: number;
   briefingDate: string;
   alertsCreated: number;
+  discovery: MorningDiscoveryMetrics;
+  evidence: MorningEvidenceMetrics;
   status: "success" | "partial" | "failed";
   errors: string[];
+}
+
+export interface MorningDiscoveryMetrics {
+  totalListItems: number;
+  candidateCount: number;
+  droppedByKeyword: number;
+  droppedByLimit: number;
+  sourceCounts: {
+    committee: number;
+    mixin_law: number;
+  };
+  manualWatchCount: number;
+  detailTargetCount: number;
+}
+
+export interface MorningEvidenceMetrics {
+  levelCounts: Record<EvidenceLevel, number>;
+  bodyFetchStatusCounts: Record<BodyFetchStatus, number>;
+}
+
+function emptyEvidenceMetrics(): MorningEvidenceMetrics {
+  return {
+    levelCounts: {
+      title_only: 0,
+      metadata: 0,
+      body: 0,
+      body_with_references: 0,
+    },
+    bodyFetchStatusCounts: {
+      not_attempted: 0,
+      from_mcp_detail: 0,
+      from_existing_db: 0,
+      fetched: 0,
+      empty: 0,
+      failed: 0,
+    },
+  };
+}
+
+function recordEvidenceMetrics(
+  metrics: MorningEvidenceMetrics,
+  evidence: EvidenceMeta,
+): void {
+  metrics.levelCounts[evidence.level] += 1;
+  metrics.bodyFetchStatusCounts[evidence.bodyFetchStatus] += 1;
 }
 
 /**
@@ -1110,6 +1146,19 @@ export async function runMorningSync(
   let pressCount = 0;
   let transcriptMatchedUtterances = 0;
   let recentAlertBills: Bill[] = [];
+  let discoveryMetrics: MorningDiscoveryMetrics = {
+    totalListItems: 0,
+    candidateCount: 0,
+    droppedByKeyword: 0,
+    droppedByLimit: 0,
+    sourceCounts: {
+      committee: 0,
+      mixin_law: 0,
+    },
+    manualWatchCount: 0,
+    detailTargetCount: 0,
+  };
+  const evidenceMetrics = emptyEvidenceMetrics();
 
   // 1. Active industry profile
   const [activeProfile] = await db.select().from(industryProfile).limit(1);
@@ -1209,54 +1258,42 @@ export async function runMorningSync(
     errors.push(`committee_members: ${errorMessage(err)}`);
   }
 
-  // 4. Phase 1 — discover bills per watched committee (in parallel,
-  //    bounded by mcp-client's internal p-limit(5))
-  const listItems: McpBillListItem[] = [];
-  const committeesToQuery =
-    committeeCodes.length > 0 ? committeeCodes : [""];
-
-  const listFetches = await Promise.allSettled(
-    committeesToQuery.map((code) =>
-      callMcpToolOrThrow<McpBillListResponse>(
-        "assembly_bill",
-        code
-          ? { committee: code, age: 22, page_size: 100 }
-          : { age: 22, page_size: 100 },
-      ),
-    ),
-  );
-
-  for (let i = 0; i < listFetches.length; i++) {
-    const r = listFetches[i];
-    const code = committeesToQuery[i];
-    if (r.status === "fulfilled") {
-      listItems.push(...(r.value.items ?? []));
-    } else {
-      errors.push(
-        `assembly_bill(${code || "all"}): ${errorMessage(r.reason)}`,
-      );
-    }
+  // 4. Discover bill candidates from committee pages plus selected law-mixin
+  //    title searches, then apply the cheap title-only keyword gate.
+  const discovery = await discoverBillCandidates({
+    committeeCodes,
+    keywords,
+    excludeKeywords,
+    mixinSlugs,
+  });
+  if (discovery.errors.length > 0) {
+    errors.push(...discovery.errors.map((err) => `discovery: ${err}`));
   }
-
-  // Deduplicate by 의안ID
-  const uniqueList = Array.from(
-    new Map(listItems.map((b) => [b.의안ID, b])).values(),
+  billsProcessed = discovery.totalListItems;
+  console.log(
+    `[sync] discovery candidates=${discovery.candidates.length}/${discovery.totalListItems}, dropped=${discovery.droppedByKeyword}, limited=${discovery.droppedByLimit}, sources=${JSON.stringify(discovery.sourceCounts)}`,
   );
-  billsProcessed = uniqueList.length;
 
-  // 5. Keyword pre-filter (title-only)
-  const filtered = uniqueList.filter((b) =>
-    keywordMatches(b, keywords, excludeKeywords),
-  );
+  // 5. Add manually watched bills after discovery filtering. Manual watches
+  //    are explicit user intent, so they bypass the automatic title gate.
   const detailTargets = Array.from(
     new Map(
       [
-        ...filtered,
+        ...discovery.candidates.map((candidate) => candidate.listItem),
         ...manualWatchRows.map((row) => storedBillToListItem(row)),
       ].map((item) => [item.의안ID, item]),
     ).values(),
   );
   billsProcessed = detailTargets.length;
+  discoveryMetrics = {
+    totalListItems: discovery.totalListItems,
+    candidateCount: discovery.candidates.length,
+    droppedByKeyword: discovery.droppedByKeyword,
+    droppedByLimit: discovery.droppedByLimit,
+    sourceCounts: discovery.sourceCounts,
+    manualWatchCount: manualWatchRows.length,
+    detailTargetCount: detailTargets.length,
+  };
 
   // 6. Phase 2 — fetch detail for matched bills (parallel via p-limit).
   //    Skip bills we already have at the same stage (not implemented yet;
@@ -1280,6 +1317,7 @@ export async function runMorningSync(
     score: number;
     reasoning: string;
     summary: string;
+    evidence: EvidenceMeta;
   };
   const scoredBills: ScoredBill[] = [];
   const existingBodies =
@@ -1305,18 +1343,28 @@ export async function runMorningSync(
     const { listItem, detail } = f.value;
     try {
       const existingBody = existingBodyByBillId.get(listItem.의안ID);
-      let proposalReason =
-        detail.제안이유 ?? existingBody?.proposalReason ?? null;
-      let mainContent =
-        detail.주요내용 ?? existingBody?.mainContent ?? null;
-
-      if (!proposalReason && !mainContent) {
-        const body = await fetchBillBodyFragment(listItem.의안ID);
-        if (body) {
-          proposalReason = body.proposalReason;
-          mainContent = body.mainContent;
-        }
+      const billName = detail.의안명 ?? listItem.의안명;
+      const proposerParty = proposerPartyFromDetail(detail);
+      const evidenceResult = await enrichBillEvidence({
+        billId: listItem.의안ID,
+        billName,
+        committee: listItem.소관위원회,
+        proposerName: listItem.대표발의자,
+        proposerParty,
+        proposalDate: listItem.제안일,
+        mcpBody: {
+          proposalReason: detail.제안이유,
+          mainContent: detail.주요내용,
+        },
+        existingBody,
+      });
+      recordEvidenceMetrics(evidenceMetrics, evidenceResult.evidence);
+      if (evidenceResult.bodyFetchError) {
+        errors.push(
+          `body_fetch(${listItem.의안ID}): ${evidenceResult.bodyFetchError}`,
+        );
       }
+      const { proposalReason, mainContent } = evidenceResult;
 
       const enrichedDetail: McpBillDetailItem = {
         ...detail,
@@ -1324,33 +1372,26 @@ export async function runMorningSync(
         주요내용: mainContent,
       };
 
-      const [scoreResult, summary] = await Promise.all([
-        deps.scorer.scoreBill({
-          billName: enrichedDetail.의안명 ?? listItem.의안명,
-          committee: listItem.소관위원회,
-          proposerName: listItem.대표발의자 ?? "",
-          proposerParty: proposerPartyFromDetail(enrichedDetail),
-          proposalReason,
-          mainContent,
-          industryName: activeProfile.name,
-          industryContext: activeProfile.llmContext,
-          industryKeywords: keywords,
-        }),
-        deps.scorer.summarizeBill({
-          billName: enrichedDetail.의안명 ?? listItem.의안명,
-          committee: listItem.소관위원회,
-          proposerName: listItem.대표발의자 ?? "",
-          proposalReason,
-          mainContent,
-        }),
-      ]);
+      const quickAnalysis = await deps.scorer.analyzeBillQuick({
+        billName,
+        committee: listItem.소관위원회,
+        proposerName: listItem.대표발의자 ?? "",
+        proposerParty,
+        proposalReason,
+        mainContent,
+        industryName: activeProfile.name,
+        industryContext: activeProfile.llmContext,
+        industryKeywords: keywords,
+        evidence: evidenceResult.evidence,
+      });
 
       scoredBills.push({
         listItem,
         detail: enrichedDetail,
-        score: scoreResult.score,
-        reasoning: scoreResult.reasoning,
-        summary,
+        score: quickAnalysis.score,
+        reasoning: quickAnalysis.reasoning,
+        summary: quickAnalysis.summary,
+        evidence: evidenceResult.evidence,
       });
       billsScored++;
     } catch (err) {
@@ -1528,6 +1569,8 @@ export async function runMorningSync(
     legislatorsUpdated,
     briefingDate,
     alertsCreated,
+    discovery: discoveryMetrics,
+    evidence: evidenceMetrics,
     status,
     errors,
   };
@@ -2100,6 +2143,7 @@ interface ScoredBillForUpsert {
   score: number;
   reasoning: string;
   summary: string;
+  evidence: EvidenceMeta;
 }
 
 /**
@@ -2112,7 +2156,7 @@ async function upsertBills(scored: ScoredBillForUpsert[]): Promise<number> {
   if (scored.length === 0) return 0;
 
   const rows: NewBill[] = scored.map(
-    ({ listItem, detail, score, reasoning, summary }) => {
+    ({ listItem, detail, score, reasoning, summary, evidence }) => {
       const stage = stageFromSimsa(detail.심사경과);
       const proposerParty = proposerPartyFromDetail(detail);
       const coSponsorCount =
@@ -2133,6 +2177,9 @@ async function upsertBills(scored: ScoredBillForUpsert[]): Promise<number> {
         relevanceReasoning: reasoning,
         proposalReason: detail.제안이유, // null today (MCP limitation)
         mainContent: detail.주요내용, // null today
+        evidenceLevel: evidence.level,
+        bodyFetchStatus: evidence.bodyFetchStatus,
+        evidenceMeta: evidence as PersistedEvidenceMeta,
         summaryText: summary,
         externalLink: detail.LINK_URL ?? listItem.상세링크,
         lastSynced: new Date(),
@@ -2159,6 +2206,9 @@ async function upsertBills(scored: ScoredBillForUpsert[]): Promise<number> {
         relevanceReasoning: sql`excluded.relevance_reasoning`,
         proposalReason: sql`coalesce(excluded.proposal_reason, ${bill.proposalReason})`,
         mainContent: sql`coalesce(excluded.main_content, ${bill.mainContent})`,
+        evidenceLevel: sql`excluded.evidence_level`,
+        bodyFetchStatus: sql`excluded.body_fetch_status`,
+        evidenceMeta: sql`excluded.evidence_meta`,
         summaryText: sql`excluded.summary_text`,
         externalLink: sql`coalesce(excluded.external_link, ${bill.externalLink})`,
         lastSynced: sql`NOW()`,
