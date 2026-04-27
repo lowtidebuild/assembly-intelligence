@@ -3,12 +3,17 @@ import type { SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { bill, industryBillWatch, industryProfile } from "@/db/schema";
 import { callMcpToolOrThrow, hasMcpKey } from "@/lib/mcp-client";
+import { evaluateKeywordRelevance } from "@/lib/keyword-relevance";
+import { mergeKeywordsWithMixins } from "@/lib/law-mixins";
 import {
   getGeminiBillScorer,
   shouldUseGeminiOrThrow,
 } from "@/lib/gemini-client";
 import { getStubBillScorer } from "@/lib/gemini-stub";
 import { enrichBillEvidence } from "@/services/evidence-enrichment";
+import { QUICK_ANALYSIS_PROMPT_VERSION } from "@/lib/prompts/bill-quick-analysis";
+import type { BillAnalysisMeta } from "@/lib/sync-health";
+import type { DiscoverySource } from "@/services/candidate-discovery";
 import {
   stageFromSimsa,
   syncVotesForBillTargets,
@@ -302,6 +307,7 @@ export async function trackBillForActiveProfile(
       name: industryProfile.name,
       llmContext: industryProfile.llmContext,
       keywords: industryProfile.keywords,
+      selectedLawMixins: industryProfile.selectedLawMixins,
     })
     .from(industryProfile)
     .limit(1);
@@ -349,6 +355,10 @@ export async function trackBillForActiveProfile(
   });
   const { proposalReason, mainContent } = evidenceResult;
 
+  const industryKeywords = mergeKeywordsWithMixins(
+    profile.keywords ?? [],
+    profile.selectedLawMixins ?? [],
+  );
   const quickAnalysis = await scorer.analyzeBillQuick({
     billName,
     committee,
@@ -358,9 +368,22 @@ export async function trackBillForActiveProfile(
     mainContent,
     industryName: profile.name,
     industryContext: profile.llmContext,
-    industryKeywords: profile.keywords ?? [],
+    industryKeywords,
     evidence: evidenceResult.evidence,
   });
+  const discoverySources: DiscoverySource[] = [{ type: "manual_watch" }];
+  const discoveryKeywords = evaluateKeywordRelevance({
+    text: billName,
+    includeKeywords: industryKeywords,
+    defaultWhenEmpty: false,
+  }).matchedIncludeKeywords;
+  const analysisMeta: BillAnalysisMeta = {
+    analysisKeywords: quickAnalysis.analysisKeywords,
+    confidence: quickAnalysis.confidence,
+    unknowns: quickAnalysis.unknowns,
+    quickAnalysisVersion: QUICK_ANALYSIS_PROMPT_VERSION,
+    analyzedAt: new Date().toISOString(),
+  };
 
   const proposalDate = parseKstDate(input.proposalDate);
   const [billRow] = await db
@@ -382,6 +405,9 @@ export async function trackBillForActiveProfile(
       evidenceLevel: evidenceResult.evidence.level,
       bodyFetchStatus: evidenceResult.evidence.bodyFetchStatus,
       evidenceMeta: evidenceResult.evidence,
+      discoverySources,
+      discoveryKeywords,
+      analysisMeta,
       summaryText: quickAnalysis.summary,
       externalLink: detail.LINK_URL,
       lastSynced: new Date(),
@@ -404,6 +430,27 @@ export async function trackBillForActiveProfile(
         evidenceLevel: sql`excluded.evidence_level`,
         bodyFetchStatus: sql`excluded.body_fetch_status`,
         evidenceMeta: sql`excluded.evidence_meta`,
+        discoverySources: sql`coalesce(
+          (
+            select jsonb_agg(distinct value)
+            from jsonb_array_elements(
+              coalesce(${bill.discoverySources}, '[]'::jsonb) ||
+              coalesce(excluded.discovery_sources, '[]'::jsonb)
+            ) as merged(value)
+          ),
+          '[]'::jsonb
+        )`,
+        discoveryKeywords: sql`coalesce(
+          (
+            select jsonb_agg(distinct value)
+            from jsonb_array_elements_text(
+              coalesce(${bill.discoveryKeywords}, '[]'::jsonb) ||
+              coalesce(excluded.discovery_keywords, '[]'::jsonb)
+            ) as merged(value)
+          ),
+          '[]'::jsonb
+        )`,
+        analysisMeta: sql`excluded.analysis_meta`,
         summaryText: quickAnalysis.summary,
         externalLink: sql`coalesce(excluded.external_link, ${bill.externalLink})`,
         lastSynced: new Date(),

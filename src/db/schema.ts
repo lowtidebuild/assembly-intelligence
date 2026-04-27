@@ -45,6 +45,11 @@ import type {
   EvidenceMeta,
 } from "@/lib/evidence";
 import type { DailyBriefingContent } from "@/lib/daily-briefing-content";
+import type {
+  BillAnalysisMeta,
+  SyncQualityMetadata,
+} from "@/lib/sync-health";
+import type { DiscoverySource } from "@/services/candidate-discovery";
 
 /* ─────────────────────────────────────────────────────────────
  * Enums
@@ -363,6 +368,9 @@ export const bill = pgTable(
     evidenceLevel: text("evidence_level").$type<EvidenceLevel>(),
     bodyFetchStatus: text("body_fetch_status").$type<BodyFetchStatus>(),
     evidenceMeta: jsonb("evidence_meta").$type<EvidenceMeta>(),
+    discoverySources: jsonb("discovery_sources").$type<DiscoverySource[]>(),
+    discoveryKeywords: jsonb("discovery_keywords").$type<string[]>(),
+    analysisMeta: jsonb("analysis_meta").$type<BillAnalysisMeta>(),
     // Pre-generated summary shown in slide-over panel (Gemini Flash, sync-time)
     summaryText: text("summary_text"),
     // User-editable company impact assessment (GR/PA judgment)
@@ -741,6 +749,7 @@ export const syncLog = pgTable(
     legislatorsUpdated: integer("legislators_updated").notNull().default(0),
     newsFetched: integer("news_fetched").notNull().default(0),
     errorsJson: jsonb("errors_json").$type<unknown>(),
+    metadataJson: jsonb("metadata_json").$type<SyncQualityMetadata>(),
   },
   (t) => [index("idx_sync_log_started").on(t.startedAt)],
 );

@@ -130,11 +130,107 @@ function recordUsage(
 }
 
 export function getGeminiUsageStats(): Record<string, GeminiUsageStats> {
-  return Object.fromEntries(usageByOperation.entries());
+  return cloneUsageStats(Object.fromEntries(usageByOperation.entries()));
+}
+
+export function getGeminiUsageStatsSnapshot(): Record<string, GeminiUsageStats> {
+  return getGeminiUsageStats();
+}
+
+export function subtractGeminiUsageStats(
+  current: Record<string, GeminiUsageStats>,
+  baseline: Record<string, GeminiUsageStats>,
+): Record<string, GeminiUsageStats> {
+  const operations = new Set([
+    ...Object.keys(current),
+    ...Object.keys(baseline),
+  ]);
+  const diff: Record<string, GeminiUsageStats> = {};
+
+  for (const operation of operations) {
+    const now = current[operation] ?? emptyUsageStats();
+    const before = baseline[operation] ?? emptyUsageStats();
+    const value = {
+      promptTokens: Math.max(0, now.promptTokens - before.promptTokens),
+      outputTokens: Math.max(0, now.outputTokens - before.outputTokens),
+      thoughtTokens: Math.max(0, now.thoughtTokens - before.thoughtTokens),
+      totalTokens: Math.max(0, now.totalTokens - before.totalTokens),
+      calls: Math.max(0, now.calls - before.calls),
+    };
+    if (
+      value.calls > 0 ||
+      value.promptTokens > 0 ||
+      value.outputTokens > 0 ||
+      value.thoughtTokens > 0 ||
+      value.totalTokens > 0
+    ) {
+      diff[operation] = value;
+    }
+  }
+
+  return diff;
 }
 
 export function resetGeminiUsageStats(): void {
   usageByOperation.clear();
+}
+
+function emptyUsageStats(): GeminiUsageStats {
+  return {
+    promptTokens: 0,
+    outputTokens: 0,
+    thoughtTokens: 0,
+    totalTokens: 0,
+    calls: 0,
+  };
+}
+
+function cloneUsageStats(
+  stats: Record<string, GeminiUsageStats>,
+): Record<string, GeminiUsageStats> {
+  return Object.fromEntries(
+    Object.entries(stats).map(([operation, value]) => [
+      operation,
+      { ...value },
+    ]),
+  );
+}
+
+export class GeminiParseError extends Error {
+  constructor(
+    public readonly operation: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "GeminiParseError";
+  }
+}
+
+function parseGeminiJson<T>(
+  raw: string,
+  schema: z.ZodType<T>,
+  operation: string,
+  label: string,
+): T {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(raw);
+  } catch (err) {
+    throw new GeminiParseError(
+      operation,
+      `${label} returned invalid JSON: ${errorMessage(err)}`,
+    );
+  }
+
+  const parsed = schema.safeParse(decoded);
+  if (!parsed.success) {
+    throw new GeminiParseError(
+      operation,
+      `${label} returned invalid shape: ${parsed.error.message}`,
+    );
+  }
+
+  return parsed.data;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -515,13 +611,12 @@ export function getGeminiBillScorer(): BillScorer {
       operation: "gemini.analyzeBillQuick",
     });
 
-    const parsed = quickAnalysisResultSchema.safeParse(JSON.parse(raw));
-    if (!parsed.success) {
-      throw new Error(
-        `Gemini quick analysis returned invalid shape: ${parsed.error.message}`,
-      );
-    }
-    return parsed.data;
+    return parseGeminiJson(
+      raw,
+      quickAnalysisResultSchema,
+      "gemini.analyzeBillQuick",
+      "Gemini quick analysis",
+    );
   }
 
   async function summarizeBillLegacy(
@@ -584,13 +679,12 @@ export function getGeminiBillScorer(): BillScorer {
         operation: "gemini.scoreBill",
       });
 
-      const parsed = scoringResultSchema.safeParse(JSON.parse(raw));
-      if (!parsed.success) {
-        throw new Error(
-          `Gemini scoring returned invalid shape: ${parsed.error.message}`,
-        );
-      }
-      return parsed.data;
+      return parseGeminiJson(
+        raw,
+        scoringResultSchema,
+        "gemini.scoreBill",
+        "Gemini scoring",
+      );
     },
 
     summarizeBill: summarizeBillLegacy,
@@ -619,13 +713,12 @@ export function getGeminiBriefingGenerator(): BriefingGenerator {
         operation: "gemini.generateBriefing",
       });
 
-      const parsed = dailyBriefingContentSchema.safeParse(JSON.parse(rawJson));
-      if (!parsed.success) {
-        throw new Error(
-          `Gemini briefing returned invalid shape: ${parsed.error.message}`,
-        );
-      }
-      const contentJson = parsed.data;
+      const contentJson = parseGeminiJson(
+        rawJson,
+        dailyBriefingContentSchema,
+        "gemini.generateBriefing",
+        "Gemini briefing",
+      );
       const contentHtml = renderDailyBriefingContentHtml(contentJson);
 
       // Persist (same behavior as the stub — sync orchestrator
@@ -714,11 +807,10 @@ export async function generateBillAnalysis(
     .replace(/\s*```$/i, "")
     .trim();
 
-  const parsed = billAnalysisSchema.safeParse(JSON.parse(cleaned));
-  if (!parsed.success) {
-    throw new Error(
-      `Gemini analysis returned invalid shape: ${parsed.error.message}`,
-    );
-  }
-  return parsed.data;
+  return parseGeminiJson(
+    cleaned,
+    billAnalysisSchema,
+    "gemini.generateBillAnalysis",
+    "Gemini analysis",
+  );
 }

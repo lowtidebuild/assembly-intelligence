@@ -41,7 +41,22 @@ export default async function SettingsPage() {
   const [profileRows, recentSyncs] = await withDbReadRetry(() =>
     Promise.all([
       loadActiveIndustryProfileCompat().then((profile) => (profile ? [profile] : [])),
-      db.select().from(syncLog).orderBy(desc(syncLog.startedAt)).limit(5),
+      db
+        .select({
+          id: syncLog.id,
+          syncType: syncLog.syncType,
+          status: syncLog.status,
+          startedAt: syncLog.startedAt,
+          completedAt: syncLog.completedAt,
+          billsProcessed: syncLog.billsProcessed,
+          billsScored: syncLog.billsScored,
+          legislatorsUpdated: syncLog.legislatorsUpdated,
+          newsFetched: syncLog.newsFetched,
+          errorsJson: syncLog.errorsJson,
+        })
+        .from(syncLog)
+        .orderBy(desc(syncLog.startedAt))
+        .limit(5),
     ]),
   );
 

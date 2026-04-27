@@ -10,6 +10,8 @@ import {
   type EvidenceMeta,
 } from "@/lib/evidence";
 
+export const QUICK_ANALYSIS_PROMPT_VERSION = "quick-analysis-v1";
+
 export interface BillQuickAnalysisInput {
   billName: string;
   committee: string | null;

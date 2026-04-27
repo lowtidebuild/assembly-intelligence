@@ -1,4 +1,4 @@
-export const QUICK_ANALYSIS_PROMPT_VERSION = "quick-analysis-v1";
+export { QUICK_ANALYSIS_PROMPT_VERSION } from "@/lib/prompts/bill-quick-analysis";
 export const DEEP_ANALYSIS_PROMPT_VERSION = "deep-analysis-v1";
 
 export interface AnalysisCacheKeyInput {

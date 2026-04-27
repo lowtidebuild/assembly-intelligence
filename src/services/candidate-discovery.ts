@@ -39,11 +39,22 @@ export type DiscoverySource =
       type: "committee";
       committee: string | null;
       page: number;
+      inferred?: boolean;
     }
   | {
       type: "mixin_law";
       slug: string;
       query: string;
+      inferred?: boolean;
+    }
+  | {
+      type: "bill_name";
+      query: string;
+      inferred?: boolean;
+    }
+  | {
+      type: "manual_watch";
+      inferred?: boolean;
     };
 
 export interface DiscoveredBillCandidate {
@@ -272,6 +283,8 @@ function countSources(
   const counts: Record<DiscoverySource["type"], number> = {
     committee: 0,
     mixin_law: 0,
+    bill_name: 0,
+    manual_watch: 0,
   };
 
   for (const candidate of candidates) {

@@ -17,10 +17,10 @@
  *   9. Log to SyncLog
  *
  * ── Dependency inversion ──────────────────────────────────
- * This service does NOT import gemini-client directly. Instead it
- * accepts `BillScorer` and `BriefingGenerator` interfaces through
- * the orchestrator function, so Lane B (Gemini) can be swapped in
- * later without changing this file, and tests can pass fakes.
+ * This service accepts `BillScorer` and `BriefingGenerator` interfaces
+ * through the orchestrator function, so tests can pass fakes. It only
+ * imports gemini-client's usage/parse telemetry helpers for sync health
+ * accounting; model execution still flows through injected deps.
  *
  * ── Real MCP API shape ────────────────────────────────────
  * This file targets the real assembly-api-mcp server (6 tools).
@@ -79,6 +79,8 @@ import { resolveLegislatorPhotoUrl } from "@/lib/legislator-photo";
 import { buildAlertMeta, insertAlertIfMissing } from "@/lib/alerts";
 import {
   discoverBillCandidates,
+  type DiscoveredBillCandidate,
+  type DiscoverySource,
   type McpBillListItem,
 } from "@/services/candidate-discovery";
 import { enrichBillEvidence } from "@/services/evidence-enrichment";
@@ -87,6 +89,23 @@ import {
   loadRecentTranscriptHits,
   syncCommitteeTranscripts,
 } from "@/services/transcript-sync";
+import {
+  GeminiParseError,
+  getGeminiUsageStatsSnapshot,
+  subtractGeminiUsageStats,
+} from "@/lib/gemini-client";
+import { QUICK_ANALYSIS_PROMPT_VERSION } from "@/lib/prompts/bill-quick-analysis";
+import {
+  assertSyncMetadataWithinSizeLimit,
+  countDiscoverySources,
+  emptyParseFailures,
+  emptyStageTransitionCounts,
+  mergeDiscoverySources,
+  recordParseFailure,
+  type BillAnalysisMeta,
+  type SyncAiMode,
+  type SyncQualityMetadata,
+} from "@/lib/sync-health";
 
 /* ─────────────────────────────────────────────────────────────
  * Bill stage enum literal — matches `bill_stage` postgres enum.
@@ -1065,6 +1084,7 @@ async function createPressAlerts(items: NewPressRelease[]) {
 export interface MorningSyncDeps {
   scorer: BillScorer;
   briefingGenerator: BriefingGenerator;
+  aiMode?: SyncAiMode;
 }
 
 export interface MorningSyncResult {
@@ -1076,6 +1096,7 @@ export interface MorningSyncResult {
   alertsCreated: number;
   discovery: MorningDiscoveryMetrics;
   evidence: MorningEvidenceMetrics;
+  metadata: SyncQualityMetadata;
   status: "success" | "partial" | "failed";
   errors: string[];
 }
@@ -1085,10 +1106,7 @@ export interface MorningDiscoveryMetrics {
   candidateCount: number;
   droppedByKeyword: number;
   droppedByLimit: number;
-  sourceCounts: {
-    committee: number;
-    mixin_law: number;
-  };
+  sourceCounts: Record<string, number>;
   manualWatchCount: number;
   detailTargetCount: number;
 }
@@ -1125,6 +1143,57 @@ function recordEvidenceMetrics(
   metrics.bodyFetchStatusCounts[evidence.bodyFetchStatus] += 1;
 }
 
+function buildBillAnalysisMeta(input: {
+  analysisKeywords: string[];
+  confidence: "low" | "medium" | "high";
+  unknowns: string[];
+}): BillAnalysisMeta {
+  return {
+    analysisKeywords: input.analysisKeywords,
+    confidence: input.confidence,
+    unknowns: input.unknowns,
+    quickAnalysisVersion: QUICK_ANALYSIS_PROMPT_VERSION,
+    analyzedAt: new Date().toISOString(),
+  };
+}
+
+function discoveryKeywordsForManualWatch(
+  listItem: McpBillListItem,
+  keywords: string[],
+  excludeKeywords: string[],
+): string[] {
+  return evaluateKeywordRelevance({
+    text: listItem.의안명,
+    includeKeywords: keywords,
+    excludeKeywords,
+    defaultWhenEmpty: false,
+  }).matchedIncludeKeywords;
+}
+
+function addOrMergeDiscoveredCandidate(
+  map: Map<string, DiscoveredBillCandidate>,
+  candidate: DiscoveredBillCandidate,
+): void {
+  const key =
+    candidate.listItem.의안ID ||
+    candidate.listItem.의안번호 ||
+    candidate.listItem.의안명;
+  const existing = map.get(key);
+  if (!existing) {
+    map.set(key, candidate);
+    return;
+  }
+
+  existing.discoverySources = mergeDiscoverySources(
+    existing.discoverySources,
+    candidate.discoverySources,
+  );
+  existing.discoveryKeywords = Array.from(
+    new Set([...existing.discoveryKeywords, ...candidate.discoveryKeywords]),
+  );
+}
+
+
 /**
  * Run the morning sync pipeline. Called by /api/cron/sync-morning.
  *
@@ -1135,6 +1204,8 @@ export async function runMorningSync(
   deps: MorningSyncDeps,
 ): Promise<MorningSyncResult> {
   const startedAt = new Date();
+  const usageBaseline = getGeminiUsageStatsSnapshot();
+  const parseFailures = emptyParseFailures();
   const errors: string[] = [];
   let billsProcessed = 0;
   let billsScored = 0;
@@ -1154,6 +1225,8 @@ export async function runMorningSync(
     sourceCounts: {
       committee: 0,
       mixin_law: 0,
+      bill_name: 0,
+      manual_watch: 0,
     },
     manualWatchCount: 0,
     detailTargetCount: 0,
@@ -1276,21 +1349,30 @@ export async function runMorningSync(
 
   // 5. Add manually watched bills after discovery filtering. Manual watches
   //    are explicit user intent, so they bypass the automatic title gate.
-  const detailTargets = Array.from(
-    new Map(
-      [
-        ...discovery.candidates.map((candidate) => candidate.listItem),
-        ...manualWatchRows.map((row) => storedBillToListItem(row)),
-      ].map((item) => [item.의안ID, item]),
-    ).values(),
-  );
+  const detailTargetMap = new Map<string, DiscoveredBillCandidate>();
+  for (const candidate of discovery.candidates) {
+    addOrMergeDiscoveredCandidate(detailTargetMap, candidate);
+  }
+  for (const row of manualWatchRows) {
+    const listItem = storedBillToListItem(row);
+    addOrMergeDiscoveredCandidate(detailTargetMap, {
+      listItem,
+      discoverySources: [{ type: "manual_watch" }],
+      discoveryKeywords: discoveryKeywordsForManualWatch(
+        listItem,
+        keywords,
+        excludeKeywords,
+      ),
+    });
+  }
+  const detailTargets = Array.from(detailTargetMap.values());
   billsProcessed = detailTargets.length;
   discoveryMetrics = {
     totalListItems: discovery.totalListItems,
     candidateCount: discovery.candidates.length,
     droppedByKeyword: discovery.droppedByKeyword,
     droppedByLimit: discovery.droppedByLimit,
-    sourceCounts: discovery.sourceCounts,
+    sourceCounts: countDiscoverySources(detailTargets),
     manualWatchCount: manualWatchRows.length,
     detailTargetCount: detailTargets.length,
   };
@@ -1299,14 +1381,15 @@ export async function runMorningSync(
   //    Skip bills we already have at the same stage (not implemented yet;
   //    for now refetch every morning — 20-50 bills is fine).
   const detailFetches = await Promise.allSettled(
-    detailTargets.map(async (item) => {
+    detailTargets.map(async (candidate) => {
+      const item = candidate.listItem;
       const resp = await callMcpToolOrThrow<McpBillDetailResponse>(
         "assembly_bill",
         { bill_id: item.의안ID },
       );
       const detail = resp.items?.[0];
       if (!detail) throw new Error(`empty detail for ${item.의안ID}`);
-      return { listItem: item, detail };
+      return { candidate, listItem: item, detail };
     }),
   );
 
@@ -1318,6 +1401,9 @@ export async function runMorningSync(
     reasoning: string;
     summary: string;
     evidence: EvidenceMeta;
+    discoverySources: DiscoverySource[];
+    discoveryKeywords: string[];
+    analysisMeta: BillAnalysisMeta;
   };
   const scoredBills: ScoredBill[] = [];
   const existingBodies =
@@ -1329,7 +1415,12 @@ export async function runMorningSync(
             mainContent: bill.mainContent,
           })
           .from(bill)
-          .where(inArray(bill.billId, detailTargets.map((item) => item.의안ID)))
+          .where(
+            inArray(
+              bill.billId,
+              detailTargets.map((candidate) => candidate.listItem.의안ID),
+            ),
+          )
       : [];
   const existingBodyByBillId = new Map(
     existingBodies.map((row) => [row.billId, row]),
@@ -1340,7 +1431,7 @@ export async function runMorningSync(
       errors.push(`detail: ${errorMessage(f.reason)}`);
       continue;
     }
-    const { listItem, detail } = f.value;
+    const { candidate, listItem, detail } = f.value;
     try {
       const existingBody = existingBodyByBillId.get(listItem.의안ID);
       const billName = detail.의안명 ?? listItem.의안명;
@@ -1392,9 +1483,15 @@ export async function runMorningSync(
         reasoning: quickAnalysis.reasoning,
         summary: quickAnalysis.summary,
         evidence: evidenceResult.evidence,
+        discoverySources: candidate.discoverySources,
+        discoveryKeywords: candidate.discoveryKeywords,
+        analysisMeta: buildBillAnalysisMeta(quickAnalysis),
       });
       billsScored++;
     } catch (err) {
+      if (err instanceof GeminiParseError) {
+        recordParseFailure(parseFailures, err.operation);
+      }
       errors.push(`score(${listItem.의안ID}): ${errorMessage(err)}`);
     }
   }
@@ -1482,6 +1579,9 @@ export async function runMorningSync(
     });
     // BriefingGenerator is responsible for persisting to daily_briefing
   } catch (err) {
+    if (err instanceof GeminiParseError) {
+      recordParseFailure(parseFailures, err.operation);
+    }
     errors.push(`briefing: ${errorMessage(err)}`);
   }
 
@@ -1532,18 +1632,49 @@ export async function runMorningSync(
   const status: MorningSyncResult["status"] =
     errors.length === 0 ? "success" : billsScored > 0 ? "partial" : "failed";
 
+  const completedAt = new Date();
+  const usageDiff = subtractGeminiUsageStats(
+    getGeminiUsageStatsSnapshot(),
+    usageBaseline,
+  );
+  const metadata: SyncQualityMetadata = {
+    aiMode: deps.aiMode,
+    latencyMs: {
+      total: completedAt.getTime() - startedAt.getTime(),
+    },
+    discovery: {
+      totalListItems: discoveryMetrics.totalListItems,
+      candidates: discoveryMetrics.candidateCount,
+      droppedByKeyword: discoveryMetrics.droppedByKeyword,
+      droppedByLimit: discoveryMetrics.droppedByLimit,
+      sourceCounts: discoveryMetrics.sourceCounts,
+      errors: discovery.errors,
+    },
+    evidence: {
+      evidenceLevelCounts: evidenceMetrics.levelCounts,
+      bodyFetchStatusCounts: evidenceMetrics.bodyFetchStatusCounts,
+      bodyFetchFailed: evidenceMetrics.bodyFetchStatusCounts.failed,
+    },
+    llm: {
+      usageByOperation: usageDiff,
+      parseFailures,
+    },
+  };
+  assertSyncMetadataWithinSizeLimit(metadata);
+
   const [logRow] = await db
     .insert(syncLog)
     .values({
       syncType: "morning",
       status,
       startedAt,
-      completedAt: new Date(),
+      completedAt,
       billsProcessed,
       billsScored,
       legislatorsUpdated,
       newsFetched,
       errorsJson: errors.length > 0 ? errors : null,
+      metadataJson: metadata,
     })
     .returning({ id: syncLog.id });
 
@@ -1571,6 +1702,7 @@ export async function runMorningSync(
     alertsCreated,
     discovery: discoveryMetrics,
     evidence: evidenceMetrics,
+    metadata,
     status,
     errors,
   };
@@ -1585,6 +1717,7 @@ export interface EveningSyncResult {
   billsChecked: number;
   stageTransitions: number;
   alertsCreated: number;
+  metadata: SyncQualityMetadata;
   status: "success" | "partial" | "failed";
   errors: string[];
 }
@@ -1605,6 +1738,8 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
   let billsChecked = 0;
   let stageTransitions = 0;
   let alertsCreated = 0;
+  let mcpDetailFailed = 0;
+  const transitionsBy = emptyStageTransitionCounts();
 
   const trackedBills = await db
     .select({ billId: industryBillWatch.billId })
@@ -1644,6 +1779,7 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
   for (const r of results) {
     billsChecked++;
     if (r.status !== "fulfilled") {
+      mcpDetailFailed++;
       errors.push(`evening: ${errorMessage(r.reason)}`);
       continue;
     }
@@ -1655,6 +1791,9 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
       const persisted = await persistEveningStageTransition(tracked, newStage);
       if (persisted.updated) {
         stageTransitions++;
+        if (newStage !== "stage_0") {
+          transitionsBy[newStage] += 1;
+        }
       }
       if (persisted.alertInserted) {
         alertsCreated++;
@@ -1671,18 +1810,33 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
         ? "partial"
         : "failed";
 
+  const completedAt = new Date();
+  const metadata: SyncQualityMetadata = {
+    latencyMs: {
+      total: completedAt.getTime() - startedAt.getTime(),
+    },
+    evening: {
+      billsChecked,
+      stageTransitions,
+      mcpDetailFailed,
+      transitionsBy,
+    },
+  };
+  assertSyncMetadataWithinSizeLimit(metadata);
+
   const [logRow] = await db
     .insert(syncLog)
     .values({
       syncType: "evening",
       status,
       startedAt,
-      completedAt: new Date(),
+      completedAt,
       billsProcessed: billsChecked,
       billsScored: 0,
       legislatorsUpdated: 0,
       newsFetched: 0,
       errorsJson: errors.length > 0 ? errors : null,
+      metadataJson: metadata,
     })
     .returning({ id: syncLog.id });
 
@@ -1698,6 +1852,7 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
     billsChecked,
     stageTransitions,
     alertsCreated,
+    metadata,
     status,
     errors,
   };
@@ -2144,6 +2299,9 @@ interface ScoredBillForUpsert {
   reasoning: string;
   summary: string;
   evidence: EvidenceMeta;
+  discoverySources: DiscoverySource[];
+  discoveryKeywords: string[];
+  analysisMeta: BillAnalysisMeta;
 }
 
 /**
@@ -2156,7 +2314,17 @@ async function upsertBills(scored: ScoredBillForUpsert[]): Promise<number> {
   if (scored.length === 0) return 0;
 
   const rows: NewBill[] = scored.map(
-    ({ listItem, detail, score, reasoning, summary, evidence }) => {
+    ({
+      listItem,
+      detail,
+      score,
+      reasoning,
+      summary,
+      evidence,
+      discoverySources,
+      discoveryKeywords,
+      analysisMeta,
+    }) => {
       const stage = stageFromSimsa(detail.심사경과);
       const proposerParty = proposerPartyFromDetail(detail);
       const coSponsorCount =
@@ -2180,6 +2348,9 @@ async function upsertBills(scored: ScoredBillForUpsert[]): Promise<number> {
         evidenceLevel: evidence.level,
         bodyFetchStatus: evidence.bodyFetchStatus,
         evidenceMeta: evidence as PersistedEvidenceMeta,
+        discoverySources,
+        discoveryKeywords,
+        analysisMeta,
         summaryText: summary,
         externalLink: detail.LINK_URL ?? listItem.상세링크,
         lastSynced: new Date(),
@@ -2209,6 +2380,27 @@ async function upsertBills(scored: ScoredBillForUpsert[]): Promise<number> {
         evidenceLevel: sql`excluded.evidence_level`,
         bodyFetchStatus: sql`excluded.body_fetch_status`,
         evidenceMeta: sql`excluded.evidence_meta`,
+        discoverySources: sql`coalesce(
+          (
+            select jsonb_agg(distinct value)
+            from jsonb_array_elements(
+              coalesce(${bill.discoverySources}, '[]'::jsonb) ||
+              coalesce(excluded.discovery_sources, '[]'::jsonb)
+            ) as merged(value)
+          ),
+          '[]'::jsonb
+        )`,
+        discoveryKeywords: sql`coalesce(
+          (
+            select jsonb_agg(distinct value)
+            from jsonb_array_elements_text(
+              coalesce(${bill.discoveryKeywords}, '[]'::jsonb) ||
+              coalesce(excluded.discovery_keywords, '[]'::jsonb)
+            ) as merged(value)
+          ),
+          '[]'::jsonb
+        )`,
+        analysisMeta: sql`excluded.analysis_meta`,
         summaryText: sql`excluded.summary_text`,
         externalLink: sql`coalesce(excluded.external_link, ${bill.externalLink})`,
         lastSynced: sql`NOW()`,

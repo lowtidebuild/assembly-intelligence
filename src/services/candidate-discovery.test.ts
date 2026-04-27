@@ -101,7 +101,12 @@ describe("discoverBillCandidates", () => {
       "PRC_ITEM",
     ]);
     expect(result.candidates[0].discoveryKeywords).toEqual(["게임산업"]);
-    expect(result.sourceCounts).toEqual({ committee: 2, mixin_law: 0 });
+    expect(result.sourceCounts).toEqual({
+      committee: 2,
+      mixin_law: 0,
+      bill_name: 0,
+      manual_watch: 0,
+    });
   });
 
   it("caps relevant candidates when maxCandidates is configured", async () => {
@@ -130,7 +135,12 @@ describe("discoverBillCandidates", () => {
     ]);
     expect(result.droppedByKeyword).toBe(0);
     expect(result.droppedByLimit).toBe(1);
-    expect(result.sourceCounts).toEqual({ committee: 1, mixin_law: 0 });
+    expect(result.sourceCounts).toEqual({
+      committee: 1,
+      mixin_law: 0,
+      bill_name: 0,
+      manual_watch: 0,
+    });
   });
 
   it("adds law-mixin title searches and keeps source provenance on duplicates", async () => {
@@ -166,6 +176,11 @@ describe("discoverBillCandidates", () => {
       "committee",
       "mixin_law",
     ]);
-    expect(result.sourceCounts).toEqual({ committee: 1, mixin_law: 1 });
+    expect(result.sourceCounts).toEqual({
+      committee: 1,
+      mixin_law: 1,
+      bill_name: 0,
+      manual_watch: 0,
+    });
   });
 });

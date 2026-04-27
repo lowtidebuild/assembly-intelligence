@@ -17,10 +17,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runMorningSync } from "@/services/sync";
 import {
-  getGeminiUsageStats,
   getGeminiBillScorer,
   getGeminiBriefingGenerator,
-  resetGeminiUsageStats,
   shouldUseGeminiOrThrow,
 } from "@/lib/gemini-client";
 import {
@@ -77,10 +75,15 @@ export async function GET(req: NextRequest) {
 
   try {
     const { scorer, briefingGenerator, mode } = chooseDeps();
-    resetGeminiUsageStats();
-    const result = await runMorningSync({ scorer, briefingGenerator });
+    const result = await runMorningSync({
+      scorer,
+      briefingGenerator,
+      aiMode: mode,
+    });
     const geminiUsage =
-      mode === "gemini" ? { geminiUsage: getGeminiUsageStats() } : {};
+      mode === "gemini"
+        ? { geminiUsage: result.metadata.llm?.usageByOperation ?? {} }
+        : {};
 
     const httpStatus = result.status === "failed" ? 500 : 200;
     return NextResponse.json(
