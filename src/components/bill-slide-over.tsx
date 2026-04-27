@@ -18,6 +18,7 @@ import Link from "next/link";
 import { StageBadge } from "@/components/stage-badge";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
 import { CompanyImpactEditor } from "@/components/company-impact-editor";
+import { DetectionExplainability } from "@/components/detection-explainability";
 import { EvidenceBadge, EvidenceMetaList } from "@/components/evidence-badge";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
 import type { ImportanceRecord } from "@/lib/legislator-importance";
@@ -121,6 +122,14 @@ export function BillSlideOver({
               status={bill.bodyFetchStatus}
             />
             <EvidenceMetaList meta={bill.evidenceMeta} />
+          </Block>
+
+          <Block label="탐지 이유" sublabel="탐지 메타데이터">
+            <DetectionExplainability
+              discoverySources={bill.discoverySources}
+              discoveryKeywords={bill.discoveryKeywords}
+              analysisMeta={bill.analysisMeta}
+            />
           </Block>
 
           {/* Gemini summary (pre-generated during morning sync) */}

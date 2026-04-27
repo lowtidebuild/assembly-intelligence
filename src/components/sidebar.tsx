@@ -25,6 +25,7 @@ import {
   MessagesSquare,
   Settings,
   Bell,
+  Activity,
   LogOut,
   X,
 } from "lucide-react";
@@ -107,6 +108,12 @@ function buildItems(counts: SidebarCounts): NavItem[] {
       href: "/alerts",
       label: "알림",
       icon: Bell,
+    },
+    {
+      section: "system",
+      href: "/health",
+      label: "상태",
+      icon: Activity,
     },
     {
       section: "system",
