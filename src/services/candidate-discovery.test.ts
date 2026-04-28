@@ -143,6 +143,26 @@ describe("discoverBillCandidates", () => {
     });
   });
 
+  it("uses a conservative default cap when maxCandidates is omitted", async () => {
+    callMcpToolOrThrow.mockResolvedValueOnce({
+      items: Array.from({ length: 25 }, (_, index) =>
+        makeBill({
+          의안ID: `PRC_GAME_${index}`,
+          의안명: `게임산업 이용자 보호 법률안 ${index}`,
+        }),
+      ),
+    });
+
+    const result = await discoverBillCandidates({
+      committeeCodes: ["문화체육관광위원회"],
+      keywords: ["게임산업"],
+      pageSize: 100,
+    });
+
+    expect(result.candidates).toHaveLength(20);
+    expect(result.droppedByLimit).toBe(5);
+  });
+
   it("adds law-mixin title searches and keeps source provenance on duplicates", async () => {
     const ecommerceBill = makeBill({
       의안ID: "PRC_ECOM",

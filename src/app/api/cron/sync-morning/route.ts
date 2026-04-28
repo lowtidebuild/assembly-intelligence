@@ -35,8 +35,9 @@ import { demoGuardResponse } from "@/lib/demo-mode";
 //   - ~5 Gemini Flash score+summary per matched bill — ~15s
 //   - 1 Gemini Pro briefing generation — ~10s
 //   - 1 schedule fetch — ~3s
-// Worst case ~60s when legislators need refresh. Use 60s + Pro plan.
-export const maxDuration = 60;
+// Recent MCP latency can push even capped runs past 60s; keep the
+// cron on the longer Node function budget and cap candidates upstream.
+export const maxDuration = 300;
 
 /**
  * Select scorer/generator based on env. If GEMINI_API_KEY is missing

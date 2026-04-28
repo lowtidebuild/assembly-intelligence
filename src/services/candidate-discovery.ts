@@ -7,6 +7,7 @@ const CURRENT_ASSEMBLY_AGE = 22;
 const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_MAX_PAGES_PER_COMMITTEE = 2;
 const DEFAULT_MAX_MIXIN_QUERIES = 16;
+const DEFAULT_MAX_CANDIDATES = 20;
 
 /** `assembly_bill` search mode — list item. */
 export interface McpBillListItem {
@@ -143,7 +144,8 @@ export async function discoverBillCandidates(
     );
   const maxCandidates =
     optionalPositiveInt(input.maxCandidates) ??
-    optionalPositiveInt(Number(process.env.BILL_DISCOVERY_MAX_CANDIDATES));
+    optionalPositiveInt(Number(process.env.BILL_DISCOVERY_MAX_CANDIDATES)) ??
+    DEFAULT_MAX_CANDIDATES;
   const candidateCutoffDate = candidateCutoffDays
     ? isoDateDaysAgo(candidateCutoffDays)
     : null;
