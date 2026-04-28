@@ -14,6 +14,7 @@
  * stay aligned with the generated HTML/counts for that morning.
  */
 
+import Link from "next/link";
 import { db } from "@/db";
 import {
   bill,
@@ -44,6 +45,7 @@ import { buildTranscriptSnippet } from "@/lib/transcript-parser";
 import { loadRecentNews } from "@/services/news-sync";
 import { loadRecentTranscriptHits } from "@/services/transcript-sync";
 import { cn } from "@/lib/utils";
+import { billHref } from "@/lib/routes";
 import { isDemoMode } from "@/lib/demo-mode";
 import {
   flattenErrorText,
@@ -915,7 +917,10 @@ function NewBillRow({
   const proposalDate = formatMonthDay(b.proposalDate);
 
   return (
-    <div className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[13px]">
+    <Link
+      href={billHref(b.id)}
+      className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[13px] transition-colors hover:bg-[var(--color-surface-2)]"
+    >
       {proposalDate && (
         <span className="shrink-0 rounded-[4px] bg-[var(--color-surface-2)] px-[7px] py-[2px] font-mono text-[11px] font-semibold text-[var(--color-text-secondary)]">
           {proposalDate}
@@ -930,7 +935,7 @@ function NewBillRow({
           <PartyBadge party={b.proposerParty} className="ml-1" />
         )}
       </span>
-    </div>
+    </Link>
   );
 }
 

@@ -19,6 +19,7 @@ import {
 import { isDemoMode } from "@/lib/demo-mode";
 import { DemoWatchToggleRow } from "@/components/demo-watch-controls";
 import { LegislatorAvatar } from "@/components/legislator-avatar";
+import { billHref } from "@/lib/routes";
 
 export async function LegislatorProfileSlideOver({
   legislatorId,
@@ -221,7 +222,7 @@ export async function LegislatorProfileSlideOver({
                     className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2"
                   >
                     <Link
-                      href={`/radar?bill=${entry.id}`}
+                      href={billHref(entry.id)}
                       className="block text-[12px] font-medium text-[var(--color-text)] hover:text-[var(--color-primary)]"
                     >
                       {entry.billName}

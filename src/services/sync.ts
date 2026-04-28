@@ -68,6 +68,7 @@ import { errorMessage } from "@/lib/api-base";
 import type { BodyFetchStatus, EvidenceLevel, EvidenceMeta } from "@/lib/evidence";
 import type { DailyBriefingContent } from "@/lib/daily-briefing-content";
 import { decodeHtmlEntities } from "@/lib/html-entities";
+import { billHref } from "@/lib/routes";
 import { getPreset } from "@/lib/industry-presets";
 import { evaluateKeywordRelevance } from "@/lib/keyword-relevance";
 import {
@@ -845,7 +846,7 @@ async function persistEveningStageTransition(
     billId: tracked.id,
     title: "법안 단계 변경",
     message,
-    href: `/radar?bill=${tracked.id}`,
+    href: billHref(tracked.id),
     meta: buildAlertMeta([tracked.billName, description]),
     severity: newStage === "stage_4" || newStage === "stage_5" ? "warning" : "info",
   });
@@ -914,7 +915,7 @@ async function createMorningSummaryAlerts(input: {
         billId: row.id,
         title: "신규 핵심 법안",
         message: row.billName,
-        href: `/radar?bill=${row.id}`,
+        href: billHref(row.id),
         meta: buildAlertMeta([
           row.billNumber ? `의안번호 ${row.billNumber}` : null,
           row.committee,

@@ -137,14 +137,13 @@ async function main() {
       "Radar page filtered to stage_2 (상임위 심사)",
     );
 
-    console.log("\n── 7. radar slide-over opened ──");
-    // Click the first bill name in the table
-    await page.goto(`${BASE_URL}/radar?bill=1`);
+    console.log("\n── 7. bill detail page ──");
+    await page.goto(`${BASE_URL}/bills/1`);
     await page.waitForLoadState("networkidle");
     await snap(
       page,
-      "07-radar-slide-over",
-      "Bill slide-over panel with AI summary + relevance reasoning + company impact editor",
+      "07-bill-detail",
+      "Canonical bill detail page with AI summary + relevance reasoning + company impact editor",
     );
 
     console.log("\n── 8. impact page empty picker ──");

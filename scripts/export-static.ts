@@ -45,7 +45,7 @@ interface ExportTarget {
 const TARGETS: ExportTarget[] = [
   { path: "/briefing", name: "briefing", description: "브리핑봇 — 오늘의 핵심 법안 + Gemini 일일 브리핑 + 관련 뉴스" },
   { path: "/radar", name: "radar", description: "입법 레이더 — 필터 가능 법안 테이블" },
-  { path: "/radar?bill=1", name: "radar-slide-over", description: "입법 레이더 — 슬라이드오버 패널 열린 상태" },
+  { path: "/bills/1", name: "bill-detail", description: "법안 상세 — AI 요약, 탐지 이유, 근거 수준, 당사 영향 사항" },
   { path: "/impact", name: "impact-empty", description: "영향 분석기 — 법안 선택 전 empty state" },
   { path: "/impact?bill=1", name: "impact-selected", description: "영향 분석기 — 법안 선택 + 분석 셸" },
   { path: "/assembly", name: "assembly", description: "국회 현황 — 295명 의석 배치도 (wedge layout)" },
@@ -155,7 +155,7 @@ function stripScripts(html: string): string {
  * Rewrite internal navigation hrefs so clicking links in the
  * exported HTML goes to sibling static files. For example:
  *   <a href="/radar">  →  <a href="radar.html">
- *   <a href="/radar?bill=1">  →  <a href="radar-slide-over.html">
+ *   <a href="/bills/1">  →  <a href="bill-detail.html">
  *
  * Anything we didn't export gets a noop href="#".
  */

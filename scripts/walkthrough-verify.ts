@@ -46,11 +46,11 @@ async function main() {
       fullPage: true,
     });
 
-    console.log("── radar slide-over (after) ──");
-    await page.goto(`${BASE_URL}/radar?bill=1`);
+    console.log("── bill detail page (after) ──");
+    await page.goto(`${BASE_URL}/bills/1`);
     await page.waitForLoadState("networkidle");
     await page.screenshot({
-      path: resolve(OUT_DIR, "07-radar-slide-over.png"),
+      path: resolve(OUT_DIR, "07-bill-detail.png"),
       fullPage: true,
     });
 

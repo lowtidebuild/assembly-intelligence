@@ -37,7 +37,7 @@ interface PageSpec {
 const PAGES: PageSpec[] = [
   { slug: "briefing", filename: "briefing.html", label: "브리핑봇", group: "primary" },
   { slug: "radar", filename: "radar.html", label: "입법 레이더", group: "primary" },
-  { slug: "radar-slide-over", filename: "radar-slide-over.html", label: "레이더 상세", group: "variant" },
+  { slug: "bill-detail", filename: "bill-detail.html", label: "법안 상세", group: "variant" },
   { slug: "impact-empty", filename: "impact-empty.html", label: "영향 분석기 (빈)", group: "variant" },
   { slug: "impact-selected", filename: "impact-selected.html", label: "영향 분석기", group: "primary" },
   { slug: "watch", filename: "watch.html", label: "의원 워치", group: "primary" },

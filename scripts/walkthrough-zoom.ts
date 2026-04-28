@@ -90,14 +90,13 @@ async function main() {
     // Table region
     await shoot(page.locator("table"), "r02-table", "Bills table with sort headers");
 
-    // Radar with slide-over open
-    await page.goto(`${BASE_URL}/radar?bill=1`);
-    await page.waitForSelector("aside");
-    // Slide-over panel
+    // Canonical bill detail page
+    await page.goto(`${BASE_URL}/bills/1`);
+    await page.waitForLoadState("networkidle");
     await shoot(
-      page.locator('aside[class*="fixed right-0"]').first(),
-      "r03-slide-over",
-      "Slide-over panel with editors",
+      page.locator("main").first(),
+      "r03-bill-detail",
+      "Bill detail page with evidence and actions",
     );
 
     // ── Impact page ──

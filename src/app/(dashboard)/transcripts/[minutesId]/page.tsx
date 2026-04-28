@@ -8,6 +8,7 @@ import { LegislatorAvatar } from "@/components/legislator-avatar";
 import { flattenErrorText } from "@/lib/db-compat";
 import { getDemoBills, getDemoTranscriptByMinutesId } from "@/lib/demo-content";
 import { isDemoMode } from "@/lib/demo-mode";
+import { billHref } from "@/lib/routes";
 import { loadTranscriptByMinutesId } from "@/services/transcript-sync";
 import { ExternalLink } from "lucide-react";
 
@@ -206,10 +207,10 @@ export default async function TranscriptDetailPage(props: {
                         <>
                           <span>·</span>
                           <Link
-                            href={`/radar?bill=${localBill.id}`}
+                            href={billHref(localBill.id)}
                             className="font-semibold text-[var(--color-primary)] hover:underline"
                           >
-                            레이더에서 보기
+                            법안 상세
                           </Link>
                         </>
                       )}

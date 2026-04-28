@@ -11,6 +11,7 @@ import type { Bill } from "@/db/schema";
 import Link from "next/link";
 import { StageBadge } from "@/components/stage-badge";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
+import { billHref } from "@/lib/routes";
 import {
   LegislatorImportanceStar,
 } from "@/components/legislator-importance-star";
@@ -67,9 +68,12 @@ export function BillKeyCard({
         {number}
       </div>
       <div className="min-w-0">
-        <div className="mb-1 text-[14px] font-semibold leading-snug text-[var(--color-text)]">
+        <Link
+          href={billHref(bill.id)}
+          className="mb-1 block text-[14px] font-semibold leading-snug text-[var(--color-text)] hover:text-[var(--color-primary)]"
+        >
           {bill.billName}
-        </div>
+        </Link>
         {proposalExcerpt ? (
           <p className="mb-1.5 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
             {proposalExcerpt}

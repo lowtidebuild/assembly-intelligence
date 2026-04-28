@@ -27,6 +27,7 @@ import { flattenErrorText, loadActiveIndustryProfileCompat } from "@/lib/db-comp
 import { buildTranscriptSnippet } from "@/lib/transcript-parser";
 import { summarizeLegislatorIssueSignals } from "@/lib/stance-analysis";
 import { cn } from "@/lib/utils";
+import { billHref } from "@/lib/routes";
 import { loadTranscriptHitsForLegislator } from "@/services/transcript-sync";
 import { ExternalLink, Minus, Plus } from "lucide-react";
 
@@ -251,7 +252,7 @@ export default async function LegislatorDetailPage(props: {
               {sponsoredBills.map((entry) => (
                 <Link
                   key={entry.id}
-                  href={`/radar?bill=${entry.id}`}
+                  href={billHref(entry.id)}
                   className="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-3 transition-colors hover:bg-[var(--color-surface)]"
                 >
                   <div className="min-w-0 flex-1">

@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { LoaderCircle, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { billHref } from "@/lib/routes";
 
 interface SearchResponse {
   legislators: Array<{
@@ -143,7 +144,7 @@ export function SearchCommand() {
 
   async function monitorBill(entry: SearchResponse["bills"][number]) {
     if (entry.id && entry.tracked) {
-      navigate(`/radar?bill=${entry.id}`);
+      navigate(billHref(entry.id));
       return;
     }
 
@@ -177,7 +178,7 @@ export function SearchCommand() {
         );
       }
 
-      navigate(`/radar?bill=${payload.id}`);
+      navigate(billHref(payload.id));
     } catch (error) {
       setActionError(
         error instanceof Error
@@ -198,7 +199,7 @@ export function SearchCommand() {
       return;
     }
     if (item.item.id && item.item.tracked) {
-      navigate(`/radar?bill=${item.item.id}`);
+      navigate(billHref(item.item.id));
       return;
     }
     void monitorBill(item.item);
@@ -327,7 +328,7 @@ export function SearchCommand() {
                     onSelect={() => {
                       if (actionPendingKey === entry.billId) return;
                       if (entry.id && entry.tracked) {
-                        navigate(`/radar?bill=${entry.id}`);
+                        navigate(billHref(entry.id));
                         return;
                       }
                       void monitorBill(entry);
