@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runMorningSync } from "@/services/sync";
 import {
+  assertStubDbWriteAllowed,
   getGeminiBillScorer,
   getGeminiBriefingGenerator,
   shouldUseGeminiOrThrow,
@@ -40,9 +41,8 @@ import { demoGuardResponse } from "@/lib/demo-mode";
 export const maxDuration = 300;
 
 /**
- * Select scorer/generator based on env. If GEMINI_API_KEY is missing
- * we fall back to stubs so dev machines without a key can still run
- * the pipeline end-to-end.
+ * Select scorer/generator based on env. Stub mode is an explicit
+ * local-only opt-in because this endpoint writes analysis output.
  */
 function chooseDeps() {
   if (shouldUseGeminiOrThrow("cron/sync-morning")) {
@@ -52,8 +52,9 @@ function chooseDeps() {
       mode: "gemini" as const,
     };
   }
+  assertStubDbWriteAllowed("cron/sync-morning");
   console.warn(
-    "[cron/sync-morning] GEMINI_API_KEY not set — using stub scorer",
+    "[cron/sync-morning] GEMINI_API_KEY not set — using explicit local stub scorer",
   );
   return {
     scorer: getStubBillScorer(),

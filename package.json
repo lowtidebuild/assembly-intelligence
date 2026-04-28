@@ -17,6 +17,7 @@
     "audit:law-mixins": "tsx scripts/audit-law-mixin-invariants.ts",
     "preflight:schema": "tsx scripts/preflight-schema.ts",
     "backfill:discovery-metadata": "tsx scripts/backfill-discovery-metadata.ts",
+    "repair:stub-ai": "tsx scripts/repair-stub-ai-output.ts",
     "smoke:postdeploy": "tsx scripts/postdeploy-smoke.ts",
     "static:export": "tsx scripts/export-static.ts",
     "static:bundle": "tsx scripts/bundle-static.ts",

@@ -6,6 +6,7 @@ import { callMcpToolOrThrow, hasMcpKey } from "@/lib/mcp-client";
 import { evaluateKeywordRelevance } from "@/lib/keyword-relevance";
 import { mergeKeywordsWithMixins } from "@/lib/law-mixins";
 import {
+  assertStubDbWriteAllowed,
   getGeminiBillScorer,
   shouldUseGeminiOrThrow,
 } from "@/lib/gemini-client";
@@ -194,9 +195,11 @@ function proposerPartyFromDetail(detail: McpBillDetailItem): string | null {
 }
 
 function getBillScorer(): BillScorer {
-  return shouldUseGeminiOrThrow("bill-monitoring.trackBill")
-    ? getGeminiBillScorer()
-    : getStubBillScorer();
+  if (shouldUseGeminiOrThrow("bill-monitoring.trackBill")) {
+    return getGeminiBillScorer();
+  }
+  assertStubDbWriteAllowed("bill-monitoring.trackBill");
+  return getStubBillScorer();
 }
 
 function buildBillRank(query: string, prefixQuery: string): SQL<number> {

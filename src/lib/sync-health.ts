@@ -18,6 +18,9 @@ export interface BillAnalysisMeta {
   unknowns: string[];
   quickAnalysisVersion: string;
   analyzedAt: string;
+  aiMode?: SyncAiMode;
+  repairedAt?: string;
+  repairReason?: string;
 }
 
 export interface SyncQualityMetadata {

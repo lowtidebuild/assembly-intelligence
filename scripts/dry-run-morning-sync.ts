@@ -1,22 +1,46 @@
 /**
- * Dry-run the morning sync pipeline directly, without going through
- * the HTTP cron endpoint.
+ * Run the morning sync pipeline directly, without going through the
+ * HTTP cron endpoint.
  *
- * By default uses real Gemini (if GEMINI_API_KEY is set). Pass
- * `--stub` to force the stub scorer instead (cheaper, zero cost):
+ * This script writes to the configured DATABASE_URL. It requires
+ * `--apply` so it is not mistaken for a no-write dry-run.
  *
- *   pnpm tsx scripts/dry-run-morning-sync.ts          # real Gemini
- *   pnpm tsx scripts/dry-run-morning-sync.ts --stub   # stub
+ *   pnpm tsx scripts/dry-run-morning-sync.ts --apply          # real Gemini
+ *   ALLOW_AI_STUB=1 ALLOW_STUB_DB_WRITE=1 \
+ *     pnpm tsx scripts/dry-run-morning-sync.ts --apply --stub # local stub
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
 async function main() {
-  const useStub =
-    process.argv.includes("--stub") || !process.env.GEMINI_API_KEY;
+  const apply = process.argv.includes("--apply");
+  if (!apply) {
+    console.error(
+      [
+        "Refusing to run: scripts/dry-run-morning-sync.ts writes to DATABASE_URL.",
+        "Re-run with --apply if you intend to write sync output.",
+        "Stub writes also require ALLOW_AI_STUB=1 and ALLOW_STUB_DB_WRITE=1 outside production.",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+
+  const forceStub = process.argv.includes("--stub");
 
   const { runMorningSync } = await import("../src/services/sync");
   const { closeMcp } = await import("../src/lib/mcp-client");
+  const {
+    assertStubDbWriteAllowed,
+    shouldUseGeminiOrThrow,
+  } = await import("../src/lib/gemini-client");
+
+  const useGemini = forceStub
+    ? false
+    : shouldUseGeminiOrThrow("scripts/dry-run-morning-sync");
+  const useStub = !useGemini;
+  if (useStub) {
+    assertStubDbWriteAllowed("scripts/dry-run-morning-sync");
+  }
 
   const { scorer, briefingGenerator, mode } = useStub
     ? await (async () => {

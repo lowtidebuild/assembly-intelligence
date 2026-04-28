@@ -253,12 +253,45 @@ export function hasGeminiApiKey(): boolean {
   return Boolean(process.env.GEMINI_API_KEY?.trim());
 }
 
+export function isProductionRuntime(): boolean {
+  return (
+    process.env.VERCEL_ENV === "production" ||
+    process.env.NODE_ENV === "production"
+  );
+}
+
+export function isAiStubAllowed(): boolean {
+  return process.env.ALLOW_AI_STUB === "1";
+}
+
+export function isStubDbWriteAllowed(): boolean {
+  return (
+    !isProductionRuntime() &&
+    isAiStubAllowed() &&
+    process.env.ALLOW_STUB_DB_WRITE === "1"
+  );
+}
+
+export function assertStubDbWriteAllowed(operation: string): void {
+  if (isStubDbWriteAllowed()) return;
+
+  throw new NonRetryableError(
+    `${operation}: stub DB writes are blocked. Set ALLOW_AI_STUB=1 and ALLOW_STUB_DB_WRITE=1 outside production only if this is intentional.`,
+  );
+}
+
 export function shouldUseGeminiOrThrow(operation: string): boolean {
   if (hasGeminiApiKey()) return true;
 
-  if (process.env.VERCEL_ENV === "production") {
+  if (isProductionRuntime()) {
     throw new NonRetryableError(
       `${operation}: GEMINI_API_KEY is required in production`,
+    );
+  }
+
+  if (!isAiStubAllowed()) {
+    throw new NonRetryableError(
+      `${operation}: GEMINI_API_KEY is not set. Set ALLOW_AI_STUB=1 to use stub mode outside production.`,
     );
   }
 
