@@ -1,8 +1,8 @@
 /**
  * /radar — 입법 레이더.
  *
- * The Excel replacement. Dense table of all bills with filters,
- * sort, and a slide-over detail panel when a row is clicked.
+ * The Excel replacement. Dense table of all bills with filters
+ * and sort. Bill rows link to the canonical /bills/[id] detail page.
  *
  * Filtering is URL-driven so filters are shareable and the server
  * does all the work. Table uses a plain <table> — we'll add
@@ -15,9 +15,8 @@
  *   - cte     : committee exact match
  *   - sort    : date | score | name (prefix "-" for desc)
  *
- * Server component reads ?bill=<id> to decide whether to show the
- * slide-over. The slide-over is a client component for close-button
- * interactivity.
+ * Legacy ?bill=<id> URLs redirect to /bills/[id] so old alerts and
+ * exported links keep working.
  */
 
 import { db } from "@/db";
@@ -31,11 +30,12 @@ import { PageHeader } from "@/components/page-header";
 import { ContextStrip } from "@/components/context-strip";
 import { StageBadge } from "@/components/stage-badge";
 import { RelevanceScoreBadge } from "@/components/relevance-score-badge";
-import { BillSlideOver } from "@/components/bill-slide-over";
 import { LegislatorImportanceStar } from "@/components/legislator-importance-star";
 import { LegislatorProfileSlideOver } from "@/components/legislator-profile-slide-over";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { billHref } from "@/lib/routes";
 import {
   loadCachedImportance,
   loadProposerImportanceMap,
@@ -69,6 +69,9 @@ export default async function RadarPage(props: {
   const cteFilter = sp.cte || "";
   const sort = sp.sort || "-date";
   const selectedBillId = sp.bill ? parseInt(sp.bill, 10) : null;
+  if (selectedBillId && Number.isFinite(selectedBillId)) {
+    redirect(billHref(selectedBillId));
+  }
   const selectedLegislatorId = sp.legislator
     ? Number.parseInt(sp.legislator, 10)
     : null;
@@ -140,28 +143,13 @@ export default async function RadarPage(props: {
         })
         .from(bill)
         .groupBy(bill.committee);
-  const selectedBill = selectedBillId
-    ? rows.find((r) => r.id === selectedBillId) ??
-      (demoMode
-        ? demoBills.find((row) => row.id === selectedBillId) ?? null
-        : await db
-            .select()
-            .from(bill)
-            .where(eq(bill.id, selectedBillId))
-            .then((r) => r[0] ?? null))
-    : null;
   const proposerImportance = await loadProposerImportanceMap(
-    [...rows, ...(selectedBill ? [selectedBill] : [])].map((entry) => ({
+    rows.map((entry) => ({
       name: entry.proposerName,
       party: entry.proposerParty,
     })),
     importanceById,
   );
-  const selectedProposerEntry = selectedBill
-    ? proposerImportance.get(
-        makeProposerKey(selectedBill.proposerName, selectedBill.proposerParty),
-      )
-    : null;
 
   return (
     <>
@@ -229,8 +217,6 @@ export default async function RadarPage(props: {
                   <BillRow
                     key={b.id}
                     bill={b}
-                    selected={b.id === selectedBillId}
-                    searchParams={sp}
                     proposerImportance={
                       proposerImportance.get(makeProposerKey(b.proposerName, b.proposerParty))
                         ?.importance ?? null
@@ -242,22 +228,6 @@ export default async function RadarPage(props: {
           </table>
         </div>
       </div>
-
-      {selectedBill && !selectedLegislatorId && (
-        <BillSlideOver
-          bill={selectedBill}
-          closeHref={buildHref({ ...sp, bill: undefined })}
-          proposerImportance={selectedProposerEntry?.importance ?? null}
-          proposerHref={
-            selectedProposerEntry
-              ? buildHref({
-                  ...sp,
-                  legislator: String(selectedProposerEntry.legislatorId),
-                })
-              : null
-          }
-        />
-      )}
 
       {selectedLegislatorId && (
         <LegislatorProfileSlideOver
@@ -426,22 +396,15 @@ function SortHeader({
 
 function BillRow({
   bill: b,
-  selected,
-  searchParams,
   proposerImportance,
 }: {
   bill: Bill;
-  selected: boolean;
-  searchParams: SearchParams;
   proposerImportance?: ImportanceRecord | null;
 }) {
-  const href = buildHref({ ...searchParams, bill: String(b.id) });
+  const href = billHref(b.id);
   return (
     <tr
-      className={cn(
-        "border-b border-[var(--color-border)] transition-colors last:border-b-0 hover:bg-[var(--color-surface-2)]",
-        selected && "bg-[var(--color-primary-light)] hover:bg-[var(--color-primary-light)]",
-      )}
+      className="border-b border-[var(--color-border)] transition-colors last:border-b-0 hover:bg-[var(--color-surface-2)]"
     >
       <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-[var(--color-text-secondary)]">
         {b.proposalDate
