@@ -60,5 +60,8 @@ docs/demo-deploy-runbook.md
 # Design docs / internal planning (keep local, not public)
 RESUME.md
 design.md
-assembly-intelligence-brainstorm.md
+DESIGN_*.md
+CODEX_REVIEW_*.md
+assembly-intelligence-brainstorm*.md
+docs/TODO.md
 .vercel
