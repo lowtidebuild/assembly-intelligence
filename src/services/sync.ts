@@ -107,6 +107,7 @@ import {
   type SyncAiMode,
   type SyncQualityMetadata,
 } from "@/lib/sync-health";
+import type { AmendmentDelta } from "@/lib/amendment-delta";
 
 /* ─────────────────────────────────────────────────────────────
  * Bill stage enum literal — matches `bill_stage` postgres enum.
@@ -148,6 +149,7 @@ export interface BillScorer {
     analysisKeywords: string[];
     confidence: "low" | "medium" | "high";
     unknowns: string[];
+    amendmentDelta?: AmendmentDelta;
   }>;
 
   scoreBill(input: {
@@ -1148,11 +1150,13 @@ function buildBillAnalysisMeta(input: {
   analysisKeywords: string[];
   confidence: "low" | "medium" | "high";
   unknowns: string[];
+  amendmentDelta?: AmendmentDelta;
 }): BillAnalysisMeta {
   return {
     analysisKeywords: input.analysisKeywords,
     confidence: input.confidence,
     unknowns: input.unknowns,
+    ...(input.amendmentDelta ? { amendmentDelta: input.amendmentDelta } : {}),
     quickAnalysisVersion: QUICK_ANALYSIS_PROMPT_VERSION,
     analyzedAt: new Date().toISOString(),
   };

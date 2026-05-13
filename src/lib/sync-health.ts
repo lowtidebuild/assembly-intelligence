@@ -1,5 +1,6 @@
 import type { BodyFetchStatus, EvidenceLevel } from "@/lib/evidence";
 import type { GeminiUsageStats } from "@/lib/gemini-client";
+import type { AmendmentDelta } from "@/lib/amendment-delta";
 import type { DiscoverySource } from "@/services/candidate-discovery";
 
 export type SyncAiMode = "gemini" | "stub";
@@ -16,6 +17,7 @@ export interface BillAnalysisMeta {
   analysisKeywords: string[];
   confidence: "low" | "medium" | "high";
   unknowns: string[];
+  amendmentDelta?: AmendmentDelta;
   quickAnalysisVersion: string;
   analyzedAt: string;
   aiMode?: SyncAiMode;

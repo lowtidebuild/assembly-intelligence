@@ -55,6 +55,13 @@ import {
   type BillAnalysisInput,
 } from "@/lib/prompts/bill-analysis";
 import {
+  AMENDMENT_CHANGE_TYPES,
+  AMENDMENT_DELTA_SOURCES,
+  AMENDMENT_DELTA_VERSION,
+  ensureAmendmentDelta,
+  type AmendmentDelta,
+} from "@/lib/amendment-delta";
+import {
   dailyBriefingContentSchema,
   renderDailyBriefingContentHtml,
 } from "@/lib/daily-briefing-content";
@@ -413,8 +420,89 @@ const quickAnalysisResultSchema = z.object({
   analysisKeywords: z.array(z.string()).default([]),
   confidence: z.enum(["low", "medium", "high"]),
   unknowns: z.array(z.string()).default([]),
+  amendmentDelta: z.unknown().optional(),
 });
-export type QuickAnalysisResult = z.infer<typeof quickAnalysisResultSchema>;
+export type QuickAnalysisResult = Omit<
+  z.infer<typeof quickAnalysisResultSchema>,
+  "amendmentDelta"
+> & {
+  amendmentDelta?: AmendmentDelta;
+};
+
+const amendmentDeltaResponseSchema: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    version: {
+      type: Type.STRING,
+      format: "enum",
+      enum: [AMENDMENT_DELTA_VERSION],
+      description: "Schema version",
+    },
+    source: {
+      type: Type.STRING,
+      format: "enum",
+      enum: [...AMENDMENT_DELTA_SOURCES],
+      description: "Source used for the amendment delta",
+    },
+    changeTypes: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.STRING,
+        format: "enum",
+        enum: [...AMENDMENT_CHANGE_TYPES],
+      },
+    },
+    affectedArticles: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "Affected article references such as 안 제11조의2",
+    },
+    keyChanges: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "Concrete changes introduced by this amendment",
+    },
+    affectedParties: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "Regulated or affected parties",
+    },
+    operationalImpacts: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+    },
+    complianceImpacts: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+    },
+    financialImpacts: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+    },
+    unknowns: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+    },
+    confidence: {
+      type: Type.STRING,
+      format: "enum",
+      enum: ["low", "medium", "high"],
+    },
+  },
+  required: [
+    "version",
+    "source",
+    "changeTypes",
+    "affectedArticles",
+    "keyChanges",
+    "affectedParties",
+    "operationalImpacts",
+    "complianceImpacts",
+    "financialImpacts",
+    "unknowns",
+    "confidence",
+  ],
+};
 
 const quickAnalysisResponseSchema: Schema = {
   type: Type.OBJECT,
@@ -449,6 +537,7 @@ const quickAnalysisResponseSchema: Schema = {
       items: { type: Type.STRING },
       description: "Missing evidence or items that cannot be confirmed",
     },
+    amendmentDelta: amendmentDeltaResponseSchema,
   },
   required: [
     "score",
@@ -644,12 +733,26 @@ export function getGeminiBillScorer(): BillScorer {
       operation: "gemini.analyzeBillQuick",
     });
 
-    return parseGeminiJson(
+    const parsed = parseGeminiJson(
       raw,
       quickAnalysisResultSchema,
       "gemini.analyzeBillQuick",
       "Gemini quick analysis",
     );
+    const { amendmentDelta: rawAmendmentDelta, ...base } = parsed;
+    const amendmentDelta = ensureAmendmentDelta(
+      {
+        billName: input.billName,
+        proposalReason: input.proposalReason,
+        mainContent: input.mainContent,
+      },
+      rawAmendmentDelta,
+    );
+
+    return {
+      ...base,
+      ...(amendmentDelta ? { amendmentDelta } : {}),
+    };
   }
 
   async function summarizeBillLegacy(

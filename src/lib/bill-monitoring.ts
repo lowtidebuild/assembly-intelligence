@@ -384,6 +384,9 @@ export async function trackBillForActiveProfile(
     analysisKeywords: quickAnalysis.analysisKeywords,
     confidence: quickAnalysis.confidence,
     unknowns: quickAnalysis.unknowns,
+    ...(quickAnalysis.amendmentDelta
+      ? { amendmentDelta: quickAnalysis.amendmentDelta }
+      : {}),
     quickAnalysisVersion: QUICK_ANALYSIS_PROMPT_VERSION,
     analyzedAt: new Date().toISOString(),
   };

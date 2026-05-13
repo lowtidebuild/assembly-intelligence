@@ -20,7 +20,7 @@ describe("buildAnalysisCacheKey", () => {
     ).not.toBe(
       buildAnalysisCacheKey({
         ...base,
-        promptVersion: "quick-analysis-v2",
+        promptVersion: "quick-analysis-v1",
       }),
     );
   });
@@ -52,6 +52,6 @@ describe("buildAnalysisCacheKey", () => {
         activeProfileUpdatedAt: null,
         promptVersion: QUICK_ANALYSIS_PROMPT_VERSION,
       }),
-    ).toBe("quick-analysis-v1:PRC_1:no-body:unknown-profile");
+    ).toBe("quick-analysis-v2:PRC_1:no-body:unknown-profile");
   });
 });

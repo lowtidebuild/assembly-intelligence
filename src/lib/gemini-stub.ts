@@ -22,6 +22,7 @@ import {
   buildFallbackDailyBriefingContent,
   renderDailyBriefingContentHtml,
 } from "@/lib/daily-briefing-content";
+import { buildRuleBasedAmendmentDelta } from "@/lib/amendment-delta";
 
 /**
  * Stub scorer — assigns score 3 to everything, no real LLM calls.
@@ -33,6 +34,11 @@ export function getStubBillScorer(): BillScorer {
       const firstLine = (input.proposalReason || input.mainContent || "")
         .split("\n")[0]
         .slice(0, 200);
+      const amendmentDelta = buildRuleBasedAmendmentDelta({
+        billName: input.billName,
+        proposalReason: input.proposalReason,
+        mainContent: input.mainContent,
+      });
       return {
         score: 3,
         reasoning: `[STUB] No Gemini call made. Title: ${input.billName}`,
@@ -43,6 +49,7 @@ export function getStubBillScorer(): BillScorer {
           input.proposalReason || input.mainContent
             ? []
             : ["제안이유 및 주요내용 미확보"],
+        ...(amendmentDelta ? { amendmentDelta } : {}),
       };
     },
     async scoreBill(input) {

@@ -5,6 +5,11 @@ import { StageBadge } from "@/components/stage-badge";
 import { CompanyImpactEditor } from "@/components/company-impact-editor";
 import { DetectionExplainability } from "@/components/detection-explainability";
 import { EvidenceBadge, EvidenceMetaList } from "@/components/evidence-badge";
+import {
+  AmendmentDeltaImpact,
+  AmendmentDeltaSummary,
+} from "@/components/amendment-delta-panel";
+import { hasUsefulAmendmentDelta } from "@/lib/amendment-delta";
 import { billImpactHref } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { BarChart3, ExternalLink } from "lucide-react";
@@ -25,6 +30,8 @@ export function BillDetailContent({
   variant?: "page" | "panel";
 }) {
   const isPage = variant === "page";
+  const amendmentDelta = bill.analysisMeta?.amendmentDelta ?? null;
+  const showAmendmentDelta = hasUsefulAmendmentDelta(amendmentDelta);
 
   return (
     <div
@@ -35,6 +42,18 @@ export function BillDetailContent({
     >
       <div className="space-y-5">
         <Facts bill={bill} variant={variant} />
+
+        {showAmendmentDelta && (
+          <Block label="이번 개정 핵심" sublabel="개정안 변경점">
+            <AmendmentDeltaSummary delta={amendmentDelta} />
+          </Block>
+        )}
+
+        {showAmendmentDelta && (
+          <Block label="실무 영향" sublabel="운영·준법·비용">
+            <AmendmentDeltaImpact delta={amendmentDelta} />
+          </Block>
+        )}
 
         <Block label="AI 요약" sublabel="Gemini Flash">
           {bill.summaryText ? (

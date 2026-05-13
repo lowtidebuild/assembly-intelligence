@@ -29,6 +29,7 @@ describe("prompt contract snapshots", () => {
           "analysisKeywords",
           "confidence",
           "unknowns",
+          "amendmentDelta",
         ],
         "sections": [
           "## 근거 수준",

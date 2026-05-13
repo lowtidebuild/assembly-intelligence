@@ -10,7 +10,7 @@ import {
   type EvidenceMeta,
 } from "@/lib/evidence";
 
-export const QUICK_ANALYSIS_PROMPT_VERSION = "quick-analysis-v1";
+export const QUICK_ANALYSIS_PROMPT_VERSION = "quick-analysis-v2";
 
 export interface BillQuickAnalysisInput {
   billName: string;
@@ -97,12 +97,29 @@ ${JSON.stringify(sourceData, null, 2)}
   "summary": "<무엇을 바꾸려는 법안인지 쉬운 한국어 2-3문장>",
   "analysisKeywords": ["<판단에 실제로 사용한 키워드>"],
   "confidence": "<low|medium|high>",
-  "unknowns": ["<본문/구체 조항/시행시점 등 확인 불가 사항>"]
+  "unknowns": ["<본문/구체 조항/시행시점 등 확인 불가 사항>"],
+  "amendmentDelta": {
+    "version": "v1",
+    "source": "<proposal_reason|main_content>",
+    "changeTypes": ["<신설|개정|삭제|의무화|지원|처벌|절차|정의|권한>"],
+    "affectedArticles": ["<안 제11조의2 등 원문에서 확인되는 조문>"],
+    "keyChanges": ["<이번 개정으로 실제 바뀌는 사항 1문장>"],
+    "affectedParties": ["<직접 영향을 받는 주체>"],
+    "operationalImpacts": ["<운영 프로세스 영향>"],
+    "complianceImpacts": ["<준법/신고/공시/제재 영향>"],
+    "financialImpacts": ["<비용/지원/예산 영향>"],
+    "unknowns": ["<시행일/하위법령/제재 등 확인 필요 사항>"],
+    "confidence": "<low|medium|high>"
+  }
 }
 
 ## 작성 원칙
 - 본문이 없으면 unknowns에 "제안이유 및 주요내용 미확보"를 포함할 것.
+- 본문이 없으면 amendmentDelta 필드는 생략할 것.
 - 본문이 없으면 reasoning/summary에서 구체 조항, 기한, 과태료, 신고/보고 의무를 단정하지 말 것.
 - summary 첫 문장은 이 법안이 무엇을 바꾸려는지, 두 번째 문장은 왜 중요한지에 집중할 것.
+- amendmentDelta는 기존 법 전체 설명이 아니라 "이번 일부개정안이 바꾸는 조문/의무/절차"만 적을 것.
+- affectedArticles는 원문에 나온 "안 제..." 조문만 쓰고, 없으면 빈 배열로 둘 것.
+- keyChanges는 원문에서 확인되는 변경 사항만 3-5개 이하로 쓰고 추정하지 말 것.
 - "주의가 필요합니다" 같은 빈 결론 대신 구체적인 확인/모니터링 이유를 쓸 것.`;
 }
