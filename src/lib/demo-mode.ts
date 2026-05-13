@@ -1,5 +1,5 @@
 /**
- * Demo mode — single env var controls read-only public access.
+ * Demo mode — single env var controls read-only access.
  *
  * When DEMO_MODE=true:
  *   - Middleware skips authentication (no login required)
@@ -7,8 +7,7 @@
  *   - API POST/PUT/DELETE routes return 403
  *   - Edit buttons are hidden or disabled in the UI
  *
- * This lets us deploy a public-facing demo that shares the same
- * DB as production (read-only) without risk of data corruption.
+ * This keeps read-only environments from mutating shared data.
  */
 
 export function isDemoMode(): boolean {

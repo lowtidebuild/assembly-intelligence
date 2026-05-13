@@ -18,6 +18,7 @@ import { verifyCronRequest } from "@/lib/cron-auth";
 import { demoGuardResponse } from "@/lib/demo-mode";
 
 export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const blocked = demoGuardResponse();

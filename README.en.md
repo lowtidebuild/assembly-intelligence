@@ -5,13 +5,8 @@
   AI-powered bill tracking, legislator profiling, and automated daily GR/PA briefings
 </p>
 
-<p align="center">
-  <a href="https://assembly-intelligence-demo.vercel.app"><img src="https://img.shields.io/badge/Live_Demo-Try_Now-blue?style=for-the-badge" alt="Live Demo" /></a>
-  <a href="https://lowtidebuild.github.io/assembly-intelligence/"><img src="https://img.shields.io/badge/Static_Demo-GitHub_Pages-green?style=for-the-badge" alt="Static Demo" /></a>
-</p>
-
 > This English page is based on the Korean README. The Korean README remains the default/canonical version: [README.md](./README.md)<br/>
-> The app UI and public demos are currently available in Korean only.
+> The app UI is currently available in Korean only.
 
 ---
 
@@ -26,35 +21,6 @@
 The core experience is simple: when your team opens the dashboard in the morning, you should immediately see the bills, lawmakers, transcript mentions, public notices, and press releases that matter to your industry in one connected workflow. The current app runs against the latest upstream `full` profile, and `/settings` also shows readiness for `research_data`, `assembly_org(type=lawmaking)`, and `get_nabo`.
 
 **One-line summary**: when you arrive at work each morning, the dashboard tells you which new bills may affect your industry, with AI doing the first round of triage.
-
----
-
-## Live Demo
-
-<table>
-<tr>
-<td width="50%">
-
-### Demo App (read-only)
-**[assembly-intelligence-demo.vercel.app](https://assembly-intelligence-demo.vercel.app)**
-
-Open access with no password. You can explore the product using real data.
-Only write actions such as adding watches or generating new AI analyses are disabled.
-
-</td>
-<td width="50%">
-
-### Static Snapshot
-**[lowtidebuild.github.io/assembly-intelligence](https://lowtidebuild.github.io/assembly-intelligence/)**
-
-A single HTML artifact with 13 pages you can browse as tabs.
-Works offline and does not require a server.
-
-</td>
-</tr>
-</table>
-
----
 
 ## Screenshots
 
@@ -138,9 +104,6 @@ Automatically calculated from committee relevance, primary-sponsored bills in th
 ### Legislator profiles
 All 295 current members of the 22nd National Assembly. Stable tracking based on `MONA_CD`. Includes Chinese-character name, English name, email, office, aides, biography, and related bills.
 
-### Read-only demo mode
-Deploy a public demo with a single env var: `DEMO_MODE=true`. Read access is open, while writes and API-triggering actions are fully blocked.
-
 </td>
 </tr>
 </table>
@@ -156,7 +119,7 @@ Deploy a public demo with a single env var: `DEMO_MODE=true`. Read access is ope
 | **AI** | Gemini 2.5 Flash (scoring), Gemini 3.1 Pro (briefing, deep analysis) |
 | **Data Source** | [assembly-api-mcp](https://github.com/hollobit/assembly-api-mcp) (MCP Streamable HTTP, configurable `full` profile) |
 | **News** | Naver News Search API |
-| **Hosting** | Vercel (App + Cron), Neon (DB), GitHub Pages (static demo) |
+| **Hosting** | Vercel (App + Cron), Neon (DB) |
 | **Auth** | HMAC-signed cookie (Edge middleware, 7-day session) |
 
 ---
@@ -164,8 +127,6 @@ Deploy a public demo with a single env var: `DEMO_MODE=true`. Read access is ope
 ## Quick Start
 
 > Detailed guide for non-developers (Korean): [docs/setup-guide.md](./docs/setup-guide.md)
->
-> Demo/production redeploy instructions are kept in an internal runbook.
 
 ### 1. Environment variables
 
@@ -183,8 +144,10 @@ NAVER_CLIENT_SECRET=...                # Naver Developers
 APP_PASSWORD=...                       # login password (any string)
 ```
 
-`ASSEMBLY_API_MCP_KEY` is **not required if you are only running a mock-data or read-only demo**.
-If the database is already populated and the app only needs to read existing data, the public demo should still boot without it. However, you do need the key for **live MCP-backed features** such as `/setup`, manual or automated sync, and MCP capability probes.
+`ASSEMBLY_API_MCP_KEY` is required for **live MCP-backed features** such as
+`/setup`, manual or automated sync, and MCP capability probes. Some pages may open
+without it when you are only reading from an already-populated local database, but
+production should have the key configured.
 
 If `ASSEMBLY_API_MCP_BASE_URL` is empty, the app uses the public upstream server (`assembly-api-mcp.fly.dev`). Optional sources such as `lawmaking` and `NABO` are controlled by **the target MCP server's own configuration**, not the app env. In other words, the server must already have credentials such as `LAWMKING_OC` and `NABO_API_KEY` configured before those sources become available.
 
@@ -193,8 +156,7 @@ If `ASSEMBLY_API_MCP_BASE_URL` is empty, the app uses the public upstream server
 ```bash
 pnpm ci:check          # typecheck + lint + test + build
 pnpm preflight:schema  # verify required latest columns exist
-pnpm smoke:postdeploy  # smoke-check core routes after main/demo deploy
-pnpm static:refresh    # refresh examples/*.html + examples/app.html + docs/index.html
+pnpm smoke:postdeploy  # smoke-check core routes after production deploy
 ```
 
 ### 2. Install dependencies + run DB migrations

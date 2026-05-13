@@ -8,7 +8,10 @@ export const dailyBriefingContentSchema = z.object({
       z.object({
         text: z.string().min(1),
         severity: z.enum(["watch", "action", "info"]),
-        billId: z.number().int().optional(),
+        billId: z.preprocess(
+          (value) => (value === null ? undefined : value),
+          z.number().int().optional(),
+        ),
       }),
     )
     .default([]),

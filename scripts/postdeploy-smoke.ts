@@ -3,8 +3,6 @@ config({ path: ".env.local" });
 
 const MAIN_APP_URL =
   process.env.MAIN_APP_URL ?? "https://assembly-intelligence.vercel.app";
-const DEMO_APP_URL =
-  process.env.DEMO_APP_URL ?? "https://assembly-intelligence-demo.vercel.app";
 const MAIN_APP_PASSWORD = process.env.MAIN_APP_PASSWORD ?? process.env.APP_PASSWORD;
 
 interface CheckResult {
@@ -68,6 +66,19 @@ async function checkMainLogin(baseUrl: string): Promise<CheckResult> {
   return checkHtmlContains(url, "main login", ["ParlaWatch+", "비밀번호"]);
 }
 
+async function checkCronSecretConfigured(baseUrl: string): Promise<CheckResult> {
+  const url = new URL("/api/cron/sync-evening", baseUrl).toString();
+  const response = await requestText(url);
+
+  if (response.status === 401) {
+    return ok("cron auth", "unauthenticated request rejected");
+  }
+  if (response.text.includes("CRON_SECRET not configured")) {
+    return fail("cron auth", "CRON_SECRET is not configured");
+  }
+  return fail("cron auth", `expected 401, got HTTP ${response.status}`);
+}
+
 async function checkMainBriefingWithPassword(
   baseUrl: string,
   password: string,
@@ -115,11 +126,10 @@ async function main() {
 
   console.log("── postdeploy smoke ──");
   console.log(`main: ${MAIN_APP_URL}`);
-  console.log(`demo: ${DEMO_APP_URL}`);
 
   checks.push(await checkHealth(MAIN_APP_URL, "main"));
-  checks.push(await checkHealth(DEMO_APP_URL, "demo"));
   checks.push(await checkMainLogin(MAIN_APP_URL));
+  checks.push(await checkCronSecretConfigured(MAIN_APP_URL));
 
   if (MAIN_APP_PASSWORD) {
     checks.push(await checkMainBriefingWithPassword(MAIN_APP_URL, MAIN_APP_PASSWORD));
@@ -128,26 +138,6 @@ async function main() {
       ok("main briefing", "skipped (MAIN_APP_PASSWORD / APP_PASSWORD not set)"),
     );
   }
-
-  checks.push(
-    await checkHtmlContains(new URL("/briefing", DEMO_APP_URL).toString(), "demo briefing", [
-      "브리핑봇",
-      "Gemini 브리핑",
-    ]),
-  );
-  checks.push(
-    await checkHtmlContains(new URL("/watch", DEMO_APP_URL).toString(), "demo watch", [
-      "의원 워치",
-      "워치리스트",
-    ]),
-  );
-  checks.push(
-    await checkHtmlContains(
-      new URL("/assembly", DEMO_APP_URL).toString(),
-      "demo assembly",
-      ["국회 현황", "본회의장 의석 배치"],
-    ),
-  );
 
   let failed = false;
   for (const result of checks) {

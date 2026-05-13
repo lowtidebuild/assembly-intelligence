@@ -250,7 +250,7 @@ export default async function SettingsPage() {
         <Card icon={<Database className="h-4 w-4" />} title="환경 변수">
           <ul className="grid grid-cols-2 gap-2 text-[12px]">
             <EnvRow label="DATABASE_URL" ok={envStatus.db} />
-            <EnvRow label="ASSEMBLY_API_MCP_KEY (선택)" ok={envStatus.mcp} />
+            <EnvRow label="ASSEMBLY_API_MCP_KEY" ok={envStatus.mcp} />
             <EnvRow label="GEMINI_API_KEY" ok={envStatus.gemini} />
             <EnvRow label="NAVER_CLIENT_*" ok={envStatus.naver} />
             <EnvRow label="CRON_SECRET" ok={envStatus.cronSecret} />
@@ -269,8 +269,8 @@ export default async function SettingsPage() {
           </dl>
           <p className="mt-3 text-[11px] text-[var(--color-text-tertiary)]">
             CRON_SECRET은 프로덕션(Vercel) 환경에서만 필요합니다. 로컬
-            개발에서는 자동 우회됩니다. `ASSEMBLY_API_MCP_KEY`는
-            mock-data/read-only 데모 배포라면 없어도 됩니다.
+            개발에서는 자동 우회됩니다. `ASSEMBLY_API_MCP_KEY`는 setup,
+            sync, capability probe 같은 MCP 기반 기능에 필요합니다.
           </p>
         </Card>
 
@@ -294,7 +294,7 @@ export default async function SettingsPage() {
           ) : (
             <p className="text-[12px] text-[var(--color-text-tertiary)]">
               MCP 키가 없어서 최신 capability probe를 건너뛰었습니다.
-              mock-data/read-only 데모 배포에서는 정상입니다.
+              setup과 sync를 쓰려면 `ASSEMBLY_API_MCP_KEY`를 설정하세요.
             </p>
           )}
         </Card>

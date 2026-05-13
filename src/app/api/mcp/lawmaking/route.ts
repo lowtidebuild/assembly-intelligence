@@ -28,7 +28,7 @@ export async function GET(request: Request) {
         ok: false,
         disabled: true,
         error:
-          "ASSEMBLY_API_MCP_KEY가 없어 lawmaking probe를 건너뛰었습니다. mock-data/read-only 데모에서는 정상입니다.",
+          "ASSEMBLY_API_MCP_KEY가 없어 lawmaking probe를 건너뛰었습니다.",
       },
       { status: 503 },
     );

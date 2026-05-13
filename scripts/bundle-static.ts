@@ -2,8 +2,8 @@
  * Bundle the exported examples/*.html files into a single
  * examples/app.html with JS-based tab navigation.
  *
- * Use case: share ONE file with external reviewers. They open it in
- * any browser, click tabs at the top to switch pages, no server
+ * Use case: keep ONE local HTML snapshot for visual review. Open it
+ * in any browser, click tabs at the top to switch pages, no server
  * required.
  *
  * How it works:
@@ -23,7 +23,7 @@
  * The result is a single ~350 KB HTML file that works offline.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 interface PageSpec {
@@ -51,8 +51,6 @@ const PAGES: PageSpec[] = [
 ];
 
 const EXAMPLES_DIR = resolve("examples");
-const DOCS_DIR = resolve("docs");
-
 function extractCss(html: string): string {
   const m = html.match(/<style data-inlined="true">([\s\S]*?)<\/style>/);
   return m?.[1] ?? "";
@@ -162,7 +160,7 @@ const bundled = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ParlaWatch+ — Interactive Demo</title>
+<title>ParlaWatch+ — Static Snapshot</title>
 <script>
 (function () {
   var STORAGE_KEY = "parlawatch-theme";
@@ -253,7 +251,7 @@ ${css}
 </head>
 <body>
 <div class="bundle-notice">
-  <strong>ParlaWatch+ Interactive Demo</strong> · 정적 스냅샷 ·
+  <strong>ParlaWatch+ Static Snapshot</strong> · 정적 스냅샷 ·
   실제 앱: <code>pnpm install &amp;&amp; pnpm dev</code> →
   <code>localhost:3000</code> ·
   편집/필터 제출/슬라이드오버 닫기 등은 동작하지 않습니다
@@ -342,14 +340,11 @@ ${sections.join("\n\n")}
 </html>`;
 
   const outPath = resolve(EXAMPLES_DIR, "app.html");
-  mkdirSync(DOCS_DIR, { recursive: true });
   writeFileSync(outPath, bundled, "utf-8");
-  writeFileSync(resolve(DOCS_DIR, "index.html"), bundled, "utf-8");
   const bytes = Buffer.byteLength(bundled, "utf-8");
   console.log(
     `\n✅ examples/app.html (${Math.round(bytes / 1024)} KB, ${PAGES.length} pages)`,
   );
-  console.log("   mirrored to docs/index.html");
   console.log(`   open examples/app.html to browse`);
 }
 

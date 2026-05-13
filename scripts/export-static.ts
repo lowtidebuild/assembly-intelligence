@@ -1,7 +1,7 @@
 /**
  * Static HTML export — snapshots every dashboard page as a
  * standalone HTML file with all CSS inlined, for:
- *   1. README examples
+ *   1. Local visual review
  *   2. External feedback review (send a .zip of HTML files)
  *
  * How it works:

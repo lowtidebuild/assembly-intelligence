@@ -39,6 +39,7 @@ import { demoGuardResponse } from "@/lib/demo-mode";
 // Recent MCP latency can push even capped runs past 60s; keep the
 // cron on the longer Node function budget and cap candidates upstream.
 export const maxDuration = 300;
+export const dynamic = "force-dynamic";
 
 /**
  * Select scorer/generator based on env. Stub mode is an explicit

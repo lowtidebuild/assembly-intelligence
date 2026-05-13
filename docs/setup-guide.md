@@ -131,6 +131,7 @@ postgresql://neondb_owner:xxxxxxxx@ep-xxx-xxx.ap-southeast-1.aws.neon.tech/neond
 |---|---|
 | `DATABASE_URL` | Neon → Connection Details → Pooled |
 | `DATABASE_URL_UNPOOLED` | Neon → Connection Details → Direct |
+| `ASSEMBLY_API_MCP_KEY` | assembly-api-mcp API key |
 | `GEMINI_API_KEY` | 3-2에서 발급한 키 |
 | `NAVER_CLIENT_ID` | 3-3에서 발급한 ID |
 | `NAVER_CLIENT_SECRET` | 3-3에서 발급한 Secret |
@@ -146,7 +147,6 @@ postgresql://neondb_owner:xxxxxxxx@ep-xxx-xxx.ap-southeast-1.aws.neon.tech/neond
 |---|---|
 | `MCP_PROFILE` | 기본값은 `full` 권장. 최신 MCP 도구(`research_data`, `get_nabo`)까지 노출 |
 | `ASSEMBLY_API_MCP_BASE_URL` | 공개 upstream 대신 직접 띄운 `assembly-api-mcp` 서버를 붙이고 싶을 때 사용 |
-| `ASSEMBLY_API_MCP_KEY` | 실시간 MCP 호출을 쓸 때만 필요. mock-data/read-only 데모만 띄울 때는 생략 가능 |
 
 > `lawmaking` / `NABO`는 이 앱이 아니라 **대상 MCP 서버** 쪽에 `LAWMKING_OC`, `NABO_API_KEY`가 준비되어 있어야 활성화됩니다.
 
