@@ -61,19 +61,23 @@ export function BillKeyCard({
 }) {
   const proposalDate = formatIsoDate(bill.proposalDate);
   const proposalExcerpt = excerptProposalReason(bill.proposalReason);
+  const href = billHref(bill.id);
 
   return (
-    <div className="grid grid-cols-[24px_1fr_auto] gap-3 rounded-[var(--radius)] border border-l-4 border-[var(--color-border)] border-l-[var(--color-domain)] bg-[var(--color-surface)] p-[13px_15px] shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]">
-      <div className="pt-[2px] text-[13px] font-extrabold text-[var(--color-primary)]">
+    <article className="group relative grid grid-cols-[24px_1fr_auto] gap-3 rounded-[var(--radius)] border border-l-4 border-[var(--color-border)] border-l-[var(--color-domain)] bg-[var(--color-surface)] p-[13px_15px] shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]">
+      <Link
+        href={href}
+        aria-label={`법안 상세 보기: ${bill.billName}`}
+        className="absolute inset-0 z-10 rounded-[var(--radius)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+      />
+
+      <div className="pointer-events-none relative z-20 pt-[2px] text-[13px] font-extrabold text-[var(--color-primary)]">
         {number}
       </div>
-      <div className="min-w-0">
-        <Link
-          href={billHref(bill.id)}
-          className="mb-1 block text-[14px] font-semibold leading-snug text-[var(--color-text)] hover:text-[var(--color-primary)]"
-        >
+      <div className="pointer-events-none relative z-20 min-w-0">
+        <h3 className="mb-1 block text-[14px] font-semibold leading-snug text-[var(--color-text)] transition-colors group-hover:text-[var(--color-primary)]">
           {bill.billName}
-        </Link>
+        </h3>
         {proposalExcerpt ? (
           <p className="mb-1.5 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
             {proposalExcerpt}
@@ -91,7 +95,7 @@ export function BillKeyCard({
             <Link
               href={proposerHref}
               scroll={false}
-              className="inline-flex items-center gap-1 hover:text-[var(--color-primary)]"
+              className="pointer-events-auto relative z-30 inline-flex items-center gap-1 hover:text-[var(--color-primary)]"
             >
               {bill.proposerName}
               <LegislatorImportanceStar
@@ -129,8 +133,10 @@ export function BillKeyCard({
         </div>
       </div>
       {bill.relevanceScore !== null && (
-        <RelevanceScoreBadge score={bill.relevanceScore} />
+        <div className="pointer-events-none relative z-20">
+          <RelevanceScoreBadge score={bill.relevanceScore} />
+        </div>
       )}
-    </div>
+    </article>
   );
 }
