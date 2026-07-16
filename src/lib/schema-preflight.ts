@@ -13,6 +13,7 @@ export interface MissingSchemaColumn {
   column: string;
 }
 
+// Every new migration that adds a table/column consumed by cron paths MUST add an entry here.
 export const EXPECTED_SCHEMA_COLUMNS: ExpectedTable[] = [
   {
     table: "daily_briefing",
@@ -51,6 +52,27 @@ export const EXPECTED_SCHEMA_COLUMNS: ExpectedTable[] = [
   {
     table: "sync_log",
     columns: ["metadata_json"],
+  },
+  {
+    table: "committee_transcript",
+    columns: ["minutes_id", "meeting_name", "full_text", "agenda_items"],
+  },
+  {
+    table: "committee_transcript_utterance",
+    columns: [
+      "transcript_id",
+      "sort_order",
+      "content",
+      "has_keyword_match",
+    ],
+  },
+  {
+    table: "alert",
+    columns: ["type", "title", "message", "severity", "read"],
+  },
+  {
+    table: "industry_bill_watch",
+    columns: ["industry_profile_id", "bill_id"],
   },
 ];
 

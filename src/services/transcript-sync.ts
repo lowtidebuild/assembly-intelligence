@@ -329,7 +329,17 @@ function canonicalizeCommittee(value: string | null | undefined): string | null 
 
 export async function loadRecentTranscripts(limitCount = 20) {
   return db
-    .select()
+    .select({
+      id: committeeTranscript.id,
+      minutesId: committeeTranscript.minutesId,
+      committee: committeeTranscript.committee,
+      meetingName: committeeTranscript.meetingName,
+      meetingDate: committeeTranscript.meetingDate,
+      sessionLabel: committeeTranscript.sessionLabel,
+      place: committeeTranscript.place,
+      utteranceCount: committeeTranscript.utteranceCount,
+      fetchedAt: committeeTranscript.fetchedAt,
+    })
     .from(committeeTranscript)
     .orderBy(desc(committeeTranscript.meetingDate), desc(committeeTranscript.fetchedAt))
     .limit(limitCount);

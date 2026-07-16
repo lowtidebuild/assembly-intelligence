@@ -1,4 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { dbMock, callMcpToolOrThrowMock, insertAlertIfMissingMock } = vi.hoisted(
+  () => ({
+    dbMock: {
+      select: vi.fn(),
+      update: vi.fn(),
+      insert: vi.fn(),
+    },
+    callMcpToolOrThrowMock: vi.fn(),
+    insertAlertIfMissingMock: vi.fn(),
+  }),
+);
+
+vi.mock("@/db", () => ({ db: dbMock }));
+vi.mock("@/lib/mcp-client", () => ({
+  callMcpToolOrThrow: callMcpToolOrThrowMock,
+}));
+vi.mock("@/lib/alerts", () => ({
+  buildAlertMeta: vi.fn(() => []),
+  insertAlertIfMissing: insertAlertIfMissingMock,
+}));
 import { evaluateKeywordRelevance } from "@/lib/keyword-relevance";
 import {
   mergeCommitteesWithMixins,
@@ -9,9 +30,20 @@ import {
   hasPlenarySignal,
   noticeIsRelevant,
   parseVoteResult,
+  EVENING_SYNC_MAX_BILLS,
+  runEveningSync,
+  settleConcurrentScoring,
   stageFromSimsa,
   textIsRelevant,
 } from "@/services/sync";
+
+beforeEach(() => {
+  dbMock.select.mockReset();
+  dbMock.update.mockReset();
+  dbMock.insert.mockReset();
+  callMcpToolOrThrowMock.mockReset();
+  insertAlertIfMissingMock.mockReset();
+});
 
 function makeSimsa(
   overrides: Partial<Exclude<Parameters<typeof stageFromSimsa>[0], undefined>>,
@@ -240,5 +272,113 @@ describe("sync committee fetch pool", () => {
     expect(result).toContain("보건복지위원회");
     expect(result).toContain("정무위원회");
     expect(result).toContain("행정안전위원회");
+  });
+});
+
+describe("runEveningSync working-set bound", () => {
+  it("fetches only the cap, prioritizes watched bills, and reports exact overflow", async () => {
+    const watchedBillId = "WATCHED";
+    const selectedBills = Array.from(
+      { length: EVENING_SYNC_MAX_BILLS },
+      (_, index) => ({
+        id: index + 1,
+        billId: index === 0 ? watchedBillId : `BILL-${index}`,
+        billName: index === 0 ? "watched bill" : `bill ${index}`,
+        stage: "stage_1",
+        relevanceScore: index === 0 ? 1 : 3,
+        lastSynced: new Date(index * 1_000),
+      }),
+    );
+    const limitMock = vi.fn(async () => selectedBills);
+
+    dbMock.select
+      .mockImplementationOnce(() => ({
+        from: () => ({
+          innerJoin: () => ({
+            limit: async () => [{ billId: watchedBillId }],
+          }),
+        }),
+      }))
+      .mockImplementationOnce(() => ({
+        from: () => ({
+          where: async () => [{ count: EVENING_SYNC_MAX_BILLS + 5 }],
+        }),
+      }))
+      .mockImplementationOnce(() => ({
+        from: () => ({
+          where: () => ({
+            orderBy: () => ({ limit: limitMock }),
+          }),
+        }),
+      }));
+
+    callMcpToolOrThrowMock.mockResolvedValue({
+      items: [{ 심사경과: undefined }],
+    });
+    dbMock.update.mockReturnValue({
+      set: () => ({ where: async () => [] }),
+    });
+    dbMock.insert.mockReturnValue({
+      values: () => ({ returning: async () => [{ id: 99 }] }),
+    });
+    insertAlertIfMissingMock.mockResolvedValue(false);
+
+    const result = await runEveningSync();
+
+    expect(limitMock).toHaveBeenCalledWith(EVENING_SYNC_MAX_BILLS);
+    expect(callMcpToolOrThrowMock).toHaveBeenCalledTimes(
+      EVENING_SYNC_MAX_BILLS,
+    );
+    expect(callMcpToolOrThrowMock.mock.calls[0]?.[1]).toEqual({
+      bill_id: watchedBillId,
+    });
+    expect(dbMock.update).toHaveBeenCalledTimes(1);
+    expect(result.billsChecked).toBe(EVENING_SYNC_MAX_BILLS);
+    expect(result.metadata.evening?.droppedByLimit).toBe(5);
+  });
+});
+
+describe("concurrent scoring settlement", () => {
+  it("keeps two successful scores and one bill-specific failure", async () => {
+    const started: string[] = [];
+    let releaseFirst: () => void = () => {};
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    const pending = settleConcurrentScoring([
+      {
+        billId: "BILL-1",
+        run: async () => {
+          started.push("BILL-1");
+          await firstGate;
+          return { score: 5 };
+        },
+      },
+      {
+        billId: "BILL-2",
+        run: async () => {
+          started.push("BILL-2");
+          throw new Error("scorer failed");
+        },
+      },
+      {
+        billId: "BILL-3",
+        run: async () => {
+          started.push("BILL-3");
+          return { score: 3 };
+        },
+      },
+    ]);
+
+    await Promise.resolve();
+    expect(started).toEqual(["BILL-1", "BILL-2", "BILL-3"]);
+    releaseFirst();
+
+    const results = await pending;
+    expect(results.filter(({ result }) => result.status === "fulfilled")).toHaveLength(2);
+    expect(results.filter(({ result }) => result.status === "rejected")).toEqual([
+      expect.objectContaining({ billId: "BILL-2" }),
+    ]);
   });
 });

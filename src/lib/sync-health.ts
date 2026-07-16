@@ -59,6 +59,7 @@ export interface SyncQualityMetadata {
     billsChecked: number;
     stageTransitions: number;
     mcpDetailFailed: number;
+    droppedByLimit: number;
     transitionsBy: Record<BillStageKey, number>;
   };
 }

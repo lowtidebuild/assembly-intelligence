@@ -18,7 +18,47 @@ import {
   buildAuthCookieOptions,
   getAuthMode,
   signToken,
+  timingSafePasswordCompare,
 } from "@/lib/auth";
+
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 10;
+const LOGIN_MAX_TRACKED_IPS = 1_000;
+const failedLoginAttempts = new Map<string, number[]>();
+
+function currentFailures(ip: string, now: number): number[] {
+  const cutoff = now - LOGIN_WINDOW_MS;
+  const recent = (failedLoginAttempts.get(ip) ?? []).filter(
+    (timestamp) => timestamp > cutoff,
+  );
+  if (recent.length === 0) {
+    failedLoginAttempts.delete(ip);
+  } else {
+    failedLoginAttempts.set(ip, recent);
+  }
+  return recent;
+}
+
+export function isLoginRateLimited(ip: string, now = Date.now()): boolean {
+  return currentFailures(ip, now).length >= LOGIN_MAX_FAILURES;
+}
+
+export function recordFailedLoginAttempt(ip: string, now = Date.now()): void {
+  const recent = currentFailures(ip, now);
+  if (!failedLoginAttempts.has(ip) && failedLoginAttempts.size >= LOGIN_MAX_TRACKED_IPS) {
+    const oldestIp = failedLoginAttempts.keys().next().value;
+    if (oldestIp) failedLoginAttempts.delete(oldestIp);
+  }
+  failedLoginAttempts.set(ip, [...recent, now]);
+}
+
+export function clearLoginFailures(ip: string): void {
+  failedLoginAttempts.delete(ip);
+}
+
+function clientIp(req: NextRequest): string {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
 
 /**
  * Only allow same-origin relative paths for the return_to redirect
@@ -69,6 +109,7 @@ async function parseRequest(req: NextRequest): Promise<{
 export async function POST(req: NextRequest) {
   const { password, returnTo } = await parseRequest(req);
   const origin = req.nextUrl.origin;
+  const ip = clientIp(req);
 
   const mode = (() => {
     try {
@@ -90,14 +131,20 @@ export async function POST(req: NextRequest) {
     return res;
   }
 
+  if (isLoginRateLimited(ip)) {
+    return redirectWithError(origin, returnTo, "rate_limited", 429);
+  }
+
   if (!password) {
     return redirectWithError(origin, returnTo, "missing");
   }
 
-  if (password !== mode.password) {
+  if (!(await timingSafePasswordCompare(password, mode.password!))) {
+    recordFailedLoginAttempt(ip);
     return redirectWithError(origin, returnTo, "bad_password");
   }
 
+  clearLoginFailures(ip);
   const token = await signToken(mode.password!);
   const secure = req.nextUrl.protocol === "https:";
 
@@ -113,11 +160,21 @@ function redirectWithError(
   origin: string,
   returnTo: string,
   code: string,
+  status: 303 | 429 = 303,
 ): NextResponse {
   const url = new URL("/login", origin);
   url.searchParams.set("error", code);
   if (returnTo !== "/briefing") {
     url.searchParams.set(RETURN_TO_PARAM, returnTo);
   }
-  return NextResponse.redirect(url, 303);
+  if (status === 429) {
+    return new NextResponse(null, {
+      status,
+      headers: {
+        location: url.toString(),
+        "retry-after": String(Math.ceil(LOGIN_WINDOW_MS / 1000)),
+      },
+    });
+  }
+  return NextResponse.redirect(url, status);
 }

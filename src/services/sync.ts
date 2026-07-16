@@ -126,6 +126,22 @@ type BillStage =
 
 type PersistedEvidenceMeta = EvidenceMeta & Record<string, unknown>;
 
+/**
+ * The evening route is fully serialized by the MCP client. Forty warm calls
+ * leave enough room inside the route's 300-second execution budget.
+ */
+export const EVENING_SYNC_MAX_BILLS = 40;
+
+export async function settleConcurrentScoring<T>(
+  tasks: Array<{ billId: string; run: () => Promise<T> }>,
+): Promise<Array<{ billId: string; result: PromiseSettledResult<T> }>> {
+  const results = await Promise.allSettled(tasks.map((task) => task.run()));
+  return results.map((result, index) => ({
+    billId: tasks[index].billId,
+    result,
+  }));
+}
+
 /* ─────────────────────────────────────────────────────────────
  * Dependency contracts (injected by orchestrator)
  * ────────────────────────────────────────────────────────────── */
@@ -1323,7 +1339,7 @@ export async function runMorningSync(
 
   if (!legislatorsSynced) {
     try {
-      await backfillLegislatorPhotos();
+      await backfillLegislatorPhotos(15);
     } catch (err) {
       errors.push(`legislator_photos: ${errorMessage(err)}`);
     }
@@ -1398,7 +1414,7 @@ export async function runMorningSync(
     }),
   );
 
-  // 7. Score + summarize (sequential — Lane B can parallelize when ready)
+  // 7. Score + summarize. Gemini concurrency stays bounded inside the client.
   type ScoredBill = {
     listItem: McpBillListItem;
     detail: McpBillDetailItem;
@@ -1431,75 +1447,97 @@ export async function runMorningSync(
     existingBodies.map((row) => [row.billId, row]),
   );
 
+  const scoreTargets: Array<{
+    candidate: DiscoveredBillCandidate;
+    listItem: McpBillListItem;
+    detail: McpBillDetailItem;
+  }> = [];
   for (const f of detailFetches) {
     if (f.status !== "fulfilled") {
       errors.push(`detail: ${errorMessage(f.reason)}`);
       continue;
     }
-    const { candidate, listItem, detail } = f.value;
-    try {
-      const existingBody = existingBodyByBillId.get(listItem.의안ID);
-      const billName = detail.의안명 ?? listItem.의안명;
-      const proposerParty = proposerPartyFromDetail(detail);
-      const evidenceResult = await enrichBillEvidence({
-        billId: listItem.의안ID,
-        billName,
-        committee: listItem.소관위원회,
-        proposerName: listItem.대표발의자,
-        proposerParty,
-        proposalDate: listItem.제안일,
-        mcpBody: {
-          proposalReason: detail.제안이유,
-          mainContent: detail.주요내용,
-        },
-        existingBody,
-      });
-      recordEvidenceMetrics(evidenceMetrics, evidenceResult.evidence);
-      if (evidenceResult.bodyFetchError) {
-        errors.push(
-          `body_fetch(${listItem.의안ID}): ${evidenceResult.bodyFetchError}`,
-        );
-      }
-      const { proposalReason, mainContent } = evidenceResult;
-
-      const enrichedDetail: McpBillDetailItem = {
-        ...detail,
-        제안이유: proposalReason,
-        주요내용: mainContent,
-      };
-
-      const quickAnalysis = await deps.scorer.analyzeBillQuick({
-        billName,
-        committee: listItem.소관위원회,
-        proposerName: listItem.대표발의자 ?? "",
-        proposerParty,
-        proposalReason,
-        mainContent,
-        industryName: activeProfile.name,
-        industryContext: activeProfile.llmContext,
-        industryKeywords: keywords,
-        evidence: evidenceResult.evidence,
-      });
-
-      scoredBills.push({
-        listItem,
-        detail: enrichedDetail,
-        score: quickAnalysis.score,
-        reasoning: quickAnalysis.reasoning,
-        summary: quickAnalysis.summary,
-        evidence: evidenceResult.evidence,
-        discoverySources: candidate.discoverySources,
-        discoveryKeywords: candidate.discoveryKeywords,
-        analysisMeta: buildBillAnalysisMeta(quickAnalysis),
-      });
-      billsScored++;
-    } catch (err) {
-      if (err instanceof GeminiParseError) {
-        recordParseFailure(parseFailures, err.operation);
-      }
-      errors.push(`score(${listItem.의안ID}): ${errorMessage(err)}`);
-    }
+    scoreTargets.push(f.value);
   }
+
+  const scoringStartedAt = Date.now();
+  const scoringResults = await settleConcurrentScoring(
+    scoreTargets.map(({ candidate, listItem, detail }) => ({
+      billId: listItem.의안ID,
+      run: async (): Promise<ScoredBill> => {
+        const existingBody = existingBodyByBillId.get(listItem.의안ID);
+        const billName = detail.의안명 ?? listItem.의안명;
+        const proposerParty = proposerPartyFromDetail(detail);
+        const evidenceResult = await enrichBillEvidence({
+          billId: listItem.의안ID,
+          billName,
+          committee: listItem.소관위원회,
+          proposerName: listItem.대표발의자,
+          proposerParty,
+          proposalDate: listItem.제안일,
+          mcpBody: {
+            proposalReason: detail.제안이유,
+            mainContent: detail.주요내용,
+          },
+          existingBody,
+        });
+        recordEvidenceMetrics(evidenceMetrics, evidenceResult.evidence);
+        if (evidenceResult.bodyFetchError) {
+          errors.push(
+            `body_fetch(${listItem.의안ID}): ${evidenceResult.bodyFetchError}`,
+          );
+        }
+        const { proposalReason, mainContent } = evidenceResult;
+        const enrichedDetail: McpBillDetailItem = {
+          ...detail,
+          제안이유: proposalReason,
+          주요내용: mainContent,
+        };
+        const quickAnalysis = await deps.scorer.analyzeBillQuick({
+          billName,
+          committee: listItem.소관위원회,
+          proposerName: listItem.대표발의자 ?? "",
+          proposerParty,
+          proposalReason,
+          mainContent,
+          industryName: activeProfile.name,
+          industryContext: activeProfile.llmContext,
+          industryKeywords: keywords,
+          evidence: evidenceResult.evidence,
+        });
+
+        return {
+          listItem,
+          detail: enrichedDetail,
+          score: quickAnalysis.score,
+          reasoning: quickAnalysis.reasoning,
+          summary: quickAnalysis.summary,
+          evidence: evidenceResult.evidence,
+          discoverySources: candidate.discoverySources,
+          discoveryKeywords: candidate.discoveryKeywords,
+          analysisMeta: buildBillAnalysisMeta(quickAnalysis),
+        };
+      },
+    })),
+  );
+
+  for (const { billId, result } of scoringResults) {
+    if (result.status === "fulfilled") {
+      scoredBills.push(result.value);
+      billsScored++;
+      continue;
+    }
+    if (result.reason instanceof GeminiParseError) {
+      recordParseFailure(parseFailures, result.reason.operation);
+    }
+    errors.push(`score(${billId}): ${errorMessage(result.reason)}`);
+  }
+  console.log(
+    `[sync] scoring completed in ${Date.now() - scoringStartedAt}ms (${scoreTargets.length} targets)`,
+  );
+  scoredBills.sort((left, right) =>
+    left.listItem.의안ID.localeCompare(right.listItem.의안ID),
+  );
 
   // 8. Upsert bills + timeline
   try {
@@ -1753,22 +1791,42 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
     .limit(1000);
 
   const manualBillIds = trackedBills.map((row) => row.billId);
+  const eligibleWhere = and(
+    sql`${bill.stage} != 'stage_6'`,
+    manualBillIds.length > 0
+      ? or(
+          sql`${bill.relevanceScore} >= 3`,
+          inArray(bill.billId, manualBillIds),
+        )
+      : sql`${bill.relevanceScore} >= 3`,
+  );
+
+  const [eligibleCountRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(bill)
+    .where(eligibleWhere);
+
+  const watchedPriority =
+    manualBillIds.length > 0
+      ? sql<number>`CASE WHEN ${inArray(bill.billId, manualBillIds)} THEN 0 ELSE 1 END`
+      : sql<number>`1`;
   const billsToCheck = await db
     .select()
     .from(bill)
-    .where(
-      and(
-        sql`${bill.stage} != 'stage_6'`,
-        manualBillIds.length > 0
-          ? or(
-              sql`${bill.relevanceScore} >= 3`,
-              inArray(bill.billId, manualBillIds),
-            )
-          : sql`${bill.relevanceScore} >= 3`,
-      ),
-    );
+    .where(eligibleWhere)
+    .orderBy(
+      asc(watchedPriority),
+      asc(bill.lastSynced),
+      sql`${bill.relevanceScore} DESC`,
+      asc(bill.id),
+    )
+    .limit(EVENING_SYNC_MAX_BILLS);
+  const droppedByLimit = Math.max(
+    0,
+    (eligibleCountRow?.count ?? billsToCheck.length) - billsToCheck.length,
+  );
 
-  // Parallel fetch (p-limit inside mcp-client caps at 5)
+  // Parallel dispatch; p-limit inside mcp-client caps at 1 — fully serialized.
   const results = await Promise.allSettled(
     billsToCheck.map(async (tracked) => {
       const resp = await callMcpToolOrThrow<McpBillDetailResponse>(
@@ -1781,6 +1839,7 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
     }),
   );
 
+  const unchangedBillIds: number[] = [];
   for (const r of results) {
     billsChecked++;
     if (r.status !== "fulfilled") {
@@ -1790,7 +1849,10 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
     }
     const { tracked, detail } = r.value;
     const newStage = stageFromSimsa(detail.심사경과);
-    if (newStage === tracked.stage) continue;
+    if (newStage === tracked.stage) {
+      unchangedBillIds.push(tracked.id);
+      continue;
+    }
 
     try {
       const persisted = await persistEveningStageTransition(tracked, newStage);
@@ -1806,6 +1868,13 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
     } catch (err) {
       errors.push(`evening(${tracked.billId}): ${errorMessage(err)}`);
     }
+  }
+
+  if (unchangedBillIds.length > 0) {
+    await db
+      .update(bill)
+      .set({ lastSynced: new Date() })
+      .where(inArray(bill.id, unchangedBillIds));
   }
 
   const status: EveningSyncResult["status"] =
@@ -1824,6 +1893,7 @@ export async function runEveningSync(): Promise<EveningSyncResult> {
       billsChecked,
       stageTransitions,
       mcpDetailFailed,
+      droppedByLimit,
       transitionsBy,
     },
   };
@@ -1996,7 +2066,7 @@ export async function syncLegislators(): Promise<number> {
   }
 
   try {
-    await backfillLegislatorPhotos();
+    await backfillLegislatorPhotos(15);
   } catch (err) {
     console.warn("[syncLegislators] photo backfill failed:", errorMessage(err));
   }
@@ -2004,18 +2074,27 @@ export async function syncLegislators(): Promise<number> {
   return inserts.length;
 }
 
-export async function backfillLegislatorPhotos(limitCount = 50): Promise<number> {
+export async function backfillLegislatorPhotos(limitCount = 15): Promise<number> {
   const targets = await db
     .select({
       id: legislator.id,
       name: legislator.name,
       memberId: legislator.memberId,
       photoUrl: legislator.photoUrl,
+      totalMissing: sql<number>`count(*) OVER()::int`,
     })
     .from(legislator)
     .where(and(eq(legislator.isActive, true), sql`${legislator.photoUrl} IS NULL`))
     .orderBy(asc(legislator.seatIndex))
     .limit(limitCount);
+
+  const remaining = Math.max(
+    0,
+    (targets[0]?.totalMissing ?? targets.length) - targets.length,
+  );
+  if (remaining > 0) {
+    console.log(`[sync] photo backfill: ${remaining} remaining`);
+  }
 
   let updated = 0;
   for (const row of targets) {
@@ -2025,7 +2104,7 @@ export async function backfillLegislatorPhotos(limitCount = 50): Promise<number>
       preferMemberPage: true,
     });
     if (!resolved) {
-      await sleep(500);
+      await sleep(250);
       continue;
     }
 
@@ -2035,7 +2114,7 @@ export async function backfillLegislatorPhotos(limitCount = 50): Promise<number>
       .where(eq(legislator.id, row.id));
 
     updated += 1;
-    await sleep(500);
+    await sleep(250);
   }
 
   return updated;
@@ -2312,8 +2391,8 @@ interface ScoredBillForUpsert {
 /**
  * Upsert scored bills into the database.
  *
- * Also seeds `bill_timeline` with a single row for the current stage
- * (evening sync appends more on transitions).
+ * `bill_timeline` is not seeded here. Evening sync records rows only when
+ * it detects an actual stage transition.
  */
 async function upsertBills(scored: ScoredBillForUpsert[]): Promise<number> {
   if (scored.length === 0) return 0;

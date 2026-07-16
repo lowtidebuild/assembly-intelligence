@@ -6,7 +6,7 @@ import {
 } from "@/lib/schema-preflight";
 
 describe("schema preflight helpers", () => {
-  it("tracks new sync health and detection metadata columns", () => {
+  it("tracks schema consumed by sync and cron paths", () => {
     expect(EXPECTED_SCHEMA_COLUMNS).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -25,6 +25,27 @@ describe("schema preflight helpers", () => {
           table: "daily_briefing",
           columns: expect.arrayContaining(["content_json"]),
         }),
+        {
+          table: "committee_transcript",
+          columns: ["minutes_id", "meeting_name", "full_text", "agenda_items"],
+        },
+        {
+          table: "committee_transcript_utterance",
+          columns: [
+            "transcript_id",
+            "sort_order",
+            "content",
+            "has_keyword_match",
+          ],
+        },
+        {
+          table: "alert",
+          columns: ["type", "title", "message", "severity", "read"],
+        },
+        {
+          table: "industry_bill_watch",
+          columns: ["industry_profile_id", "bill_id"],
+        },
       ]),
     );
   });

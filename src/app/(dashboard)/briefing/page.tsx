@@ -6,10 +6,10 @@
  *   context strip (industry + counts)
  *   2-column content
  *     left: 오늘의 핵심 (top-4 bills) + 오늘의 일정 + 신규 발의
- *     right: 의원 활동 + 관련 뉴스 + Gemini 브리핑 HTML
+ *     right: 의원 활동 + 관련 뉴스 + 구조화된 Gemini 브리핑
  *
  * Server component. Pulls from DB — the morning sync already scored
- * bills and generated the briefing HTML. We also prefer the saved
+ * bills and generated the structured briefing. We also prefer the saved
  * bill id snapshots from `daily_briefing` so the left-column cards
  * stay aligned with the generated HTML/counts for that morning.
  */
@@ -58,7 +58,10 @@ import {
   getDemoTopBills,
   getDemoTranscriptHits,
 } from "@/lib/demo-content";
-import type { DailyBriefingContent } from "@/lib/daily-briefing-content";
+import {
+  buildFallbackDailyBriefingContent,
+  type DailyBriefingContent,
+} from "@/lib/daily-briefing-content";
 import { FileText, RefreshCw, Newspaper, ExternalLink, MessagesSquare } from "lucide-react";
 
 export const revalidate = 60;
@@ -274,12 +277,8 @@ export default async function BriefingPage() {
         {/* RIGHT COLUMN */}
         <aside className="flex flex-col gap-4">
           <SideSection title="Gemini 브리핑" icon={<FileText className="h-4 w-4" />}>
-            {renderedBriefing ? (
-              renderedBriefing.contentJson ? (
-                <DailyBriefingRenderer content={renderedBriefing.contentJson} />
-              ) : (
-                <GeminiBriefingHtml html={renderedBriefing.contentHtml} />
-              )
+            {renderedBriefing?.contentJson ? (
+              <DailyBriefingRenderer content={renderedBriefing.contentJson} />
             ) : (
               <p className="text-[12px] text-[var(--color-text-tertiary)]">
                 아직 브리핑이 생성되지 않았습니다.
@@ -362,7 +361,6 @@ type BriefingSnapshot = {
 
 type BriefingRenderData = Pick<
   BriefingSnapshot,
-  | "contentHtml"
   | "contentJson"
   | "keyItemCount"
   | "scheduleCount"
@@ -1017,21 +1015,6 @@ function formatMonthDay(value: Date | string | null | undefined): string | null 
   return date.toISOString().slice(5, 10);
 }
 
-function formatKoreanDisplayDate(value: Date | string | null | undefined): string | null {
-  const date = normalizeDate(value);
-  if (!date) return null;
-  return `${date.getUTCFullYear()}년 ${date.getUTCMonth() + 1}월 ${date.getUTCDate()}일`;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
 function buildDemoFallbackBriefing({
   date,
   industryName,
@@ -1052,108 +1035,20 @@ function buildDemoFallbackBriefing({
     });
   }
 
-  const displayDate = formatKoreanDisplayDate(date) ?? date;
-  const headlineLines = [
-    topBills.length > 0
-      ? `${industryName} 산업 관련 핵심 법안 ${topBills.length}건이 현재 우선 모니터링 대상으로 올라와 있습니다.`
-      : null,
-    topBills[0]
-      ? `'${escapeHtml(topBills[0].billName)}'이(가) 오늘 브리핑의 최우선 체크 포인트입니다.`
-      : null,
-    recentBills.length > 0
-      ? `최근 발의 ${recentBills.length}건이 추가로 잡혀 있어 상임위 흐름과 발의자 동향을 함께 봐야 합니다.`
-      : relevantNotices.length > 0
-        ? `입법예고 ${relevantNotices.length}건이 열려 있어 외부 의견제출 일정까지 함께 챙겨야 합니다.`
-        : "오늘은 신규 변동보다 기존 계류 법안의 진행 상황을 추적하는 쪽이 더 중요합니다.",
-  ].filter((line): line is string => Boolean(line));
-
-  const keyBillsHtml =
-    topBills.length === 0
-      ? "<p>(오늘은 해당 없음)</p>"
-      : topBills
-          .slice(0, 3)
-          .map((item) => {
-            const proposer = `${escapeHtml(item.proposerName)}${
-              item.proposerParty ? ` (${escapeHtml(item.proposerParty)})` : ""
-            }`;
-            const summary =
-              item.summaryText?.trim() ||
-              "현재 저장된 요약이 없어 제목과 소관위 중심으로 우선 추적이 필요합니다.";
-            return `
-              <div class="bill-card">
-                <h3 class="bill-title">${escapeHtml(item.billName)}</h3>
-                <p class="bill-proposer"><strong>제안자:</strong> ${proposer}</p>
-                <p class="bill-analysis">${escapeHtml(summary)}</p>
-              </div>
-            `.trim();
-          })
-          .join("");
-
-  const scheduleItems = relevantNotices
-    .slice(0, 3)
-    .map((notice) => {
-      const label = notice.noticeEndDate
-        ? `[의견제출 ${escapeHtml(notice.noticeEndDate)}]`
-        : "[입법예고]";
-      return `<li><strong>${label}</strong> — ${escapeHtml(notice.billName)}${
-        notice.committee ? ` @ ${escapeHtml(notice.committee)}` : ""
-      }</li>`;
-    })
-    .join("");
-
-  const newBillsHtml =
-    recentBills.length === 0
-      ? "<p>(오늘은 해당 없음)</p>"
-      : `<ul>${recentBills
-          .slice(0, 5)
-          .map((item) => {
-            const proposer = `${escapeHtml(item.proposerName)}${
-              item.proposerParty ? ` (${escapeHtml(item.proposerParty)})` : ""
-            }`;
-            return `<li>${escapeHtml(item.billName)} — ${proposer}</li>`;
-          })
-          .join("")}</ul>`;
-
-  const summaryLine =
-    topBills[0]
-      ? `오늘은 핵심 법안 '${escapeHtml(topBills[0].billName)}'을 중심으로 발의자와 소관위 움직임을 함께 추적할 필요가 있습니다.`
-      : `${industryName} 산업 관련 신규 변동은 제한적이지만, 저장된 입법 데이터의 흐름을 계속 관찰하는 날입니다.`;
-
   return {
-    contentHtml: `
-      <article class="briefing">
-        <header class="briefing-header">
-          <p class="briefing-date">${escapeHtml(displayDate)} | ${escapeHtml(industryName)} 인텔리전스</p>
-          <h1 class="briefing-title">오늘의 헤드라인</h1>
-        </header>
-
-        <section class="briefing-headlines">
-          <ul>
-            ${headlineLines.map((line) => `<li>${line}</li>`).join("")}
-          </ul>
-        </section>
-
-        <section class="briefing-key-bills">
-          <h2>핵심 법안</h2>
-          ${keyBillsHtml}
-        </section>
-
-        <section class="briefing-schedule">
-          <h2>오늘/이번주 일정</h2>
-          ${scheduleItems ? `<ul>${scheduleItems}</ul>` : "<p>(오늘은 해당 없음)</p>"}
-        </section>
-
-        <section class="briefing-new-bills">
-          <h2>신규 발의</h2>
-          ${newBillsHtml}
-        </section>
-
-        <footer class="briefing-footer">
-          <p class="briefing-summary">${summaryLine}</p>
-        </footer>
-      </article>
-    `.trim(),
-    contentJson: null,
+    contentJson: buildFallbackDailyBriefingContent({
+      date,
+      industryName,
+      keyBills: topBills,
+      scheduleItems: relevantNotices.slice(0, 3).map((notice) => ({
+        date: notice.noticeEndDate ?? date,
+        time: null,
+        subject: notice.billName,
+        committee: notice.committee,
+        location: null,
+      })),
+      newBills: recentBills,
+    }),
     keyItemCount: topBills.length,
     scheduleCount: relevantNotices.length,
     newBillCount: recentBills.length,
@@ -1167,60 +1062,14 @@ function buildStaticDemoBriefing({
   date: string;
   industryName: string;
 }): BriefingRenderData {
-  const displayDate = formatKoreanDisplayDate(date) ?? date;
-  const safeIndustryName = escapeHtml(industryName);
-
   return {
-    contentHtml: `
-      <article class="briefing">
-        <header class="briefing-header">
-          <p class="briefing-date">${escapeHtml(displayDate)} | ${safeIndustryName} 인텔리전스</p>
-          <h1 class="briefing-title">오늘의 헤드라인</h1>
-        </header>
-
-        <section class="briefing-headlines">
-          <ul>
-            <li>게임산업의 근간이 되는 '게임산업진흥법' 개정안이 여야를 막론하고 다수 발의되어 핵심 규제 변화를 예고합니다.</li>
-            <li>확률형 아이템, P2E, 등급분류 등 핵심 비즈니스 모델에 직접적 영향을 미치는 조항들이 논의될 예정입니다.</li>
-            <li>신규 발의나 관련 일정이 없는 가운데, 현재 계류 중인 핵심 법안들의 논의 과정에 모든 역량을 집중해야 합니다.</li>
-          </ul>
-        </section>
-
-        <section class="briefing-key-bills">
-          <h2>핵심 법안</h2>
-          <div class="bill-card">
-            <h3 class="bill-title">게임산업진흥에 관한 법률 일부개정법률안 (다수 발의)</h3>
-            <p class="bill-proposer"><strong>제안자:</strong> 김성원, 진종오 (국민의힘), 조계원 (더불어민주당) 등</p>
-            <p class="bill-analysis">
-              여야를 막론하고 게임산업의 근간 법률인 '게임산업진흥법'에 대한 다수의 개정안이 문화체육관광위원회에 계류 중입니다.
-              이 법안들은 공통적으로 확률형 아이템 규제, 등급분류 제도 개선, P2E 등 신기술 수용, 이스포츠 진흥 등 산업의 핵심 영역을 다루고 있습니다.
-              이는 당사의 비즈니스 모델과 서비스 운영 전반에 직접적인 영향을 미칠 중대 사안으로, 각 법안의 세부 조항 분석과 통합적인 대응 전략 수립이 시급합니다.
-            </p>
-          </div>
-        </section>
-
-        <section class="briefing-schedule">
-          <h2>오늘/이번주 일정</h2>
-          <ul>
-            <li>(오늘은 해당 일정 없음)</li>
-            <li><strong>[주요 예정] 4/22 10:00</strong> — 아동·청소년 SNS 규제추세에 따른 대응방안 모색 @ 의원회관 제10간담회의실</li>
-            <li><strong>[예정] 4/16 15:00</strong> — 직장 내 괴롭힘, 왜 반복되는가 -일터의 존엄과 안전을 위한 제도 개선 과제- @ 의원회관 제4간담회의실</li>
-          </ul>
-        </section>
-
-        <section class="briefing-new-bills">
-          <h2>신규 발의</h2>
-          <p>(오늘은 해당 없음)</p>
-        </section>
-
-        <footer class="briefing-footer">
-          <p class="briefing-summary">
-            핵심 법안인 '게임산업진흥법' 개정안들의 동향에 대한 면밀한 <strong>주의</strong>가 필요한 날입니다.
-          </p>
-        </footer>
-      </article>
-    `.trim(),
-    contentJson: null,
+    contentJson: buildFallbackDailyBriefingContent({
+      date,
+      industryName,
+      keyBills: getDemoTopBills(),
+      scheduleItems: [],
+      newBills: [],
+    }),
     keyItemCount: 4,
     scheduleCount: 69,
     newBillCount: 0,
@@ -1249,27 +1098,6 @@ function daysLeftFromToday(dateOnly: string | null): number | null {
   const todayMs = Date.parse(`${kstToday}T00:00:00Z`);
   if (Number.isNaN(targetMs) || Number.isNaN(todayMs)) return null;
   return Math.max(0, Math.round((targetMs - todayMs) / 86400000));
-}
-
-/**
- * Render the Gemini-generated briefing HTML.
- *
- * We trust this output because:
- *   1. It comes from OUR own Gemini call, never from user input.
- *   2. The prompt limits it to a specific <article> subtree.
- *   3. Next.js dangerouslySetInnerHTML is the only way to get
- *      server-rendered AI content into the DOM.
- *
- * If we ever start rendering user-supplied HTML, switch to a
- * DOMPurify pass first.
- */
-function GeminiBriefingHtml({ html }: { html: string }) {
-  return (
-    <div
-      className="prose prose-sm max-w-none [&_article]:text-[12px] [&_h1]:text-[15px] [&_h2]:mb-1.5 [&_h2]:mt-3 [&_h2]:text-[12px] [&_h2]:font-bold [&_h3]:text-[12px] [&_h3]:font-semibold [&_p]:my-1 [&_p]:text-[12px] [&_p]:leading-relaxed [&_ul]:ml-3 [&_ul]:list-disc [&_ul]:text-[12px]"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
 }
 
 function EmptyState({

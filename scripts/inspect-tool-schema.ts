@@ -2,6 +2,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { redactMcpUrl } from "../src/lib/mcp-client";
 
 async function main() {
   const url = new URL("https://assembly-api-mcp.fly.dev/mcp");
@@ -29,6 +30,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.error(redactMcpUrl(err instanceof Error ? err.message : String(err)));
   process.exit(1);
 });

@@ -58,6 +58,18 @@ interface SearchParams {
   legislator?: string;
 }
 
+type RadarBillRow = Pick<
+  Bill,
+  | "id"
+  | "billName"
+  | "proposerName"
+  | "proposerParty"
+  | "committee"
+  | "stage"
+  | "proposalDate"
+  | "relevanceScore"
+>;
+
 export default async function RadarPage(props: {
   searchParams: Promise<SearchParams>;
 }) {
@@ -105,51 +117,78 @@ export default async function RadarPage(props: {
   };
   const orderBy = sortMap[sort] ?? sortMap["-date"];
 
-  const profile = await loadActiveIndustryProfileCompat();
-  const industryCommittees = profile
-    ? await db
-        .select({ committeeCode: industryCommittee.committeeCode })
-        .from(industryCommittee)
-        .where(eq(industryCommittee.industryProfileId, profile.id))
-    : [];
-  const importanceById = profile
-    ? await loadCachedImportance({
-        profileId: profile.id,
-        committeeCodes: industryCommittees.map((c) => c.committeeCode),
-      })
-    : new Map();
-
   const demoBills = demoMode ? getDemoBills() : [];
-  const rows = demoMode
-    ? filterAndSortDemoBills(demoBills, {
-        q,
-        stageFilter,
-        minScore,
-        cteFilter,
-        sort,
-      }).slice(0, 200)
-    : await db.select().from(bill).where(whereExpr).orderBy(orderBy).limit(200);
-  const total = demoMode
-    ? demoBills.length
-    : (
-        await db.select({ total: sql<number>`count(*)::int` }).from(bill)
-      )[0]?.total ?? 0;
-  const committees = demoMode
-    ? summarizeDemoCommittees(demoBills)
-    : await db
+  const rowsPromise = demoMode
+    ? Promise.resolve(
+        filterAndSortDemoBills(demoBills, {
+          q,
+          stageFilter,
+          minScore,
+          cteFilter,
+          sort,
+        }).slice(0, 200),
+      )
+    : db
+        .select({
+          id: bill.id,
+          billName: bill.billName,
+          proposerName: bill.proposerName,
+          proposerParty: bill.proposerParty,
+          committee: bill.committee,
+          stage: bill.stage,
+          proposalDate: bill.proposalDate,
+          relevanceScore: bill.relevanceScore,
+        })
+        .from(bill)
+        .where(whereExpr)
+        .orderBy(orderBy)
+        .limit(200);
+  const totalPromise = demoMode
+    ? Promise.resolve(demoBills.length)
+    : db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(bill)
+        .then((result) => result[0]?.total ?? 0);
+  const committeesPromise = demoMode
+    ? Promise.resolve(summarizeDemoCommittees(demoBills))
+    : db
         .select({
           committee: bill.committee,
           count: sql<number>`count(*)::int`,
         })
         .from(bill)
         .groupBy(bill.committee);
-  const proposerImportance = await loadProposerImportanceMap(
-    rows.map((entry) => ({
-      name: entry.proposerName,
-      party: entry.proposerParty,
-    })),
-    importanceById,
-  );
+
+  const [profile, rows, total, committees] = await Promise.all([
+    loadActiveIndustryProfileCompat(),
+    rowsPromise,
+    totalPromise,
+    committeesPromise,
+  ]);
+  // The proposer lookup runs while the profile-dependent committee and
+  // importance queries resolve, keeping the DB path to three phases.
+  const importanceByIdPromise = profile
+    ? db
+        .select({ committeeCode: industryCommittee.committeeCode })
+        .from(industryCommittee)
+        .where(eq(industryCommittee.industryProfileId, profile.id))
+        .then((industryCommittees) =>
+          loadCachedImportance({
+            profileId: profile.id,
+            committeeCodes: industryCommittees.map((c) => c.committeeCode),
+          }),
+        )
+    : Promise.resolve(new Map());
+  const [importanceById, proposerImportance] = await Promise.all([
+    importanceByIdPromise,
+    loadProposerImportanceMap(
+      rows.map((entry) => ({
+        name: entry.proposerName,
+        party: entry.proposerParty,
+      })),
+      importanceByIdPromise,
+    ),
+  ]);
 
   return (
     <>
@@ -398,7 +437,7 @@ function BillRow({
   bill: b,
   proposerImportance,
 }: {
-  bill: Bill;
+  bill: RadarBillRow;
   proposerImportance?: ImportanceRecord | null;
 }) {
   const href = billHref(b.id);

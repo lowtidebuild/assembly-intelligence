@@ -94,6 +94,42 @@ function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
   return diff === 0;
 }
 
+let passwordComparisonKey: Promise<CryptoKey> | null = null;
+
+function getPasswordComparisonKey(): Promise<CryptoKey> {
+  if (!passwordComparisonKey) {
+    const keyBytes = crypto.getRandomValues(new Uint8Array(32));
+    passwordComparisonKey = crypto.subtle.importKey(
+      "raw",
+      keyBytes,
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+  }
+  return passwordComparisonKey;
+}
+
+/** Compare login passwords without exposing string length or early mismatch. */
+export async function timingSafePasswordCompare(
+  a: string,
+  b: string,
+): Promise<boolean> {
+  const key = await getPasswordComparisonKey();
+  const [aDigest, bDigest] = await Promise.all(
+    [a, b].map(async (value) =>
+      new Uint8Array(
+        await crypto.subtle.sign(
+          "HMAC",
+          key,
+          new TextEncoder().encode(value),
+        ),
+      ),
+    ),
+  );
+  return timingSafeEqual(aDigest, bDigest);
+}
+
 /* ─────────────────────────────────────────────────────────────
  * HMAC via Web Crypto
  * ────────────────────────────────────────────────────────────── */

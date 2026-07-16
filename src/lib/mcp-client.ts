@@ -94,6 +94,23 @@ function getMcpUrl(profile: McpProfile): URL {
   return url;
 }
 
+export function redactMcpUrl(text: string): string {
+  return text.replace(/([?&]key=)[^&#\s]*/gi, "$1***");
+}
+
+export function sanitizeMcpError(error: unknown): Error {
+  const message = redactMcpUrl(errorMessage(error));
+  const sanitized =
+    error instanceof NonRetryableError
+      ? new NonRetryableError(message)
+      : new Error(message);
+  if (error instanceof Error) {
+    sanitized.name = error.name;
+    if (error.stack) sanitized.stack = redactMcpUrl(error.stack);
+  }
+  return sanitized;
+}
+
 /* ─────────────────────────────────────────────────────────────
  * Shared client (lazy, reopens on failure)
  * ────────────────────────────────────────────────────────────── */
@@ -158,7 +175,7 @@ async function runWithSharedClient<T>(
     } catch {
       // Surface the ORIGINAL error — the retry failure is usually
       // just a propagation of the same upstream issue.
-      throw firstErr;
+      throw sanitizeMcpError(firstErr);
     }
   }
 }

@@ -222,7 +222,7 @@ src/
 ├── components/               # hemicycle, slide-overs, wizard 등
 ├── services/                 # sync 오케스트레이터, 뉴스 수집
 ├── lib/                      # MCP client, Gemini, presets, auth
-└── db/                       # Drizzle schema (12 tables)
+└── db/                       # Drizzle schema (18 tables)
 ```
 
 ---
@@ -243,7 +243,7 @@ src/
 
 ## 알려진 제약
 
-- **MCP cold start**: assembly-api-mcp 서버 cold start 60-90초. Vercel cron이 정기적으로 warm 유지.
+- **MCP cold start**: assembly-api-mcp의 cold start 비용은 하루 2회 sync cron이 각각 부담합니다. `/api/cron/keep-alive`는 스케줄되지 않은 선택적 외부 pinger 대상이며, `CRON_SECRET` 인증 후 MCP가 아닌 Neon만 ping합니다.
 - **법안 본문 미노출**: MCP가 제안이유/주요내용을 제공하지 않음. 의안명 + 소관위 + 제안자로만 평가.
 - **Optional source readiness varies by MCP server**: 공개 upstream 서버는 `full` 프로필 도구 목록은 제공하지만, `lawmaking` / `NABO`는 대상 MCP 서버에 별도 자격증명이 없는 경우 비활성화될 수 있습니다. 앱은 이를 `/settings`와 `/api/mcp/capabilities`에서 그대로 보여줍니다.
 

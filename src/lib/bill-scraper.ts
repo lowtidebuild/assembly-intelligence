@@ -6,6 +6,8 @@ const BILL_INFO_FRAGMENT_URL =
   "http://likms.assembly.go.kr/bill/bi/bill/detail/billInfo.do";
 const USER_AGENT = "ParlaWatch+ Legislative Monitor";
 const PROPOSAL_SECTION_TITLE = "제안이유 및 주요내용";
+// A stalled Assembly response must not consume the morning cron budget.
+const SCRAPER_TIMEOUT_MS = 10_000;
 
 export interface BillBodyFragment {
   proposalReason: string | null;
@@ -142,6 +144,7 @@ export function splitProposalAndMainContent(
 export async function fetchBillBodyFragment(
   billId: string,
 ): Promise<BillBodyFragment | null> {
+  let phase: "page" | "fragment" = "page";
   try {
     const pageUrl =
       `${BILL_PAGE_URL}?billId=${encodeURIComponent(billId)}&currMenuNo=2600044`;
@@ -150,6 +153,7 @@ export async function fetchBillBodyFragment(
       headers: {
         "User-Agent": USER_AGENT,
       },
+      signal: AbortSignal.timeout(SCRAPER_TIMEOUT_MS),
       cache: "no-store",
     });
     if (!pageRes.ok) return null;
@@ -166,6 +170,7 @@ export async function fetchBillBodyFragment(
       body.set(key, value);
     }
 
+    phase = "fragment";
     const fragmentRes = await fetch(BILL_INFO_FRAGMENT_URL, {
       method: "POST",
       headers: {
@@ -176,6 +181,7 @@ export async function fetchBillBodyFragment(
         Accept: "application/json, text/plain, */*",
       },
       body,
+      signal: AbortSignal.timeout(SCRAPER_TIMEOUT_MS),
       cache: "no-store",
     });
     if (!fragmentRes.ok) return null;
@@ -189,7 +195,12 @@ export async function fetchBillBodyFragment(
       return null;
     }
     return parsed;
-  } catch {
+  } catch (error) {
+    const detail =
+      error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error);
+    console.warn(`[bill-scraper] ${phase} failed billId=${billId}: ${detail}`);
     return null;
   }
 }

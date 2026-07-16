@@ -82,7 +82,8 @@ async function selectImportanceRows(
         industryLegislatorWatch.legislatorId,
       );
 
-    return legislatorId ? query.limit(1) : query;
+    const rows = await (legislatorId ? query.limit(1) : query);
+    return rows;
   } catch (err) {
     if (!isMissingCommitteeRoleColumn(err)) {
       throw err;
@@ -121,7 +122,10 @@ async function selectImportanceRows(
         industryLegislatorWatch.legislatorId,
       );
 
-    return legislatorId ? fallbackQuery.limit(1) : fallbackQuery;
+    const rows = await (legislatorId
+      ? fallbackQuery.limit(1)
+      : fallbackQuery);
+    return rows;
   }
 }
 
@@ -306,23 +310,28 @@ export async function loadImportanceForLegislator(
 
 export async function loadProposerImportanceMap(
   proposers: Array<{ name: string; party: string | null }>,
-  importanceById: Map<number, ImportanceRecord>,
+  importanceById:
+    | Map<number, ImportanceRecord>
+    | Promise<Map<number, ImportanceRecord>>,
 ): Promise<Map<string, ProposerImportanceEntry>> {
   const names = [...new Set(proposers.map((proposer) => proposer.name))];
   if (names.length === 0) return new Map();
 
-  const matchedLegislators = await db
-    .select({
-      id: legislator.id,
-      name: legislator.name,
-      party: legislator.party,
-    })
-    .from(legislator)
-    .where(inArray(legislator.name, names));
+  const [matchedLegislators, resolvedImportanceById] = await Promise.all([
+    db
+      .select({
+        id: legislator.id,
+        name: legislator.name,
+        party: legislator.party,
+      })
+      .from(legislator)
+      .where(inArray(legislator.name, names)),
+    importanceById,
+  ]);
 
   const result = new Map<string, ProposerImportanceEntry>();
   for (const matched of matchedLegislators) {
-    const importance = importanceById.get(matched.id);
+    const importance = resolvedImportanceById.get(matched.id);
     if (!importance) continue;
     const entry = {
       legislatorId: matched.id,

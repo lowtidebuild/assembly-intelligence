@@ -108,14 +108,13 @@ export default async function ImpactPage(props: {
           .where(eq(vote.billId, selected.id))
           .orderBy(desc(vote.voteDate), legislator.name)
       : [];
-  const references =
+  const [references, stanceBundle] =
     selected && !demoMode
-      ? await loadBillReferenceSections(selected.billName)
-      : null;
-  const stanceBundle =
-    selected && !demoMode
-      ? await computeLegislatorStanceSignals(selected.id)
-      : null;
+      ? await Promise.all([
+          loadBillReferenceSections(selected.billName),
+          computeLegislatorStanceSignals(selected.id),
+        ])
+      : [null, null];
   const proposerImportance = await loadProposerImportanceMap(
     [...recentBills, ...(selected ? [selected] : [])].map((entry) => ({
       name: entry.proposerName,

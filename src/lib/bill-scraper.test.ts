@@ -1,8 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractProposalSectionText,
+  fetchBillBodyFragment,
   splitProposalAndMainContent,
 } from "@/lib/bill-scraper";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("bill-scraper", () => {
   it("extracts the proposal section text from a bill info fragment", () => {
@@ -55,5 +61,30 @@ describe("bill-scraper", () => {
         "게임산업 내부통제 기준을 강화하고 정보유출 방지를 위한 의무를 부과하려는 것임.",
       mainContent: null,
     });
+  });
+
+  it("returns null and warns when the page request is aborted", async () => {
+    vi.spyOn(AbortSignal, "timeout").mockImplementation(() => {
+      const controller = new AbortController();
+      controller.abort(new DOMException("timed out", "TimeoutError"));
+      return controller.signal;
+    });
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const signal = init?.signal;
+        if (signal?.aborted) {
+          throw signal.reason;
+        }
+        throw new Error("expected an aborted signal");
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(fetchBillBodyFragment("BILL-TIMEOUT")).resolves.toBeNull();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("page failed billId=BILL-TIMEOUT: TimeoutError"),
+    );
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
 });

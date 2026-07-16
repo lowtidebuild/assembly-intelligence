@@ -1,12 +1,14 @@
 /**
  * Database schema — Assembly Intelligence Dashboard
  *
- * 12 tables split into 3 groups:
+ * 18 tables split into 3 groups:
  *
- *   Industry config (3):  IndustryProfile, IndustryCommittee,
- *                         IndustryLegislatorWatch
- *   Assembly data (5):    Bill, BillTimeline, Legislator, Vote,
- *                         NewsArticle
+ *   Industry config (4):  IndustryProfile, IndustryCommittee,
+ *                         IndustryLegislatorWatch, IndustryBillWatch
+ *   Assembly data (10):   Bill, BillTimeline, Legislator, Vote,
+ *                         NewsArticle, LegislationNotice, PetitionItem,
+ *                         PressRelease, CommitteeTranscript,
+ *                         CommitteeTranscriptUtterance
  *   App state (4):        Alert, DailyBriefing, RelevanceOverride,
  *                         SyncLog
  *
@@ -14,7 +16,7 @@
  *
  *   IndustryProfile 1 ──── N IndustryCommittee
  *                   1 ──── N IndustryLegislatorWatch ── N Legislator
- *                   (no FK to Bill — filter is runtime via keywords/LLM)
+ *                   1 ──── N IndustryBillWatch ── N Bill
  *
  *   Bill 1 ──── N BillTimeline
  *        1 ──── N Vote ── N Legislator
@@ -404,8 +406,8 @@ export const bill = pgTable(
 );
 
 /**
- * BillTimeline — lifecycle events for a bill. Used by briefing
- * generator to detect "bills that changed today".
+ * BillTimeline — evening-sync transition log for bill lifecycle changes.
+ * Morning upserts do not seed it, and the briefing generator does not read it.
  */
 export const billTimeline = pgTable(
   "bill_timeline",
@@ -676,6 +678,7 @@ export const alert = pgTable(
     index("idx_alert_unread").on(t.read, t.createdAt),
     index("idx_alert_bill").on(t.billId),
     index("idx_alert_type_created").on(t.type, t.createdAt),
+    index("idx_alert_dedup").on(t.type, t.title, t.billId),
   ],
 );
 

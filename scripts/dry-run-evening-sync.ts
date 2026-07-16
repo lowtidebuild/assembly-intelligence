@@ -24,6 +24,9 @@ async function main() {
     console.log(`  billsChecked:    ${result.billsChecked}`);
     console.log(`  stageTransitions:${result.stageTransitions}`);
     console.log(`  alertsCreated:   ${result.alertsCreated}`);
+    console.log(
+      `  droppedByLimit:  ${result.metadata.evening?.droppedByLimit ?? 0}`,
+    );
     if (result.errors.length > 0) {
       console.log(`\n  errors (${result.errors.length}):`);
       for (const error of result.errors) console.log(`    - ${error}`);

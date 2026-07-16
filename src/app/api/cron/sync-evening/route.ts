@@ -8,8 +8,8 @@
  *   2. For each, call get_bill_detail from MCP
  *   3. If stage changed: update + create alert + write timeline entry
  *
- * No Gemini calls. No briefing regeneration. Designed to run in <10s
- * for Vercel Hobby plan compatibility.
+ * No Gemini calls. No briefing regeneration. The bounded working set is
+ * designed to complete inside the route's five-minute execution budget.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -17,7 +17,7 @@ import { runEveningSync } from "@/services/sync";
 import { verifyCronRequest } from "@/lib/cron-auth";
 import { demoGuardResponse } from "@/lib/demo-mode";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {

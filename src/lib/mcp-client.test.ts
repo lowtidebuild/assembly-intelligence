@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { getMcpRuntimeConfig } from "@/lib/mcp-client";
+import {
+  getMcpRuntimeConfig,
+  redactMcpUrl,
+  sanitizeMcpError,
+} from "@/lib/mcp-client";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -30,3 +34,26 @@ describe("getMcpRuntimeConfig", () => {
   });
 });
 
+describe("MCP URL redaction", () => {
+  it("masks query-string keys without removing other parameters", () => {
+    expect(
+      redactMcpUrl(
+        "transport failed at https://assembly-api-mcp.fly.dev/mcp?key=SECRET123&profile=full",
+      ),
+    ).toBe(
+      "transport failed at https://assembly-api-mcp.fly.dev/mcp?key=***&profile=full",
+    );
+  });
+
+  it("surfaces sanitized transport errors to callers", () => {
+    const original = new Error(
+      "connect https://assembly-api-mcp.fly.dev/mcp?key=SECRET123&profile=full failed",
+    );
+    const sanitized = sanitizeMcpError(original);
+
+    expect(sanitized.name).toBe(original.name);
+    expect(sanitized.message).toContain("key=***");
+    expect(sanitized.message).not.toContain("SECRET123");
+    expect(sanitized.stack).not.toContain("SECRET123");
+  });
+});
