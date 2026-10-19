@@ -27,12 +27,7 @@ export function DashboardShell({
           mobileOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
         />
-        <main className="flex min-w-0 flex-col">
-          <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-sm font-medium text-amber-900">
-            이 서비스는 더 이상 업데이트되지 않습니다.
-          </div>
-          {children}
-        </main>
+        <main className="flex min-w-0 flex-col">{children}</main>
       </div>
     </div>
   );
